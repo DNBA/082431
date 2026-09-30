@@ -1,0 +1,1882 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <!-- 📱 1. 禁止手機縮放跳動，並開啟全螢幕安全邊距 (viewport-fit=cover) -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>ToeicQuest NBA - 全能多益備戰與季後賽爭冠系統</title>
+<!-- 📱 專屬黑金奢華 App 桌面圖示 (iOS & Android 自適應) -->
+  <!-- 📱 手機桌面 App 專屬金盃黑金封面 (iOS Safari + Android Chrome 100% 支援) -->
+  <link rel="apple-touch-icon" href="https://img.icons8.com/color/512/trophy.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="https://img.icons8.com/color/512/trophy.png">
+  <!-- 🍎 2. iOS Safari 偽 App 設定（消除網址列與底部按鈕、狀態列半透明融合） -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="ToeicQuest">
+
+  <!-- 🤖 3. Android Chrome 偽 App 設定（隱藏網址列、主題顏色） -->
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#020617">
+<script src="./data/toeic1000.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+    <link rel="stylesheet" href="./css/styles.css">
+    <link rel="stylesheet" href="./css/ui-v2.css">
+    <link rel="stylesheet" href="./css/team-v2.css">
+    <link rel="stylesheet" href="./css/normal-card-v2.css">
+    <link rel="stylesheet" href="./css/card-v2.css">
+    <link rel="stylesheet" href="./css/player-dossier-v2.css">
+    <link rel="stylesheet" href="./css/gacha-v2.css">
+    <link rel="stylesheet" href="./css/season-v2.css">
+</head>
+<body data-v2-active="home" class="bg-slate-950 text-slate-100 min-h-screen pb-24 font-sans selection:bg-amber-500 selection:text-black">
+
+ <!-- 頂部資訊看板（專為 iPhone 14 最佳化防跑版版型） -->
+  <header id="legacyHeader" class="bg-slate-900/95 backdrop-blur sticky top-0 z-40 border-b border-slate-800 px-2.5 pt-[max(0.5rem,env(safe-area-inset-top))] pb-1.5 select-none">
+    <div class="max-w-5xl mx-auto flex flex-col gap-1.5">
+      
+      <!-- 第一排：Logo 標題與 ON FIRE 徽章 -->
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-1.5">
+          <i data-lucide="trophy" class="text-amber-400 w-4 h-4"></i>
+          <h1 class="text-sm font-black bg-gradient-to-r from-amber-400 via-orange-500 to-red-500 bg-clip-text text-transparent">ToeicQuest NBA</h1>
+          <span id="onFireBadge" class="hidden text-[9px] bg-amber-500/20 border border-amber-400 text-amber-300 px-1.5 py-0.2 rounded-full font-bold">
+            🔥 ON FIRE
+          </span>
+        </div>
+        <button id="adminBadge" onclick="adminUnlockAllPlayers()" class="hidden text-[9px] bg-red-600/30 border border-red-500 text-red-300 px-2 py-0.5 rounded-full font-bold font-mono">
+          ADMIN
+        </button>
+      </div>
+
+      <!-- 第二排：防跑版緊湊數據欄（緊湊排列，防文字折行換行） -->
+      <div class="flex items-center justify-between gap-1 w-full text-[11px] font-mono">
+        
+        <!-- 數據區 (左側) -->
+        <div class="flex items-center gap-1 min-w-0">
+          <!-- 打卡天數 -->
+          <div class="flex items-center gap-0.5 bg-slate-800/90 px-1.5 py-0.5 rounded-lg border border-slate-700/80 flex-shrink-0">
+            <span class="text-orange-400 font-bold">🔥<span id="streakCount">1</span>天</span>
+          </div>
+
+          <!-- 抽卡券 -->
+          <div class="flex items-center gap-0.5 bg-slate-800/90 px-1.5 py-0.5 rounded-lg border border-slate-700/80 flex-shrink-0">
+            <i data-lucide="ticket" class="w-3 h-3 text-amber-400"></i>
+            <span class="text-amber-400 font-bold"><span id="ticketCount">10</span>🎟️</span>
+          </div>
+
+          <!-- 碎片點數 -->
+          <div class="flex items-center gap-0.5 bg-slate-800/90 px-1.5 py-0.5 rounded-lg border border-slate-700/80 flex-shrink-0">
+            <i data-lucide="gem" class="w-3 h-3 text-pink-400"></i>
+            <span class="text-pink-400 font-bold"><span id="scoutPointsCount">0</span>💎</span>
+          </div>
+        </div>
+
+        <!-- 功能與操作按鈕 (右側) -->
+        <div class="flex items-center gap-1 flex-shrink-0">
+          
+          <!-- 🛠️ 功能選單按鈕 -->
+          <div class="relative inline-block text-left">
+            <button onclick="openTopMenu()" type="button" class="flex items-center gap-0.5 bg-slate-800 hover:bg-slate-700 active:scale-95 text-amber-300 border border-slate-700 px-2 py-0.5 rounded-lg font-bold text-[10px] cursor-pointer">
+              <span>🛠️ 功能</span>
+              <span class="text-[8px] text-slate-400">▼</span>
+            </button>
+
+            <!-- 手機防穿透遮罩 -->
+            <div id="topMenuBackdrop" onclick="closeTopMenu()" class="hidden fixed inset-0 z-40 bg-black/50 backdrop-blur-[2px]"></div>
+
+            <!-- 下拉選單 -->
+            <div id="topDropdownMenu" class="hidden absolute right-0 mt-2 w-44 bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl p-1.5 z-50 space-y-1 text-xs font-sans">
+              <button onclick="closeTopMenu(); openUpgradeModal();" type="button" class="w-full flex items-center justify-between px-2.5 py-2 rounded-xl font-bold text-indigo-300 hover:bg-indigo-950/60 active:bg-indigo-900 transition cursor-pointer">
+                <span class="flex items-center gap-2"><i data-lucide="star" class="w-3.5 h-3.5"></i> 升星所</span>
+                <span class="text-[10px] text-slate-500 font-mono">突破</span>
+              </button>
+              <button onclick="closeTopMenu(); openMarketModal();" type="button" class="w-full flex items-center justify-between px-2.5 py-2 rounded-xl font-bold text-pink-300 hover:bg-pink-950/60 active:bg-pink-900 transition cursor-pointer">
+                <span class="flex items-center gap-2"><i data-lucide="shopping-bag" class="w-3.5 h-3.5"></i> 交易所</span>
+                <span class="text-[10px] text-slate-500 font-mono">碎片</span>
+              </button>
+              <button onclick="closeTopMenu(); openChampionshipRingsModal();" type="button" class="w-full flex items-center justify-between px-2.5 py-2 rounded-xl font-bold text-amber-300 hover:bg-amber-950/60 active:bg-amber-900 transition cursor-pointer">
+                <span class="flex items-center gap-2"><span>💍</span> 戒指櫃</span>
+                <span id="headerRingsCount" class="font-mono bg-amber-400 text-slate-950 px-1.5 py-0.2 rounded-full text-[9px] font-black">0</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- 小按鈕區 -->
+          <button onclick="openRedeemModal()" class="text-amber-300 p-1 hover:text-white transition flex-shrink-0" title="兌換碼">
+            <i data-lucide="gift" class="w-3.5 h-3.5"></i>
+          </button>
+          <button onclick="toggleNotificationDrawer()" id="btnNotificationCenter" class="relative text-slate-300 hover:text-amber-400 p-1 transition cursor-pointer flex-shrink-0" title="通知中心">
+            <i data-lucide="bell" class="w-3.5 h-3.5"></i>
+            <span id="notificationUnreadDot" class="hidden absolute top-0.5 right-0.5 w-1.5 h-1.5 bg-rose-500 rounded-full animate-pulse"></span>
+          </button>
+          <button onclick="resetGame()" class="text-rose-400 p-1 hover:text-white transition flex-shrink-0" title="重置存檔">
+            <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i>
+          </button>
+        </div>
+
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-5xl mx-auto px-3 sm:px-4 mt-4">
+
+    <!-- UI V2: HOME only. Existing game pages remain mounted and unchanged. -->
+    <section id="tab-home" class="tab-content v2-home" aria-label="ToeicQuest NBA 首頁">
+      <div class="v2-home-stage">
+        <div class="v2-home-arena" aria-hidden="true"></div>
+        <div class="v2-home-atmosphere" aria-hidden="true"></div>
+        <div class="v2-home-canvas">
+          <header class="v2-top-bar">
+            <div class="v2-profile">
+              <img id="v2ProfileAvatar" src="./assets/players/featured-placeholder.svg" alt="首頁球星頭像" class="v2-profile-avatar">
+              <div class="v2-profile-copy">
+                <strong id="v2ProfileName">玩家夢幻隊</strong>
+                <span id="v2ProfileMeta">SEASON 1</span>
+              </div>
+            </div>
+
+            <div class="v2-top-actions" aria-label="球隊資源">
+              <div class="v2-resource" title="比賽體力"><span aria-hidden="true">🏀</span><b id="v2EnergyValue">15</b></div>
+              <div class="v2-resource" title="抽卡券"><span aria-hidden="true">🎟️</span><b id="v2TicketValue">10</b></div>
+              <div class="v2-resource v2-resource-gem" title="選秀碎片"><span aria-hidden="true">💎</span><b id="v2ScoutValue">0</b></div>
+              <button type="button" class="v2-icon-button" onclick="switchTab('gacha')" aria-label="前往卡包商店" title="SHOP / PACK">🛍️</button>
+              <button type="button" class="v2-icon-button" onclick="toggleNotificationDrawer()" aria-label="開啟通知" title="通知">🔔</button>
+            </div>
+          </header>
+
+          <div class="v2-hero-copy">
+            <span class="v2-eyebrow">FEATURED PLAYER</span>
+            <h1 id="v2HeroName">YOUR STAR</h1>
+            <p id="v2HeroMeta">Build your Starting Five</p>
+            <div class="v2-hero-rating"><strong id="v2HeroOvr">--</strong><span>OVR</span></div>
+            <label class="v2-cover-picker" for="v2CoverPlayerSelect">
+              <span>封面球員</span>
+              <select id="v2CoverPlayerSelect" onchange="ToeicQuestV2.selectCoverPlayer(this.value)" aria-label="選擇首頁封面球員">
+                <option value="">自動選擇</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="v2-hero-player-wrap" aria-hidden="true">
+            <div class="v2-hero-halo"></div>
+            <img id="v2HeroPlayer" src="./assets/players/featured-placeholder.svg" alt="" class="v2-hero-player">
+          </div>
+
+          <article class="v2-game-day" aria-labelledby="v2GameDayTitle">
+            <div class="v2-game-heading">
+              <div>
+                <span class="v2-eyebrow">REGULAR SEASON</span>
+                <h2 id="v2GameDayTitle">GAME <span id="v2GameNumber">1</span> <small>/ 82</small></h2>
+              </div>
+              <span id="v2SpecialEvent" class="v2-special-event">🏟️ OPENING NIGHT</span>
+            </div>
+
+            <div class="v2-matchup">
+              <div class="v2-team v2-team-home">
+                <span id="v2HomeBadge" class="v2-team-badge">TQ</span>
+                <div><strong id="v2HomeTeam">玩家夢幻隊</strong><span id="v2HomeRecord">0–0</span></div>
+              </div>
+              <span class="v2-versus">VS</span>
+              <div class="v2-team v2-team-away">
+                <span id="v2AwayBadge" class="v2-team-badge">BOS</span>
+                <div><strong id="v2AwayTeam">Celtics</strong><span id="v2AwayRecord">0–0</span></div>
+              </div>
+            </div>
+
+            <div class="v2-game-context">
+              <span id="v2RankText">尚未排名</span>
+              <span class="v2-context-dot">•</span>
+              <span id="v2RecentText">READY FOR TIP-OFF</span>
+            </div>
+
+            <button id="v2PlayButton" type="button" class="v2-play-button" onclick="ToeicQuestV2.playFromHome()">
+              <span class="v2-play-icon" aria-hidden="true">▶</span>
+              <span id="v2PlayButtonText">PLAY 開始比賽</span>
+            </button>
+          </article>
+        </div>
+      </div>
+
+      <div class="v2-home-lower">
+        <section class="v2-home-summary" aria-labelledby="v2NewsTitle">
+          <div class="v2-summary-heading"><span aria-hidden="true">✨</span><h2 id="v2NewsTitle">LEAGUE NEWS</h2></div>
+          <div id="v2LeagueNews" class="v2-news-list"><p>新賽季即將開始。</p></div>
+        </section>
+        <section class="v2-home-summary v2-team-summary" aria-labelledby="v2TeamSummaryTitle">
+          <div class="v2-summary-heading"><span aria-hidden="true">👑</span><h2 id="v2TeamSummaryTitle">MY TEAM</h2></div>
+          <div class="v2-team-overview"><strong id="v2TeamOvr">--</strong><span>TEAM OVR</span></div>
+          <p id="v2TeamSummaryText">先完成你的先發陣容</p>
+        </section>
+      </div>
+    </section>
+
+    <!-- TAB 1: 🏀 球隊陣容 -->
+    <section id="tab-roster" class="tab-content space-y-6 hidden">
+<!-- 📜 右下角浮動任務卷軸組件 -->
+  <!-- 1. 浮動圓形卷軸按鈕 (位於右下角，避開底部導航欄) -->
+  <div class="fixed bottom-24 right-3 sm:right-4 z-40 flex flex-col items-end">
+    <!-- 未領取紅點提醒 -->
+    <span id="scrollRedDot" class="hidden absolute -top-1 -right-1 w-3.5 h-3.5 bg-rose-500 rounded-full animate-ping z-50"></span>
+    <span id="scrollBadgeCount" class="hidden absolute -top-1.5 -right-1.5 bg-rose-600 text-white font-mono font-black text-[9px] w-5 h-5 rounded-full flex items-center justify-center border-2 border-slate-950 z-50 shadow">!</span>
+
+    <button onclick="toggleQuestScroll()" type="button" id="questScrollTriggerBtn" class="group bg-gradient-to-br from-amber-600 via-amber-700 to-yellow-900 hover:brightness-110 text-amber-100 p-3 rounded-full shadow-2xl border-2 border-amber-400/80 transition-all duration-300 transform active:scale-95 flex items-center gap-1.5 cursor-pointer">
+      <span class="text-xl group-hover:rotate-12 transition-transform">📜</span>
+      <span class="text-xs font-black tracking-wider pr-1 hidden sm:inline">每日任務</span>
+    </button>
+
+    <!-- 2. 展開的羊皮卷軸面板 (點開後從按鈕上方如卷軸般展開) -->
+    <div id="questScrollDrawer" class="hidden mt-2 w-[calc(100vw-1.5rem)] sm:w-[380px] max-w-[380px] parchment-border border-2 border-amber-500/70 rounded-3xl p-5 shadow-2xl text-slate-100 origin-bottom-right transition-all">
+      
+      <!-- 卷軸頂部捲軸桿裝飾 -->
+      <div class="flex justify-between items-center border-b border-amber-500/30 pb-2.5 mb-3">
+        <div class="flex items-center gap-2">
+          <span class="text-amber-400 text-base">📜</span>
+          <div>
+            <h4 class="text-xs font-black text-amber-300 tracking-wider">每日修行卷軸</h4>
+            <span class="text-[9px] font-mono text-slate-400">每日 00:00 自動封印換新</span>
+          </div>
+        </div>
+        <button onclick="toggleQuestScroll()" type="button" class="text-slate-400 hover:text-white p-1 text-sm font-bold cursor-pointer">✕</button>
+      </div>
+
+      <!-- 任務列表區 -->
+<!-- 🎁 每日登入簽到好禮 -->
+        <div class="bg-gradient-to-r from-amber-950/60 to-purple-950/60 border border-amber-400/50 p-3 rounded-2xl flex items-center justify-between shadow-lg">
+          <div>
+            <div class="flex items-center gap-1.5">
+              <span class="text-[9px] text-amber-300 font-mono font-bold bg-amber-500/20 px-1.5 py-0.2 rounded border border-amber-400/30">DAILY LOGIN</span>
+              <span id="loginStreakBadge" class="text-[9px] font-mono text-orange-400 font-bold">連續登入 1 天</span>
+            </div>
+            <h5 class="text-xs font-black text-white mt-0.5">每日登入福利禮包</h5>
+            <div class="text-[10px] font-mono text-amber-400">
+              獎勵: <span class="font-bold text-amber-300 font-black">10 🎟️ 抽卡券</span>
+            </div>
+          </div>
+          <button id="claimDailyLoginBtn" onclick="claimDailyLoginReward()" type="button" class="bg-amber-500 hover:bg-amber-400 text-slate-950 font-black px-3.5 py-1.5 rounded-xl text-xs transition cursor-pointer shadow-lg animate-pulse">
+            領取 10 🎟️
+          </button>
+        </div>
+      <div class="space-y-2.5 max-h-[55vh] overflow-y-auto pr-1">
+        <!-- 任務 1 -->
+        <div class="bg-slate-950/80 border border-amber-500/20 p-3 rounded-2xl flex items-center justify-between">
+          <div>
+            <span class="text-[9px] text-amber-400/80 font-mono block">QUEST 01</span>
+            <h5 class="text-xs font-bold text-slate-200">登錄 10 個多益單字</h5>
+            <div class="text-[10px] font-mono text-amber-400 mt-0.5">
+              獎勵: 30 💎 ｜ <span id="q1StatusText" class="text-slate-400 font-bold">0/10</span>
+            </div>
+          </div>
+          <button id="q1ClaimBtn" onclick="claimQuestReward(1)" type="button" class="bg-slate-800 text-slate-500 font-bold px-3 py-1.5 rounded-xl text-[10px] cursor-not-allowed" disabled>
+            未達成
+          </button>
+        </div>
+
+        <!-- 任務 2 -->
+        <div class="bg-slate-950/80 border border-amber-500/20 p-3 rounded-2xl flex items-center justify-between">
+          <div>
+            <span class="text-[9px] text-amber-400/80 font-mono block">QUEST 02</span>
+            <h5 class="text-xs font-bold text-slate-200">10 題測驗拿下滿分</h5>
+            <div class="text-[10px] font-mono text-amber-400 mt-0.5">
+              獎勵: 30 💎 ｜ <span id="q2StatusText" class="text-slate-400 font-bold">未完成</span>
+            </div>
+          </div>
+          <button id="q2ClaimBtn" onclick="claimQuestReward(2)" type="button" class="bg-slate-800 text-slate-500 font-bold px-3 py-1.5 rounded-xl text-[10px] cursor-not-allowed" disabled>
+            未達成
+          </button>
+        </div>
+
+        <!-- 任務 3 -->
+        <div class="bg-slate-950/80 border border-amber-500/20 p-3 rounded-2xl flex items-center justify-between">
+          <div>
+            <span class="text-[9px] text-amber-400/80 font-mono block">QUEST 03</span>
+            <h5 class="text-xs font-bold text-slate-200">完成 1 次 25分番茄鐘</h5>
+            <div class="text-[10px] font-mono text-amber-400 mt-0.5">
+              獎勵: 40 💎 ｜ <span id="q3StatusText" class="text-slate-400 font-bold">0/1 次</span>
+            </div>
+          </div>
+          <button id="q3ClaimBtn" onclick="claimQuestReward(3)" type="button" class="bg-slate-800 text-slate-500 font-bold px-3 py-1.5 rounded-xl text-[10px] cursor-not-allowed" disabled>
+            未達成
+          </button>
+        </div>
+      </div>
+
+      <!-- 卷軸底端：全解大獎勵 -->
+      <div class="mt-3 pt-3 border-t border-amber-500/30 flex justify-between items-center">
+        <div>
+          <span class="text-[10px] text-slate-400 block font-mono">卷軸進度</span>
+          <span id="questsProgressText" class="text-xs font-black font-mono text-amber-400">0 / 3 達成</span>
+        </div>
+        <button id="claimAllQuestsBtn" onclick="claimAllQuestsBonus()" type="button" class="bg-slate-800 text-slate-500 font-bold px-4 py-2 rounded-xl text-xs cursor-not-allowed transition" disabled>
+          全解送 5 🎟️
+        </button>
+      </div>
+
+    </div>
+  </div>      <div class="bg-gradient-to-br from-slate-900 via-slate-900 to-indigo-950 p-5 rounded-3xl border border-indigo-900/40 shadow-xl">
+        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-2">
+          <div>
+            <h2 class="text-base font-black text-white flex items-center gap-2">
+              <i data-lucide="shield-check" class="text-amber-400 w-4 h-4"></i> 球隊陣容 (5 先發 + 6 替補)
+            </h2>
+            <p class="text-xs text-slate-400 mt-0.5">錯位先發懲罰 -5 OVR ｜ 同隊滿 3 人化學反應 +1 OVR</p>
+          </div>
+          <div class="flex items-center gap-3">
+            <button onclick="autoSetHighestOvrLineup()" class="bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-black px-3 py-1.5 rounded-xl shadow transition flex items-center gap-1">
+              <i data-lucide="zap" class="w-3.5 h-3.5"></i> 一鍵最佳陣容
+            </button>
+            <div id="chemistryBadge" class="text-xs bg-indigo-900/40 border border-indigo-500/40 px-2.5 py-1 rounded-lg text-indigo-300 font-mono">化學反應: +0 OVR</div>
+            <div class="text-right">
+              <div class="text-[10px] text-slate-400 uppercase font-mono">Team Overall</div>
+              <div id="teamOvrBadge" class="text-xl font-black text-amber-400 font-mono leading-none">OVR 0</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 🔄 點選換位動態提示橫幅 (Tap-to-Swap Banner) -->
+        <div id="rosterSwapBanner" class="hidden mb-3.5"></div>
+
+        <div class="mb-4">
+          <div class="text-xs font-bold text-amber-400 mb-2">⭐️ 先發五人陣容 (Starting 5)</div>
+          <div class="grid grid-cols-2 sm:grid-cols-5 gap-2.5" id="rosterStarters"></div>
+        </div>
+
+        <div>
+          <div class="text-xs font-bold text-indigo-300 mb-2">🛡️ 板凳深度 (Bench 6)</div>
+          <div class="grid grid-cols-2 sm:grid-cols-6 gap-2" id="rosterBench"></div>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- TAB 2: 🃏 獨立球員卡庫 -->
+    <section id="tab-inventory" class="tab-content space-y-4 hidden">
+      <div class="inventory-panel bg-gradient-to-br from-slate-900 via-slate-900 to-indigo-950/60 p-4 sm:p-5 rounded-3xl border border-slate-800 shadow-xl">
+        <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-3 mb-4">
+          <div class="min-w-0">
+            <div class="flex items-center gap-2 flex-wrap">
+              <h2 class="text-base sm:text-lg font-black text-white flex items-center gap-2">
+                <i data-lucide="layout-grid" class="text-amber-400 w-5 h-5"></i> 球員卡片庫
+              </h2>
+              <span id="inventoryCount" class="text-xs font-mono bg-slate-800 px-3 py-1 rounded-full text-amber-400 border border-slate-700">0 張</span>
+            </div>
+            <p class="text-[11px] sm:text-xs text-slate-400 mt-1">點擊卡片可查看並指派陣容；重複卡片可前往升星所或交易所處理。</p>
+          </div>
+          <button onclick="openBinderModal()" class="w-full lg:w-auto flex items-center justify-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-2.5 rounded-xl text-xs font-bold shadow transition">
+            <i data-lucide="book-marked" class="w-4 h-4"></i> 開啟 30 隊圖鑑冊
+          </button>
+        </div>
+
+        <div class="inventory-toolbar grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 mb-4 text-xs">
+          <select id="filterPosition" aria-label="依球員位置篩選" onchange="changeFilter('pos', this.value)" class="bg-slate-950 border border-slate-700 text-slate-200 px-2.5 py-2.5 rounded-xl focus:outline-none focus:border-amber-500 cursor-pointer min-w-0">
+            <option value="ALL">全部位置</option>
+            <option value="PG">控球後衛 PG</option>
+            <option value="SG">得分後衛 SG</option>
+            <option value="SF">小前鋒 SF</option>
+            <option value="PF">大前鋒 PF</option>
+            <option value="C">中鋒 C</option>
+          </select>
+
+          <select id="filterTeam" aria-label="依球隊篩選" onchange="changeFilter('team', this.value)" class="bg-slate-950 border border-slate-700 text-slate-200 px-2.5 py-2.5 rounded-xl focus:outline-none focus:border-amber-500 cursor-pointer min-w-0">
+            <option value="ALL">全部球隊</option>
+          </select>
+
+          <select id="filterRarity" aria-label="依稀有度篩選" onchange="changeFilter('rarity', this.value)" class="bg-slate-950 border border-slate-700 text-slate-200 px-2.5 py-2.5 rounded-xl focus:outline-none focus:border-amber-500 cursor-pointer min-w-0">
+            <option value="ALL">全部稀有度</option>
+            <option value="UR">UR</option>
+            <option value="SSR">SSR</option>
+            <option value="SR">SR</option>
+            <option value="R">R</option>
+            <option value="N">N</option>
+          </select>
+
+          <select id="sortSelector" aria-label="球員卡排序方式" onchange="changeSortField(this.value)" class="bg-slate-950 border border-slate-700 text-amber-300 font-bold px-2.5 py-2.5 rounded-xl focus:outline-none focus:border-amber-500 cursor-pointer min-w-0">
+            <option value="ovr">依總評 OVR</option>
+            <option value="recent">依獲得時間</option>
+            <option value="position">依球員位置</option>
+            <option value="rarity">依稀有度</option>
+            <option value="name">依姓名</option>
+          </select>
+
+          <button id="sortOrderBtn" onclick="toggleSortOrder()" class="col-span-2 sm:col-span-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-amber-400 px-2.5 py-2.5 rounded-xl font-mono font-bold transition min-w-0">
+            ↓ 降序
+          </button>
+        </div>
+
+        <div id="cardInventory" class="inventory-grid"></div>
+      </div>
+    </section>
+
+    <!-- TAB 3: 🏆 82場例行賽 -->
+    <section id="tab-season" class="tab-content space-y-6 hidden">
+      <div class="bg-gradient-to-b from-slate-900 to-slate-950 p-6 sm:p-8 rounded-3xl border border-slate-800 shadow-xl text-center">
+        <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-800 border border-slate-700 text-xs text-amber-400 mb-3">
+          <i data-lucide="calendar" class="w-3.5 h-3.5"></i>
+          <span id="seasonLimitTip">每日限挑戰 1 次 ｜ 82-GAME SIMULATION</span>
+        </div>
+        <h2 class="text-xl font-black text-white"> 例行賽 82 場即時模擬</h2>
+        <p class="text-slate-400 text-xs max-w-md mx-auto mt-1">戰績達 42 勝以上自動解鎖 16 強季後賽對戰圖表！</p>
+
+        <div class="max-w-xl mx-auto my-5 bg-slate-950/80 border border-slate-800 rounded-2xl p-5 text-center shadow-inner">
+          <div class="flex justify-between items-center text-xs text-slate-400 font-mono mb-1">
+            <span>2025-26 REGULAR SEASON</span>
+            <span id="seasonStreakBadge" class="text-amber-400 font-bold">最長連勝: 0 場</span>
+          </div>
+          <div id="seasonRecordText" class="text-4xl sm:text-5xl font-black text-amber-400 font-mono my-2 tracking-tight">-- 勝 -- 敗</div>
+          <div class="flex justify-center items-center gap-2 text-xs text-slate-400">
+            <span id="seasonRankText">預估分區排名: --</span>
+            <span>•</span>
+          </div>
+        </div>
+
+        <div id="boxScoreSection" class="max-w-xl mx-auto mb-6 bg-slate-900/80 border border-slate-800 rounded-2xl p-4 text-left hidden">
+          <h4 class="text-xs font-black uppercase text-amber-400 font-mono mb-2 flex items-center gap-1.5">
+            <i data-lucide="award" class="w-4 h-4"></i> 本賽季獎項一覽
+          </h4>
+          <div id="boxScoreLeadersList" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5 text-xs font-mono"></div>
+        </div>
+
+        <div class="flex justify-center gap-3">
+          <button id="simSeasonBtn" onclick="start82GamesSimulation()" class="bg-emerald-600 hover:bg-emerald-500 active:scale-95 transition text-white font-black px-6 py-3 rounded-2xl text-sm shadow-lg">
+            🏀 開始模擬 82 場比賽
+          </button>
+          <button id="playoffBtn" onclick="openPlayoffBracketModal()" class="hidden bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 text-slate-950 font-black px-6 py-3 rounded-2xl text-sm shadow-lg">
+            🏆 進入 16 強季後賽對戰圖表
+          </button>
+        </div>
+
+<div class="mt-6 pt-5 border-t border-slate-800 text-left">
+          <div class="flex justify-between items-center mb-2">
+            <span class="text-xs font-bold text-slate-300 font-mono">82-GAME TRACKER</span>
+          </div>
+          <div id="gameGrid" class="grid grid-cols-8 sm:grid-cols-12 md:grid-cols-21 gap-1 sm:gap-1.5 p-2.5 bg-slate-950/90 rounded-2xl border border-slate-800/80"></div>
+        </div>
+      </div>
+    </section>
+<!-- 👇👇👇 請直接貼在 </section> 的前一行（或緊接在下方） 👇👇👇 -->
+
+<!-- 🌟 全明星週末（第 41 場）榮譽結算彈窗 -->
+<div id="allStarEventModal" onclick="if(event.target === this) resumeSimFromEvent('allStarEventModal')" class="fixed inset-0 bg-slate-950/90 backdrop-blur-md z-50 hidden flex items-end sm:items-center justify-center p-3 sm:p-4 ios-safe-modal">
+  <div class="bg-slate-900 border border-amber-500/60 rounded-3xl w-full max-w-md p-6 shadow-2xl text-center space-y-4 relative animate-modal-in">
+    <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-400/40 text-xs font-mono font-bold">
+      ★ 2026 NBA ALL-STAR WEEKEND ★
+<button id="btnOpenThreePtFromAllStar" onclick="openThreePointContest()" class="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-lg text-xs shadow-md cursor-pointer transition-all">
+  🎯 全明星三分球大賽
+</button>
+    </div>
+    <h3 class="text-xl font-black text-white">例行賽半程：全明星盛典！</h3>
+    <div class="p-4 bg-slate-950 rounded-2xl border border-slate-800 flex items-center gap-3 text-left">
+      <img id="asgPlayerImg" src="" class="w-14 h-14 rounded-full object-cover object-top bg-slate-900 border border-amber-400 flex-shrink-0" onerror="this.src='https://cdn.nba.com/headshots/nba/latest/1040x760/fallback.png'">
+      <div>
+        <span class="text-[10px] text-amber-400 font-bold block">🌟 入選西區全明星先發</span>
+        <h4 id="asgPlayerName" class="text-base font-black text-white">球員姓名</h4>
+        <p id="asgPlayerStats" class="text-xs text-slate-400 font-mono mt-0.5">場均 28.5 分 7.2 助攻</p>
+      </div>
+    </div>
+    <p class="text-xs text-slate-300">半程戰績斐然！聯盟特頒全明星嘉獎：<br><span class="text-amber-400 font-bold font-mono">+2 🎟️ 抽卡券 ｜ +30 💎 選秀碎片</span>！</p>
+    <button onclick="resumeSimFromEvent('allStarEventModal')" type="button" class="w-full bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 text-slate-950 font-black py-3.5 rounded-2xl text-xs sm:text-sm shadow-lg cursor-pointer active:scale-98 flex items-center justify-center gap-1.5">
+      收下榮譽並繼續下半季賽程 ➔
+    </button>
+  </div>
+</div>
+
+<!-- 🤝 季中交易截止日（第 55 場）提案彈窗 -->
+<div id="tradeDeadlineModal" onclick="if(event.target === this) rejectTradeOffer()" class="fixed inset-0 bg-slate-950/90 backdrop-blur-md z-50 hidden flex items-end sm:items-center justify-center p-3 sm:p-4 ios-safe-modal">
+  <div class="bg-slate-900 border border-indigo-500/60 rounded-3xl w-full max-w-lg p-6 shadow-2xl space-y-4 relative animate-modal-in">
+    <div class="flex justify-between items-center border-b border-slate-800 pb-3">
+      <span class="text-xs font-mono font-bold text-indigo-400 flex items-center gap-1.5">
+        🚨 TRADE DEADLINE (第 55 場)
+      </span>
+      <span id="tradeOfferTeamBadge" class="text-xs font-mono bg-slate-950 px-2 py-0.5 rounded text-slate-300">來自對手的報價</span>
+    </div>
+    <p class="text-xs text-slate-300">交易截止日最後鐘聲即將響起！有球隊向你拋出重磅互換報價：</p>
+    
+    <div class="grid grid-cols-2 gap-3 text-center">
+      <!-- 需送出的閒置板凳 -->
+      <div class="bg-slate-950 p-3 rounded-xl border border-rose-900/50">
+        <span class="text-[10px] text-rose-400 font-bold block mb-1">【送出】你的閒置球員</span>
+        <img id="tradeGiveImg" src="" class="w-12 h-12 rounded-full mx-auto object-cover object-top bg-slate-900 mb-1">
+        <p id="tradeGiveName" class="text-xs font-bold text-white truncate">球員</p>
+        <span id="tradeGiveOvr" class="text-[10px] text-slate-400 font-mono">OVR 78</span>
+      </div>
+
+      <!-- 對方提供的目標球員 -->
+      <div class="bg-slate-950 p-3 rounded-xl border border-emerald-900/50">
+        <span class="text-[10px] text-emerald-400 font-bold block mb-1">【獲得】補強目標</span>
+        <img id="tradeGetImg" src="" class="w-12 h-12 rounded-full mx-auto object-cover object-top bg-slate-900 mb-1">
+        <p id="tradeGetName" class="text-xs font-bold text-white truncate">球員</p>
+        <span id="tradeGetOvr" class="text-[10px] text-emerald-400 font-mono font-bold">OVR 82</span>
+      </div>
+    </div>
+
+    <div class="flex gap-2.5 pt-2">
+      <button onclick="rejectTradeOffer()" type="button" class="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold py-3.5 rounded-2xl text-xs cursor-pointer active:scale-98 border border-slate-700">
+        婉拒提案
+      </button>
+      <button onclick="acceptTradeOffer()" type="button" class="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-black py-3.5 rounded-2xl text-xs shadow-lg cursor-pointer active:scale-98">
+        達成交易！
+      </button>
+    </div>
+  </div>
+</div>
+    <!-- TAB 3: 🎟️ 選秀抽卡 -->
+    <section id="tab-gacha" class="tab-content hidden">
+      <div class="gacha-v2" aria-labelledby="gachaV2Title">
+        <header class="gacha-v2__topbar">
+          <div>
+            <span>PLAYER RECRUITMENT</span>
+            <h2 id="gachaV2Title">SEASON ONE PACK</h2>
+          </div>
+          <div class="gacha-v2__tickets" aria-label="抽卡券"><span>🎟️</span><strong id="gachaV2TicketCount">0</strong></div>
+        </header>
+
+        <div class="gacha-v2__stage">
+          <div class="gacha-v2__lights" aria-hidden="true"></div>
+          <img class="gacha-v2__pack-art" src="./assets/packs/season-one-pack-v2.png" alt="ToeicQuest Season One 球員卡包">
+          <div class="gacha-v2__stage-copy">
+            <span>30 TEAMS · 450 PLAYERS</span>
+            <strong>BUILD YOUR TEAM</strong>
+            <p>招募球員、養成同一張卡，寫下你的 Franchise Legacy。</p>
+          </div>
+        </div>
+
+        <section class="gacha-v2__featured" aria-label="本期精選球員">
+          <div class="gacha-v2__section-heading"><span>FEATURED PLAYERS</span><small>球員展示不改變原卡池機率</small></div>
+          <div id="gachaV2FeaturedPlayers" class="gacha-v2__featured-row"></div>
+        </section>
+
+        <section class="gacha-v2__rates" aria-label="卡池機率">
+          <div class="gacha-v2__rate-summary"><span class="is-ur">UR <b>1%</b></span><span class="is-ssr">SSR <b>3%</b></span><span class="is-sr">SR <b>10%</b></span></div>
+          <button type="button" onclick="toggleGachaV2Details(this)" aria-expanded="false">DETAILS</button>
+          <div id="gachaV2RateDetails" class="gacha-v2__rate-details" hidden>
+            <div><span>UR</span><strong>1%</strong></div><div><span>SSR</span><strong>3%</strong></div><div><span>SR</span><strong>10%</strong></div><div><span>R</span><strong>15%</strong></div><div><span>N</span><strong>71%</strong></div>
+            <p>每次抽卡依現有卡池機率獨立判定；此版本未啟用額外保底計數。</p>
+          </div>
+        </section>
+
+        <div class="gacha-v2__actions">
+          <button type="button" class="gacha-v2__draw-one" onclick="launchGachaWithShopAnimation(1)"><span>1 DRAW</span><small>🎟️ ×1</small></button>
+          <button type="button" class="gacha-v2__draw-ten" onclick="launchGachaWithShopAnimation(10)"><span>10 DRAW</span><small>🎟️ ×10</small></button>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 4: 📖 單字筆記 -->
+    <section id="tab-vocab" class="tab-content space-y-6 hidden">
+<!-- 📊 千字庫圖鑑收集進度面板 -->
+<div class="bg-slate-900 p-4 rounded-2xl border border-slate-800 shadow mb-4 space-y-2.5">
+  <div class="flex justify-between items-center text-xs">
+    <div class="flex items-center gap-1.5 font-black text-white">
+      <i data-lucide="compass" class="w-4 h-4 text-amber-400"></i>
+      <span>多益千字庫解鎖進度 (Vocabulary Mastery)</span>
+    </div>
+    <span id="vocabProgressPercent" class="font-mono font-bold text-amber-400 text-xs">0%</span>
+  </div>
+
+  <!-- 進度條軌道 -->
+  <div class="w-full bg-slate-950 rounded-full h-2 overflow-hidden border border-slate-800 p-0.5">
+    <div id="vocabProgressBar" class="bg-gradient-to-r from-amber-500 via-orange-500 to-emerald-500 h-full rounded-full transition-all duration-500" style="width: 0%;"></div>
+  </div>
+
+  <!-- 數據統計標籤 -->
+  <div class="grid grid-cols-4 gap-2 text-center text-[10px] font-mono font-bold pt-1">
+    <div class="bg-slate-950/80 p-1.5 rounded-xl border border-slate-800/80">
+      <span class="text-slate-500 block text-[9px]">已解鎖</span>
+      <span id="vocabStatUnlocked" class="text-slate-200">0 / 1000</span>
+    </div>
+    <div class="bg-slate-950/80 p-1.5 rounded-xl border border-slate-800/80">
+      <span class="text-amber-500/80 block text-[9px]">★1 生詞</span>
+      <span id="vocabStatBox1" class="text-amber-400">0</span>
+    </div>
+    <div class="bg-slate-950/80 p-1.5 rounded-xl border border-slate-800/80">
+      <span class="text-indigo-400/80 block text-[9px]">★2 熟悉</span>
+      <span id="vocabStatBox2" class="text-indigo-300">0</span>
+    </div>
+    <div class="bg-slate-950/80 p-1.5 rounded-xl border border-slate-800/80">
+      <span class="text-emerald-400/80 block text-[9px]">★3 精通</span>
+      <span id="vocabStatBox3" class="text-emerald-300">0</span>
+    </div>
+  </div>
+</div>
+      <div class="bg-slate-900 p-5 rounded-3xl border border-slate-800 shadow">
+        <div class="flex flex-wrap justify-between items-center mb-3 gap-2">
+          <div class="flex items-center gap-2">
+            <h3 class="text-base font-bold text-white flex items-center gap-1.5">
+              <i data-lucide="sparkles" class="text-amber-400 w-4 h-4"></i> 多益商務核心題庫
+            </h3>
+            <span id="quizStreakIndicator" class="text-xs text-amber-400 font-mono font-bold">連對: 0</span>
+          </div>
+          <div class="flex items-center gap-2 text-xs">
+            <select id="vocabBoxFilter" onchange="changeVocabBox(this.value)" class="bg-slate-950 border border-slate-700 px-2 py-1 rounded-xl text-amber-300 font-bold focus:outline-none">
+<option value="all">所有單字庫</option>
+<option value="box1">★☆☆ 初學複習</option>
+<option value="box2">★★☆ 熟練加強</option>
+<option value="box3">★★★ 畢業精通</option>
+            </select>
+            <button onclick="toggleQuizMode()" class="bg-slate-800 hover:bg-slate-700 text-slate-300 px-2.5 py-1 rounded-xl font-bold border border-slate-700" id="quizModeBtn">
+              模式: 翻卡
+            </button>
+          </div>
+        </div>
+
+<div id="flashcard" class="min-h-[155px] bg-slate-950 border border-slate-800 rounded-2xl flex flex-col items-center justify-center p-4 text-center select-none relative cursor-pointer card-swipe-smooth overflow-hidden touch-none" onclick="handleCardClick(event)">
+  <!-- 滑動印章提示 -->
+  <span id="stampLike" class="swipe-stamp swipe-stamp-like">記住了 ✅</span>
+  <span id="stampNope" class="swipe-stamp swipe-stamp-nope">不熟 ❌</span>
+
+  <div id="flashcardContent" class="w-full pointer-events-none">
+    <p class="text-[10px] text-slate-500 mb-1.5 flex items-center justify-center gap-2">
+      <span>👈 左滑 不熟</span>
+      <span>•</span>
+      <span>點擊/上滑 翻面</span>
+      <span>•</span>
+      <span>右滑 記住 👉</span>
+    </p>
+    
+    <!-- 詞性徽章 + 單字 + 朗讀按鈕 (同一水平行) -->
+    <div class="flex items-center justify-center gap-2 flex-wrap">
+      <span id="flashPosBadge" class="text-[11px] font-mono font-bold text-emerald-400 bg-emerald-950/80 border border-emerald-700/60 px-2 py-0.5 rounded-md pointer-events-none">n.</span>
+      <h4 id="flashWord" class="text-2xl font-black text-amber-400 pointer-events-none">incentive</h4>
+      <button onclick="speakWord(event)" type="button" class="pointer-events-auto inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/40 transition cursor-pointer z-20 text-xs font-bold" title="朗讀發音" aria-label="朗讀目前單字">
+        <span aria-hidden="true">🔊</span><span>發音</span>
+      </button>
+    </div>
+    
+    <!-- 翻面釋義與例句 -->
+    <p id="flashMeaning" class="text-sm text-slate-200 mt-2 hidden pointer-events-none">[★1] 誘因、動機</p>
+    <p id="flashExample" class="text-xs text-slate-400 italic mt-1 hidden pointer-events-none">"The draft lottery alters tanking incentives."</p>
+  </div>
+
+  <div id="spellingContent" class="w-full hidden space-y-2">
+    <p id="spellingMeaning" class="text-sm font-bold text-slate-200">[★1・n.] 誘因、動機</p>
+    <div id="spellingMasked" class="text-xl font-mono tracking-widest text-amber-400 font-black">i _ _ _ _ _ _ _ e</div>
+    <div class="flex justify-center gap-2 pt-1">
+      <input id="spellingInput" type="text" placeholder="請輸入完整單字" class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-1 text-center text-xs text-white focus:outline-none focus:border-amber-400 w-48">
+      <button onclick="checkSpellingAnswer()" class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-3 py-1 rounded-lg text-xs">檢查</button>
+    </div>
+  </div>
+</div>
+
+        <div class="grid grid-cols-2 gap-3 mt-3">
+<button onclick="answerQuiz(false)" class="bg-rose-950/40 hover:bg-rose-900/50 text-rose-300 font-semibold py-2 rounded-xl text-xs border border-rose-800/40">不熟 ❌ (降回 ★1)</button>
+<button onclick="answerQuiz(true)" class="bg-emerald-950/40 hover:bg-emerald-900/50 text-emerald-300 font-semibold py-2 rounded-xl text-xs border border-emerald-800/40">記住了 ✅ (晉升 +★)</button>
+        </div>
+      </div>
+
+      <div class="bg-slate-900 p-5 rounded-3xl border border-slate-800 shadow space-y-4">
+        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+          <div>
+            <h3 class="text-base font-bold text-white flex items-center gap-2">
+              <i data-lucide="book-open" class="text-indigo-400 w-4 h-4"></i> 單字庫列表
+            </h3>
+            <p class="text-xs text-slate-400">目前庫存 <span id="vocabTotalBadge" class="text-amber-400 font-bold">0</span> 字</p>
+          </div>
+          <button onclick="addFiveRandomWords()" class="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-3 py-1.5 rounded-xl shadow transition">
+            <i data-lucide="shuffle" class="w-3.5 h-3.5"></i> 隨機新增 5 個多益單字
+          </button>
+<button onclick="startVocabQuizModal()" type="button" class="flex items-center gap-1.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 text-slate-950 text-xs font-black px-3.5 py-1.5 rounded-xl shadow transition cursor-pointer">
+  <i data-lucide="award" class="w-3.5 h-3.5"></i> 單字測驗
+</button>
+        </div>
+
+        <div id="wrongAnswerPanel" class="bg-gradient-to-r from-rose-950/45 to-slate-950 border border-rose-800/40 rounded-2xl p-3.5">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <div class="flex items-center gap-2">
+                <h4 class="text-sm font-black text-rose-300">📕 錯題複習本</h4>
+                <span id="wrongAnswerCount" class="text-[10px] font-mono font-bold bg-rose-500/15 text-rose-300 border border-rose-500/30 px-2 py-0.5 rounded-full">0 題</span>
+              </div>
+              <p class="text-[11px] text-slate-400 mt-1">答錯會自動收藏；之後連續答對兩次，才會從錯題本畢業。</p>
+            </div>
+            <button id="startWrongAnswerQuizBtn" onclick="startWrongAnswerQuiz()" type="button" class="bg-rose-600 hover:bg-rose-500 disabled:bg-slate-800 disabled:text-slate-500 text-white font-black px-4 py-2.5 rounded-xl text-xs shadow transition" disabled>
+              專練錯題
+            </button>
+          </div>
+          <div id="wrongAnswerList" class="mt-3 flex flex-wrap gap-2 text-[11px]"></div>
+        </div>
+
+        <div class="bg-slate-950 p-3.5 rounded-2xl border border-slate-800">
+<form id="addWordForm" onsubmit="addWord(event)" class="grid grid-cols-1 sm:grid-cols-5 gap-2">
+  <input id="inputWord" type="text" placeholder="單字 (Word)" required class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none">
+  <select id="inputPos" class="bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-emerald-400 font-bold focus:outline-none">
+    <option value="n.">n. 名詞</option>
+    <option value="v.">v. 動詞</option>
+    <option value="adj.">adj. 形容詞</option>
+    <option value="adv.">adv. 副詞</option>
+    <option value="phr.">phr. 片語</option>
+  </select>
+  <input id="inputMeaning" type="text" placeholder="中文翻譯 (Meaning)" required class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none">
+  <input id="inputExample" type="text" placeholder="例句 (Example)" class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none">
+  <button type="submit" class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-1.5 rounded-lg text-xs transition">+ 新增</button>
+</form>
+        </div>
+        <div id="vocabListContainer" class="space-y-2 max-h-60 overflow-y-auto pr-1"></div>
+      </div>
+    </section>
+
+    <!-- TAB 5: 📊 學習打卡 & 番茄鐘 -->
+    <section id="tab-stats" class="tab-content space-y-6 hidden">
+      <div class="bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 p-5 rounded-3xl border border-indigo-900/40 shadow-xl text-center">
+        <h3 class="text-base font-black text-white mb-1 flex items-center justify-center gap-2">
+          <i data-lucide="clock" class="text-indigo-400 w-4 h-4"></i> 多益 25 分鐘衝刺番茄鐘
+        </h3>
+        <p class="text-xs text-slate-400 mb-4">專注完成一個番茄鐘，自動增加 25 分鐘時長並贈送 1 🎟️ 抽卡券！</p>
+        <div id="timerDisplay" class="text-5xl font-black font-mono text-indigo-300 my-3">25:00</div>
+        <div class="flex justify-center gap-3">
+          <button id="timerToggleBtn" onclick="togglePomodoroTimer()" class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-6 py-2 rounded-xl text-xs transition">開始專注</button>
+          <button onclick="resetPomodoroTimer()" class="bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold px-4 py-2 rounded-xl text-xs transition">重置</button>
+        </div>
+      </div>
+
+<div class="bg-slate-900 p-5 rounded-3xl border border-slate-800 shadow space-y-4">
+  <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+    <div>
+      <h3 class="text-base font-black text-white flex items-center gap-2">
+        <i data-lucide="calendar" class="text-amber-400 w-5 h-5"></i> 學習打卡日曆 (Monthly Tracker)
+      </h3>
+      <p class="text-xs text-slate-400 mt-0.5">每日完成打卡領取 1 🎟️ 抽卡券，點亮專屬日曆勳章！</p>
+    </div>
+    <div id="calendarMonthBadge" class="text-xs font-mono font-bold bg-slate-950 border border-slate-800 px-3 py-1 rounded-xl text-amber-400">
+      2026 年 9 月
+    </div>
+  </div>
+
+  <!-- 星期表頭 (日 ~ 六) -->
+  <div class="grid grid-cols-7 gap-1.5 text-center text-[11px] font-bold text-slate-400">
+    <div class="text-rose-400">日</div>
+    <div>一</div>
+    <div>二</div>
+    <div>三</div>
+    <div>四</div>
+    <div>五</div>
+    <div class="text-amber-400">六</div>
+  </div>
+
+  <!-- 圓形日期網格 -->
+  <div id="studyCalendarGrid" class="grid grid-cols-7 gap-2 p-3 bg-slate-950/80 rounded-2xl border border-slate-800/80">
+    <!-- JS 自動產生圓形日期 -->
+  </div>
+
+<!-- 今日多益實戰紀錄與打卡操作區 -->
+  <div class="pt-4 border-t border-slate-800/80 space-y-4">
+    <div class="flex justify-between items-center text-xs">
+      <span class="font-black text-amber-400 flex items-center gap-1.5">
+        <i data-lucide="edit-3" class="w-4 h-4"></i> 今日實戰明細登錄
+      </span>
+      <span id="todayStudyStatus" class="font-bold text-slate-400">今日狀態：尚未打卡</span>
+    </div>
+
+    <!-- 📝 測驗名稱與分數輸入欄 -->
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-slate-950/70 border border-slate-800 p-3.5 rounded-2xl">
+      <div class="sm:col-span-2">
+        <label class="text-[10px] text-slate-400 font-bold block mb-1">📝 今天做了什麼測驗？</label>
+        <input id="inputQuizName" type="text" placeholder="例如：國際學村黃金團隊 Test 1、官方模考 Vol.8" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-amber-400">
+      </div>
+      <div>
+        <label class="text-[10px] text-amber-400 font-bold block mb-1">🏆 測驗總分 / 預估得分</label>
+        <input id="inputTotalScore" type="number" min="0" max="990" placeholder="例如：850" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-amber-300 font-mono font-bold focus:outline-none focus:border-amber-400">
+      </div>
+    </div>
+
+    <!-- 🎧 聽力 & 📖 閱讀 題數與正確率 -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <!-- 聽力部分 -->
+      <div class="bg-slate-950/70 border border-slate-800 p-3.5 rounded-2xl space-y-2">
+        <div class="flex justify-between items-center text-xs font-bold">
+          <span class="text-indigo-400 flex items-center gap-1">🎧 聽力部分 (Listening)</span>
+          <span class="text-[11px] font-mono text-slate-400">正確率: <span id="listenRateText" class="text-indigo-300 font-bold">--%</span></span>
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="text-[10px] text-slate-500 block mb-0.5">總題數</label>
+            <input id="inputListenTotal" type="number" min="0" placeholder="例如 100" oninput="calculateStudyRates()" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500 font-mono">
+          </div>
+          <div>
+            <label class="text-[10px] text-slate-500 block mb-0.5">答對題數</label>
+            <input id="inputListenCorrect" type="number" min="0" placeholder="例如 88" oninput="calculateStudyRates()" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500 font-mono">
+          </div>
+        </div>
+      </div>
+
+      <!-- 閱讀部分 -->
+      <div class="bg-slate-950/70 border border-slate-800 p-3.5 rounded-2xl space-y-2">
+        <div class="flex justify-between items-center text-xs font-bold">
+          <span class="text-emerald-400 flex items-center gap-1">📖 閱讀部分 (Reading)</span>
+          <span class="text-[11px] font-mono text-slate-400">正確率: <span id="readRateText" class="text-emerald-300 font-bold">--%</span></span>
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="text-[10px] text-slate-500 block mb-0.5">總題數</label>
+            <input id="inputReadTotal" type="number" min="0" placeholder="例如 100" oninput="calculateStudyRates()" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500 font-mono">
+          </div>
+          <div>
+            <label class="text-[10px] text-slate-500 block mb-0.5">答對題數</label>
+            <input id="inputReadCorrect" type="number" min="0" placeholder="例如 82" oninput="calculateStudyRates()" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500 font-mono">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 打卡按鈕 -->
+<!-- 打卡按鈕與管理者時光機 -->
+    <div class="flex justify-end items-center gap-2 pt-1">
+      <!-- 管理者專用：指定打卡日期 -->
+      <input id="adminDateInput" type="date" title="管理者時光機：選擇打卡日期" class="hidden bg-slate-950 border border-rose-500/60 rounded-xl px-2 py-2 text-xs text-rose-400 font-mono focus:outline-none focus:border-rose-400 cursor-pointer shadow-lg shadow-rose-900/20">
+      
+      <button id="checkInBtn" onclick="submitStudyLog()" type="button" class="w-full sm:w-auto bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 text-slate-950 font-black px-6 py-2.5 rounded-xl text-xs shadow-lg transition flex items-center justify-center gap-1.5 cursor-pointer">
+        <i data-lucide="check-circle-2" class="w-4 h-4"></i> 保存今日紀錄並打卡 (+1 🎟️)
+      </button>
+    </div><!-- 📈 多益模考分數走勢圖 (Score Trend Chart) -->
+<div class="bg-slate-900 p-4 rounded-2xl border border-slate-800 shadow mt-4 space-y-3">
+  <div class="flex justify-between items-center">
+    <div class="flex items-center gap-2">
+      <div class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></div>
+      <h4 class="text-xs font-black text-white flex items-center gap-1.5">
+        <i data-lucide="trending-up" class="w-4 h-4 text-amber-400"></i> 多益模考得分趨勢 (Score Trend)
+      </h4>
+    </div>
+    <span id="scoreTrendSummary" class="text-[11px] font-mono text-slate-400">尚無足夠測驗分數</span>
+  </div>
+
+  <!-- SVG 折線圖繪製區 -->
+  <div class="w-full bg-slate-950/80 border border-slate-800/80 rounded-xl p-3 relative overflow-hidden">
+    <!-- 門檻輔助線標籤 -->
+    <div class="absolute right-2 top-2 text-[9px] font-mono text-amber-500/70 border border-amber-500/30 bg-amber-950/40 px-1.5 py-0.5 rounded">
+      金色證書 860+
+    </div>
+    <svg id="scoreTrendSvg" viewBox="0 0 500 160" class="w-full h-36 overflow-visible">
+      <!-- JS 動態繪製線段與數據節點 -->
+    </svg>
+  </div>
+
+  <!-- 最近幾次回數標籤列 -->
+  <div id="scoreTrendLabels" class="flex justify-between text-[10px] font-mono text-slate-500 px-1">
+    <!-- JS 動態填入回數或日期 -->
+  </div>
+</div>
+  </div>
+    </section>
+  </main>
+
+  <!-- ⭐ 升星所 Modal -->
+  <div id="upgradeModal" onclick="if(event.target === this) closeUpgradeModal()" class="fixed inset-0 bg-slate-950/90 backdrop-blur-md z-50 flex flex-col p-4 sm:p-6 hidden overflow-y-auto ios-safe-modal">
+    <div class="max-w-4xl w-full mx-auto flex justify-between items-center mb-4">
+      <div>
+        <h2 class="text-base sm:text-lg font-black text-white flex items-center gap-2">
+          <i data-lucide="star" class="text-amber-400 w-4 h-4"></i> 球員突破升星所 (Star Upgrade Center)
+        </h2>
+        <p class="text-xs text-slate-400">消耗 2 張同星級卡片突破升星（★1➔★2 需 2 張，★2➔★3 需 2 張，OVR +2）</p>
+      </div>
+      <button onclick="closeUpgradeModal()" class="bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold px-3.5 py-2.5 rounded-xl border border-slate-700 transition cursor-pointer active:scale-98">關閉</button>
+    </div>
+
+    <!-- 升星所專用篩選控制列 -->
+    <div class="max-w-4xl w-full mx-auto mb-3 flex flex-wrap items-center gap-2 text-xs">
+      <select id="upgradeFilterPos" onchange="openUpgradeModal()" class="bg-slate-900 border border-slate-700 text-slate-200 px-2 py-1 rounded-xl focus:outline-none cursor-pointer">
+        <option value="ALL">全部位置</option>
+        <option value="PG">PG</option>
+        <option value="SG">SG</option>
+        <option value="SF">SF</option>
+        <option value="PF">PF</option>
+        <option value="C">C</option>
+      </select>
+
+      <select id="upgradeFilterTeam" onchange="openUpgradeModal()" class="bg-slate-900 border border-slate-700 text-slate-200 px-2 py-1 rounded-xl focus:outline-none cursor-pointer">
+        <option value="ALL">全部球隊</option>
+      </select>
+
+      <select id="upgradeFilterRarity" onchange="openUpgradeModal()" class="bg-slate-900 border border-slate-700 text-slate-200 px-2 py-1 rounded-xl focus:outline-none cursor-pointer">
+        <option value="ALL">全部稀有度</option>
+        <option value="UR">UR</option>
+        <option value="SSR">SSR</option>
+        <option value="SR">SR</option>
+        <option value="R">R</option>
+        <option value="N">N</option>
+      </select>
+
+      <select id="upgradeSortField" onchange="openUpgradeModal()" class="bg-slate-900 border border-slate-700 text-amber-300 font-bold px-2 py-1 rounded-xl focus:outline-none cursor-pointer">
+        <option value="ovr">總評 (OVR)</option>
+        <option value="star">當前星級</option>
+        <option value="count">持有數量</option>
+      </select>
+
+      <button id="upgradeSortOrderBtn" onclick="toggleUpgradeSortOrder()" type="button" class="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-amber-400 px-2.5 py-1 rounded-xl font-mono font-bold transition">
+        ↓ 降序
+      </button>
+    </div>
+
+    <div class="max-w-4xl w-full mx-auto grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3" id="upgradeListContainer"></div>
+
+    <!-- 📱 底部大拇指關閉按鈕 -->
+    <div class="max-w-4xl w-full mx-auto mt-6 pb-6">
+      <button onclick="closeUpgradeModal()" type="button" class="w-full bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold py-3.5 rounded-2xl text-sm transition cursor-pointer active:scale-98 shadow-lg flex items-center justify-center gap-1.5 border border-slate-700">
+        <span>✕</span> 關閉升星所 (Close)
+      </button>
+    </div>
+  </div>
+
+  <!-- 💎 自由市場交易所 Modal -->
+  <div id="marketModal" onclick="if(event.target === this) closeMarketModal()" class="fixed inset-0 bg-slate-950/90 backdrop-blur-md z-50 flex flex-col p-4 sm:p-6 hidden overflow-y-auto ios-safe-modal">
+    <div class="max-w-4xl w-full mx-auto flex justify-between items-center mb-4">
+      <div>
+        <h2 class="text-base sm:text-lg font-black text-white flex items-center gap-2">
+          <i data-lucide="shopping-bag" class="text-pink-400 w-4 h-4"></i> 自由市場交易所 (Scout Market)
+        </h2>
+        <p class="text-xs text-slate-400">將多餘球員卡回收轉化為選秀碎片 (Gem)，並兌換抽卡券或傳奇球星！</p>
+      </div>
+
+      <div class="flex items-center gap-1.5">
+        <select id="convertTierSelect" class="bg-slate-900 border border-emerald-700/60 text-emerald-400 font-bold px-2 py-1.5 rounded-xl text-xs focus:outline-none cursor-pointer">
+          <option value="N" selected>僅限 N 卡</option>
+          <option value="R">僅限 R 卡</option>
+          <option value="N_R">N 卡 ＋ R 卡</option>
+          <option value="SR">僅限 SR 卡</option>
+        </select>
+        <button onclick="batchConvertCards()" type="button" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-3 py-1.5 rounded-xl text-xs shadow transition cursor-pointer">
+          ♻️ 轉化
+        </button>
+        <button onclick="closeMarketModal()" class="bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold px-3.5 py-2.5 rounded-xl border border-slate-700 transition cursor-pointer active:scale-98">關閉</button>
+      </div>
+    </div>
+<!-- ⚡ 每日黑市快閃特惠 (Flash Market) -->
+    <div class="max-w-4xl w-full mx-auto mb-4 bg-gradient-to-r from-amber-950/40 via-slate-900 to-purple-950/40 border border-amber-500/50 rounded-3xl p-4 shadow-xl">
+      <div class="flex flex-wrap justify-between items-center border-b border-slate-800 pb-2 mb-3 gap-2">
+        <div class="flex items-center gap-2">
+          <span class="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-400/40 text-[10px] font-mono font-bold animate-pulse">
+            ⚡ 每日限時特惠 (00:00 刷新)
+          </span>
+          <h4 class="text-xs font-black text-white">黑市精選貨架</h4>
+        </div>
+        <span id="flashMarketTimer" class="text-[10px] font-mono text-slate-400">刷新倒數: --:--:--</span>
+      </div>
+      
+      <!-- 每日 3 格特惠卡片由 JS 動態填入 -->
+      <div id="flashMarketGrid" class="grid grid-cols-1 sm:grid-cols-3 gap-3"></div>
+    </div>
+    <!-- 傳奇兌換專區: Kobe Bryant ('10) -->
+    <div class="max-w-4xl w-full mx-auto mb-4 bg-gradient-to-r from-slate-900 via-slate-950 to-slate-900 border border-slate-700 rounded-3xl p-5 shadow-2xl flex flex-col sm:flex-row items-center justify-between gap-4">
+      <div class="flex items-center gap-4">
+        <div class="w-16 h-24 rounded-2xl border-2 silver-black-glow flex flex-col items-center justify-between p-1.5 text-center flex-shrink-0">
+          <span class="text-[8px] font-black text-slate-300 font-mono">LEGEND</span>
+          <img src="https://cdn.nba.com/headshots/nba/latest/1040x760/977.png" class="w-10 h-10 object-cover object-top rounded-full bg-slate-800" onerror="this.src='https://cdn.nba.com/headshots/nba/latest/1040x760/fallback.png'">
+          <span class="text-[8px] font-black text-amber-300 font-mono leading-none">OVR 99</span>
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <h3 class="text-base font-black text-slate-100">Kobe Bryant ('10)</h3>
+            <span class="px-2 py-0.5 rounded bg-slate-800 border border-slate-600 text-slate-200 text-[10px] font-bold font-mono">銀黑典藏 UR</span>
+          </div>
+          <p class="text-xs text-slate-400 mt-1">洛杉磯湖人 2010 冠軍賽 MVP 頂峰巔峰形態 ｜ 位置: SG/SF ｜ OVR: 99</p>
+          <p class="text-[11px] text-pink-400 font-mono font-bold mt-0.5">兌換價格: 2400 💎 選秀碎片</p>
+        </div>
+      </div>
+      <button onclick="buyKobeLegend()" class="bg-gradient-to-r from-slate-200 via-slate-400 to-slate-200 hover:brightness-110 text-slate-950 font-black px-5 py-2.5 rounded-2xl text-xs shadow-lg transition flex-shrink-0">
+        兌換 Kobe ('10)
+      </button>
+    </div>
+
+    <div class="max-w-4xl w-full mx-auto mb-6 bg-slate-900 border border-slate-800 rounded-2xl p-4 flex flex-wrap justify-between items-center gap-4">
+      <div>
+        <h4 class="text-xs font-bold text-amber-400 font-mono">🎫 官方抽卡券補給</h4>
+        <p class="text-xs text-slate-400">使用 50 點選秀碎片兌換 1 張抽卡券</p>
+      </div>
+      <button onclick="buyTicketWithGems()" class="bg-gradient-to-r from-pink-600 to-purple-600 hover:from-pink-500 text-white text-xs font-bold px-4 py-2 rounded-xl shadow transition">兌換 1 張抽卡券 (50 💎)</button>
+    </div>
+
+    <h3 class="text-sm font-bold text-slate-300 max-w-4xl w-full mx-auto mb-2">可回收轉化為碎片的球員卡清單：</h3>
+    
+    <!-- 交易所篩選列 -->
+    <div class="max-w-4xl w-full mx-auto mb-3 flex flex-wrap items-center gap-2 text-xs">
+      <select id="marketFilterPos" onchange="openMarketModal()" class="bg-slate-900 border border-slate-700 text-slate-200 px-2 py-1 rounded-xl focus:outline-none">
+        <option value="ALL">全部位置</option>
+        <option value="PG">PG</option>
+        <option value="SG">SG</option>
+        <option value="SF">SF</option>
+        <option value="PF">PF</option>
+        <option value="C">C</option>
+      </select>
+
+      <select id="marketFilterTeam" onchange="openMarketModal()" class="bg-slate-900 border border-slate-700 text-slate-200 px-2 py-1 rounded-xl focus:outline-none">
+        <option value="ALL">全部球隊</option>
+      </select>
+
+      <select id="marketFilterRarity" onchange="openMarketModal()" class="bg-slate-900 border border-slate-700 text-slate-200 px-2 py-1 rounded-xl focus:outline-none">
+        <option value="ALL">全部稀有度</option>
+        <option value="UR">UR</option>
+        <option value="SSR">SSR</option>
+        <option value="SR">SR</option>
+        <option value="R">R</option>
+        <option value="N">N</option>
+      </select>
+
+      <select id="marketSortField" onchange="openMarketModal()" class="bg-slate-900 border border-slate-700 text-pink-300 font-bold px-2 py-1 rounded-xl focus:outline-none">
+        <option value="ovr">總評 (OVR)</option>
+        <option value="rarity">稀有度</option>
+        <option value="recent">最近獲得</option>
+      </select>
+
+      <button id="marketSortOrderBtn" onclick="toggleMarketSortOrder()" type="button" class="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-pink-300 px-2.5 py-1 rounded-xl font-mono font-bold">
+        ↓ 降序
+      </button>
+    </div>
+    <div class="max-w-4xl w-full mx-auto grid grid-cols-2 sm:grid-cols-4 gap-3" id="marketSellListContainer"></div>
+
+    <!-- 📱 底部大拇指關閉按鈕 -->
+    <div class="max-w-4xl w-full mx-auto mt-6 pb-6">
+      <button onclick="closeMarketModal()" type="button" class="w-full bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold py-3.5 rounded-2xl text-sm transition cursor-pointer active:scale-98 shadow-lg flex items-center justify-center gap-1.5 border border-slate-700">
+        <span>✕</span> 關閉自由市場 (Close)
+      </button>
+    </div>
+  </div>
+
+  <!-- 🏆 16 強季後賽對戰圖表 Modal -->
+  <div id="playoffBracketModal" onclick="if(event.target === this) closePlayoffBracketModal()" class="fixed inset-0 bg-slate-950/95 backdrop-blur-md z-50 flex flex-col p-4 sm:p-6 hidden overflow-y-auto ios-safe-modal">
+    <div class="max-w-5xl w-full mx-auto flex justify-between items-center mb-4">
+      <div>
+        <h2 class="text-base sm:text-lg font-black text-amber-400 flex items-center gap-2">
+          <i data-lucide="award" class="w-4 h-4"></i> 2026 NBA 季後賽 16 強對戰圖表
+        </h2>
+        <p class="text-xs text-slate-400">7 戰 4 勝制淘汰賽！推進每一輪對決，贏取總冠軍金盃與 15 張抽卡券！</p>
+      </div>
+      <button onclick="closePlayoffBracketModal()" class="bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold px-3.5 py-2.5 rounded-xl border border-slate-700 transition cursor-pointer active:scale-98">關閉</button>
+    </div>
+
+    <div class="max-w-5xl w-full mx-auto my-auto grid grid-cols-1 md:grid-cols-4 gap-4 text-center">
+      <div class="bg-slate-900 border border-slate-800 p-4 rounded-2xl flex flex-col justify-between">
+        <h3 class="text-xs font-black uppercase text-slate-400 font-mono mb-3">Round 1 (首輪 8組)</h3>
+        <div id="bracketRound1" class="space-y-2 text-xs max-h-96 overflow-y-auto pr-1"></div>
+        <button onclick="simulatePlayoffRound(0)" id="playoffBtnR1" class="mt-4 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2 rounded-xl text-xs transition">模擬首輪對決</button>
+      </div>
+      <div class="bg-slate-900 border border-slate-800 p-4 rounded-2xl flex flex-col justify-between">
+        <h3 class="text-xs font-black uppercase text-slate-400 font-mono mb-3">Semis (次輪 4組)</h3>
+        <div id="bracketRound2" class="space-y-2 text-xs my-auto"></div>
+        <button onclick="simulatePlayoffRound(1)" id="playoffBtnR2" class="mt-4 bg-slate-800 text-slate-500 font-bold py-2 rounded-xl text-xs cursor-not-allowed" disabled>模擬分區次輪</button>
+      </div>
+      <div class="bg-slate-900 border border-slate-800 p-4 rounded-2xl flex flex-col justify-between">
+        <h3 class="text-xs font-black uppercase text-slate-400 font-mono mb-3">Conf Finals (分決 2組)</h3>
+        <div id="bracketRound3" class="space-y-2 text-xs my-auto"></div>
+        <button onclick="simulatePlayoffRound(2)" id="playoffBtnR3" class="mt-4 bg-slate-800 text-slate-500 font-bold py-2 rounded-xl text-xs cursor-not-allowed" disabled>模擬分區決賽</button>
+      </div>
+      <div class="bg-gradient-to-br from-amber-950/40 via-slate-900 to-amber-950/40 border border-amber-500/50 p-4 rounded-2xl flex flex-col justify-between">
+        <h3 class="text-xs font-black uppercase text-amber-400 font-mono mb-3">NBA Finals (總冠軍賽)</h3>
+        <div id="bracketRound4" class="space-y-2 text-xs my-auto"></div>
+        <button onclick="simulatePlayoffRound(3)" id="playoffBtnR4" class="mt-4 bg-slate-800 text-slate-500 font-bold py-2 rounded-xl text-xs cursor-not-allowed" disabled>爭奪總冠軍金盃！</button>
+      </div>
+    </div>
+
+    <!-- 📱 底部大拇指關閉按鈕 -->
+    <div class="max-w-5xl w-full mx-auto mt-6 pb-6">
+      <button onclick="closePlayoffBracketModal()" type="button" class="w-full bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold py-3.5 rounded-2xl text-sm transition cursor-pointer active:scale-98 shadow-lg flex items-center justify-center gap-1.5 border border-slate-700">
+        <span>✕</span> 關閉對戰圖表 (Close)
+      </button>
+    </div>
+  </div>
+
+  <!-- 📖 30 隊圖鑑集卡冊 -->
+  <div id="binderModal" onclick="if(event.target === this) closeBinderModal()" class="fixed inset-0 bg-slate-950/90 backdrop-blur-md z-50 flex flex-col p-4 sm:p-6 hidden overflow-y-auto ios-safe-modal">
+    <div class="max-w-5xl w-full mx-auto flex justify-between items-center mb-4">
+      <div>
+        <h2 class="text-base sm:text-lg font-black text-white flex items-center gap-2">
+          <i data-lucide="book-marked" class="text-amber-400 w-4 h-4"></i> 30 隊圖鑑冊 (制霸送 10 🎟️)
+        </h2>
+        <p class="text-xs text-slate-400">全隊 15 人集滿即可領取專屬「隊史制霸獎勵」！</p>
+      </div>
+      <button onclick="closeBinderModal()" class="bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold px-3.5 py-2.5 rounded-xl border border-slate-700 transition cursor-pointer active:scale-98">關閉</button>
+    </div>
+    <div class="max-w-5xl w-full mx-auto grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3" id="binderTeamGrid"></div>
+
+    <!-- 📱 底部大拇指關閉按鈕 -->
+    <div class="max-w-5xl w-full mx-auto mt-6 pb-6">
+      <button onclick="closeBinderModal()" type="button" class="w-full bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold py-3.5 rounded-2xl text-sm transition cursor-pointer active:scale-98 shadow-lg flex items-center justify-center gap-1.5 border border-slate-700">
+        <span>✕</span> 關閉圖鑑集卡冊 (Close)
+      </button>
+    </div>
+  </div>
+
+  <!-- 🎁 兌換碼彈窗 -->
+  <div id="redeemModal" onclick="if(event.target === this) closeRedeemModal()" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4 hidden ios-safe-modal overflow-y-auto">
+    <div class="bg-slate-900 border border-amber-500/40 rounded-3xl p-6 max-w-sm w-full shadow-2xl text-center relative max-h-[calc(100dvh-2rem)] overflow-y-auto">
+      <button onclick="closeRedeemModal()" class="absolute top-4 right-4 text-slate-400 hover:text-white modal-close-btn-touch"><i data-lucide="x" class="w-5 h-5"></i></button>
+      <h3 class="text-base font-black text-white mb-1">禮包兌換碼</h3>
+      <p class="text-xs text-slate-400 mb-4">請輸入專屬序號進行兌換</p>
+      <input id="redeemInput" type="text" placeholder="" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-center text-sm font-mono uppercase text-amber-300 focus:outline-none mb-3">
+      <button onclick="submitRedeemCode()" class="w-full bg-amber-500 hover:bg-amber-400 text-slate-950 font-black py-3 rounded-xl text-xs transition cursor-pointer active:scale-98 shadow-lg">立即兌換</button>
+      <button onclick="closeRedeemModal()" type="button" class="w-full mt-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold py-3 rounded-xl text-xs transition cursor-pointer active:scale-98 border border-slate-700/60">
+        取消 (Cancel)
+      </button>
+    </div>
+  </div>
+
+  <!-- 🏪 卡店老闆遞卡包動畫場景 -->
+  <div id="cardShopOverlay" class="gacha-v2-opening-scene hidden ios-safe-modal">
+    <div class="gacha-v2-opening-scene__light" aria-hidden="true"></div>
+    <div class="gacha-v2-opening-scene__copy"><span>TOEICQUEST PRESENTS</span><strong>SEASON ONE</strong><small>PLAYER CARDS</small></div>
+    <button id="shopPackVisual" onclick="ripShopPack()" class="gacha-v2-opening-pack" type="button" aria-label="點擊撕開球員卡包">
+      <img src="./assets/packs/season-one-pack-v2.png" alt="Season One 卡包">
+    </button>
+    <p class="gacha-v2-opening-scene__tap">TAP TO OPEN</p>
+  </div>
+
+  <!-- 💥 抽卡展示舞台 -->
+  <div id="gachaModal" onclick="if(event.target === this) closeGachaModal()" class="fixed inset-0 bg-slate-950/95 backdrop-blur-md z-50 flex flex-col justify-between p-4 sm:p-6 hidden overflow-y-auto ios-safe-modal">
+    <div class="max-w-5xl w-full mx-auto flex justify-between items-center z-10">
+      <div>
+        <h2 class="text-base sm:text-lg font-black text-amber-400">點擊卡片翻開！</h2>
+        <p class="text-xs text-slate-400">獲得你的隊友</p>
+      </div>
+      <div class="flex items-center gap-2">
+        <button onclick="revealAllCards()" class="bg-slate-800 hover:bg-slate-700 text-amber-300 text-xs font-bold px-3 py-2 rounded-xl border border-slate-700 transition cursor-pointer active:scale-98">一鍵全部翻開</button>
+        <button onclick="closeGachaModal()" class="bg-rose-900/60 hover:bg-rose-800 text-white text-xs font-bold px-3.5 py-2 rounded-xl border border-slate-700 transition cursor-pointer active:scale-98">完成返回</button>
+      </div>
+    </div>
+    <div class="max-w-5xl w-full mx-auto my-auto py-2 flex flex-col items-center justify-center gap-3">
+      <div id="gachaSingleContainer" class="w-full flex justify-center items-center py-4"></div>
+      <div id="gachaRowTop" class="w-full flex justify-center items-center gap-2 sm:gap-3"></div>
+      <div id="gachaRowBottom" class="w-full flex justify-center items-center gap-2 sm:gap-3"></div>
+    </div>
+    <!-- 📱 底部大拇指完成按鈕 -->
+    <div class="max-w-5xl w-full mx-auto mt-4 pb-4">
+      <button onclick="closeGachaModal()" type="button" class="w-full bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold py-3.5 rounded-2xl text-sm transition cursor-pointer active:scale-98 shadow-lg flex items-center justify-center gap-1.5 border border-slate-700">
+        <span>✕</span> 完成翻卡並返回 (Done)
+      </button>
+    </div>
+  </div>
+
+  <!-- 底部固定 Tab 導航欄 -->
+<!-- 📝 10題四選一單字測驗 Modal -->
+<div id="vocabQuizModal" onclick="if(event.target === this) closeVocabQuizModal()" class="fixed inset-0 bg-slate-950/95 backdrop-blur-md z-50 flex items-center justify-center p-3 sm:p-4 hidden ios-safe-modal overflow-y-auto">
+  <div class="bg-slate-900 border border-amber-500/50 rounded-3xl p-5 sm:p-6 max-w-md w-full shadow-2xl relative text-center max-h-[calc(100dvh-2rem)] overflow-y-auto">
+    <!-- 關閉按鈕 -->
+    <button onclick="closeVocabQuizModal()" type="button" class="absolute top-4 right-4 text-slate-400 hover:text-white modal-close-btn-touch"><i data-lucide="x" class="w-5 h-5"></i></button>
+    
+    <!-- 頂部進度 -->
+    <div class="flex justify-between items-center text-xs font-mono text-slate-400 mb-2">
+      <span id="quizModeLabel" class="text-amber-400 font-bold">TOEIC QUIZ</span>
+      <span id="quizProgressText">第 1 / 10 題</span>
+    </div>
+    
+    <!-- 進度條 -->
+    <div class="w-full bg-slate-950 rounded-full h-1.5 mb-6 overflow-hidden border border-slate-800">
+      <div id="quizProgressBar" class="bg-gradient-to-r from-amber-500 to-orange-500 h-1.5 transition-all duration-300" style="width: 10%;"></div>
+    </div>
+
+    <!-- 單字題目區 -->
+    <div class="my-4">
+      <span id="quizWordPos" class="text-[10px] font-mono font-bold text-emerald-400 bg-emerald-950/80 border border-emerald-700/50 px-2 py-0.5 rounded-full">n.</span>
+      <div class="flex items-center justify-center gap-2 my-2">
+        <h3 id="quizQuestionWord" class="text-3xl font-black text-amber-400">revenue</h3>
+        <button onclick="speakQuizWord(event)" type="button" class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-amber-500/15 text-amber-300 border border-amber-500/40 text-xs font-bold" aria-label="朗讀測驗單字">🔊 發音</button>
+      </div>
+      <p id="quizQuestionExample" class="text-xs text-slate-400 italic">"Quarterly revenue exceeded expectations."</p>
+    </div>
+
+    <!-- 4 個選項按鈕 -->
+    <div id="quizOptionsContainer" class="grid grid-cols-1 gap-2.5 mt-6">
+      <!-- JS 動態渲染選項 -->
+    </div>
+
+    <div id="quizAnswerFeedback" class="hidden mt-3 text-left bg-slate-950/80 border border-slate-800 rounded-2xl p-3 text-xs leading-relaxed"></div>
+
+    <!-- 📱 底部退出按鈕 -->
+    <button onclick="closeVocabQuizModal()" type="button" class="w-full mt-4 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold py-3.5 rounded-2xl text-xs transition cursor-pointer active:scale-98 border border-slate-700/60 flex items-center justify-center gap-1.5">
+      <span>✕</span> 退出測驗 (Quit)
+    </button>
+  </div>
+</div>
+ <nav id="v2BottomNav" class="v2-bottom-nav" aria-label="主要導覽">
+    <div class="v2-bottom-nav-inner">
+      <button onclick="switchTab('home')" class="v2-nav-tab is-active" data-v2-target="home"><span class="v2-nav-icon" aria-hidden="true">⌂</span><span>HOME</span></button>
+      <button onclick="switchTab('roster')" class="v2-nav-tab" data-v2-target="team"><span class="v2-nav-icon" aria-hidden="true">♟</span><span>TEAM</span></button>
+      <button onclick="switchTab('gacha')" class="v2-nav-tab v2-nav-gacha" data-v2-target="gacha" aria-label="GACHA 抽卡"><span class="v2-nav-icon" aria-hidden="true"><span class="v2-nav-pack-icon">✦</span></span><span>GACHA</span></button>
+      <button onclick="switchTab('season')" class="v2-nav-tab" data-v2-target="season"><span class="v2-nav-icon" aria-hidden="true">▶</span><span>SEASON</span></button>
+      <button onclick="switchTab('vocab')" class="v2-nav-tab" data-v2-target="train"><span class="v2-nav-icon" aria-hidden="true">🏀</span><span>TRAIN</span></button>
+    </div>
+  </nav>
+
+  <script src="./js/ui-v2/position-utils.js"></script>
+  <script src="./js/app.js?v=20261001-4"></script>
+<!-- 🏀 季後賽逐場動態播報彈窗 -->
+<div id="playoffSeriesModal" onclick="if(event.target === this && !document.getElementById('posNextRoundBtn').disabled) closeSeriesAndShowBoxScore()" class="fixed inset-0 bg-slate-950/90 backdrop-blur-md z-50 hidden flex items-end sm:items-center justify-center p-3 sm:p-4 ios-safe-modal">
+  <div class="bg-slate-900 border border-amber-500/50 rounded-3xl w-full max-w-lg p-6 shadow-2xl space-y-4 relative animate-modal-in">
+    <div class="flex justify-between items-center border-b border-slate-800 pb-3">
+      <div>
+        <span id="posRoundTitle" class="text-xs font-mono font-bold text-amber-400">季後賽首輪 (Best of 7)</span>
+        <h3 id="posSeriesMatchup" class="text-base font-black text-white">玩家夢幻隊 vs 對手</h3>
+      </div>
+      <span id="posSeriesScore" class="text-base font-black font-mono text-amber-400 bg-slate-950 px-3 py-1 rounded-xl border border-slate-800">0 - 0</span>
+    </div>
+
+    <!-- 逐場賽果跑馬紀錄區 -->
+    <div id="posGamesLog" class="space-y-2 max-h-60 overflow-y-auto pr-1">
+      <!-- 單場賽果卡片動態塞入 -->
+    </div>
+
+    <div class="pt-2">
+      <button id="posNextRoundBtn" onclick="closeSeriesAndShowBoxScore()" type="button" class="w-full bg-slate-800 text-slate-500 font-black py-3.5 rounded-2xl text-xs sm:text-sm cursor-not-allowed transition active:scale-98 flex items-center justify-center gap-1.5" disabled>
+        ⏳ 戰況激烈播報中...
+      </button>
+    </div>
+  </div>
+</div>
+  <!-- 📊 擬真 NBA Box Score 戰報彈窗 -->
+<!-- 改為： -->
+<div id="gameBoxScoreModal" onclick="if(event.target === this) closeGameBoxScoreModal()" class="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 hidden flex items-end sm:items-center justify-center p-3 sm:p-4 ios-safe-modal">  <div class="bg-slate-900 border border-slate-700/80 rounded-3xl w-full max-w-2xl p-5 shadow-2xl space-y-4 max-h-[85dvh] modal-scroll-touch overflow-y-auto animate-modal-in">
+        
+        <div class="flex justify-between items-center border-b border-slate-800 pb-3">
+          <div class="flex items-center gap-2">
+            <span class="text-xl">📊</span>
+            <div>
+              <h3 class="text-sm font-black text-white">NBA 比賽完整戰報 (Box Score)</h3>
+              <span class="text-[10px] text-slate-400 font-mono">OFFICIAL GAME STATS</span>
+            </div>
+          </div>
+          <button onclick="closeGameBoxScoreModal()" type="button" class="text-slate-400 hover:text-white modal-close-btn-touch text-lg font-bold cursor-pointer -mr-2 -mt-2">✕</button>
+        </div>
+
+        <div class="flex justify-between items-center bg-slate-950 p-4 rounded-2xl border border-slate-800">
+          <div class="text-center flex-1">
+            <span class="text-xs text-amber-400 font-bold block">YOUR TEAM</span>
+            <span id="modalMyScore" class="text-3xl font-black font-mono text-white">112</span>
+          </div>
+          <div class="text-slate-500 font-black text-sm px-3">VS</div>
+          <div class="text-center flex-1">
+            <span id="modalOppTeamName" class="text-xs text-slate-400 font-bold block">OPPONENT</span>
+            <span id="modalOppScore" class="text-3xl font-black font-mono text-slate-400">105</span>
+          </div>
+        </div>
+
+        <div id="modalHighlight" class="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-xs font-bold text-amber-300">
+          戰報生成中...
+        </div>
+        <!-- 🏅 賽事徽章發威高光清單 -->
+        <div id="modalBadgeMomentsContainer" class="space-y-1.5 hidden">
+          <div class="flex items-center gap-1.5 text-xs font-black text-amber-400 font-mono">
+            <span>🏅 賽事徽章高光事件 (Badge Impact Moments)</span>
+          </div>
+          <div id="modalBadgeMomentsList" class="grid grid-cols-1 sm:grid-cols-2 gap-2"></div>
+        </div>
+<!-- 🟢 官方 NBA App 規格 17 欄完整戰報表格（直接貼在這裡） 🟢 -->
+        <div class="overflow-x-auto rounded-2xl border border-slate-800 bg-slate-950/80 shadow-inner">
+          <table class="w-full text-left text-xs whitespace-nowrap">
+            <thead class="text-[10px] text-slate-400 font-mono bg-slate-900/90 border-b border-slate-800 uppercase select-none">
+              <tr>
+                <!-- 1. 左側固定球員姓名欄（水平滑動時不被遮住） -->
+                <th class="py-2.5 px-3 sticky left-0 bg-slate-900 z-20 border-r border-slate-800/80 text-amber-300 font-black">球員 (PLAYER)</th>
+                
+                <!-- 2. 出場時間 -->
+                <th class="py-2.5 px-2 text-center text-slate-500">MIN</th>
+                
+                <!-- 3. 總得分（加亮粗體） -->
+                <th class="py-2.5 px-2 text-center text-amber-400 font-black text-xs">PTS</th>
+                
+                <!-- 4. 投籃命中 - 出手 與 命中率 -->
+                <th class="py-2.5 px-2 text-center">FGM-A</th>
+                <th class="py-2.5 px-2 text-center text-slate-400">FG%</th>
+                
+                <!-- 5. 三分球命中 - 出手 與 三分率 -->
+                <th class="py-2.5 px-2 text-center text-amber-300 font-bold">3PM-A</th>
+                <th class="py-2.5 px-2 text-center text-slate-400">3P%</th>
+                
+                <!-- 6. 罰球命中 - 出手 與 罰球率 -->
+                <th class="py-2.5 px-2 text-center">FTM-A</th>
+                <th class="py-2.5 px-2 text-center text-slate-400">FT%</th>
+                
+                <!-- 7. 進攻籃板、防守籃板 與 總籃板 -->
+                <th class="py-2.5 px-2 text-center text-slate-500">OREB</th>
+                <th class="py-2.5 px-2 text-center text-slate-500">DREB</th>
+                <th class="py-2.5 px-2 text-center font-bold text-slate-200">REB</th>
+                
+                <!-- 8. 助攻（亮紫色） -->
+                <th class="py-2.5 px-2 text-center font-bold text-indigo-300">AST</th>
+                
+                <!-- 9. 抄截與阻攻 -->
+                <th class="py-2.5 px-2 text-center">STL</th>
+                <th class="py-2.5 px-2 text-center">BLK</th>
+                
+                <!-- 10. 失誤與犯規 -->
+                <th class="py-2.5 px-2 text-center text-rose-400">TO</th>
+                <th class="py-2.5 px-2 text-center text-slate-400">PF</th>
+                
+                <!-- 11. 正負值 -->
+                <th class="py-2.5 px-3 text-center font-bold text-slate-300">+/-</th>
+              </tr>
+            </thead>
+            <!-- 數據行將由 JavaScript 動態填入先發 5 人與替補 6 人 -->
+            <tbody id="modalBoxScoreTbody" class="divide-y divide-slate-800/60 font-mono text-slate-200 text-xs"></tbody>
+          </table>
+        </div>
+        <div class="pt-2">
+          <button onclick="closeGameBoxScoreModal()" type="button" class="w-full bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 text-slate-950 font-black py-3.5 rounded-2xl text-sm cursor-pointer transition shadow-lg flex items-center justify-center gap-1.5 active:scale-98">
+            <span>✕</span> 關閉並收下戰報 (Close)
+          </button>
+        </div>
+      </div>
+    </div>
+<!-- 🔍 球員真實數據詳情彈窗 -->
+<div id="playerDetailModal" onclick="if(event.target === this) closePlayerDetailModal()" class="fixed inset-0 bg-slate-950/90 backdrop-blur-md z-[130] hidden flex items-end sm:items-center justify-center p-3 sm:p-4 ios-safe-modal">
+  <div class="bg-slate-900 border border-slate-700/80 rounded-3xl w-full max-w-lg p-5 shadow-2xl space-y-4 max-h-[85dvh] modal-scroll-touch overflow-y-auto animate-modal-in">
+    <!-- 頂部卡片資訊 -->
+    <div class="flex justify-between items-start border-b border-slate-800 pb-3 gap-3">
+      <div class="space-y-1.5 flex-1 min-w-0">
+        <div class="flex flex-wrap items-center gap-1.5">
+          <span id="detailPlayerTeam" class="text-[10px] font-mono font-bold bg-slate-800 px-2 py-0.5 rounded text-slate-300">--</span>
+          <span id="detailPlayerPos" class="text-[10px] font-mono font-bold text-indigo-300 bg-indigo-950/60 border border-indigo-500/30 px-2 py-0.5 rounded">--</span>
+          <span id="detailPlayerRarity" class="text-[10px] font-mono font-black text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded">--</span>
+          <span id="detailPlayerStars" class="text-xs font-black text-amber-400 tracking-wider">★</span>
+        </div>
+        <h3 id="detailPlayerName" class="text-lg sm:text-xl font-black text-white tracking-tight truncate">球員姓名</h3>
+        <div class="text-xs font-mono text-amber-400 font-bold flex flex-wrap items-center gap-x-2 gap-y-0.5">
+          <span>卡片 OVR: <span id="detailPlayerOvr" class="text-amber-300 font-black">0</span></span>
+          <span class="text-slate-600">|</span>
+          <span class="text-slate-300">實力評級: <span id="detailPlayerRealOvr" class="text-emerald-400 font-black">0</span></span>
+        </div>
+      </div>
+      
+      <div class="flex items-center gap-1.5 flex-shrink-0">
+        <button onclick="openBadgeGuideModal()" type="button" class="bg-indigo-600/30 hover:bg-indigo-600 text-indigo-300 border border-indigo-500/40 text-[10px] font-bold px-2.5 py-1.5 rounded-xl transition cursor-pointer" title="查閱所有徽章用處">
+          ❓ 徽章指南
+        </button>
+        <button onclick="closePlayerDetailModal()" type="button" class="text-slate-400 hover:text-white modal-close-btn-touch text-lg font-bold cursor-pointer transition -mr-2 -mt-2" title="關閉詳情">✕</button>
+      </div>
+    </div>
+
+    <!-- Card V2 大卡掛載點；既有 Stats / Advanced / Badge / Legacy 全數保留在下方 -->
+    <section id="cardV2DetailMount" class="card-v2-detail-mount hidden" aria-label="Kobe Bryant Card V2"></section>
+
+    <!-- 🏆 生涯成就與歷史紀錄 (Card Detail & Legacy) -->
+    <div id="detailPlayerLegacy" class="hidden bg-slate-950 p-2.5 rounded-2xl border border-amber-500/30 text-xs flex items-center justify-around font-mono text-center">
+      <div>
+        <span class="text-[9px] text-slate-400 block font-bold">總冠軍</span>
+        <span id="legacyRings" class="text-amber-400 font-black text-sm">💍 0</span>
+      </div>
+      <div class="h-6 w-px bg-slate-800"></div>
+      <div>
+        <span class="text-[9px] text-slate-400 block font-bold">生涯得分</span>
+        <span id="legacyPts" class="text-slate-200 font-bold text-xs">0 分</span>
+      </div>
+      <div class="h-6 w-px bg-slate-800"></div>
+      <div>
+        <span class="text-[9px] text-slate-400 block font-bold">出戰場次</span>
+        <span id="legacyGames" class="text-slate-200 font-bold text-xs">0 場</span>
+      </div>
+      <div class="h-6 w-px bg-slate-800"></div>
+      <div>
+        <span class="text-[9px] text-slate-400 block font-bold">歷經賽季</span>
+        <span id="legacySeasons" class="text-slate-200 font-bold text-xs">0 季</span>
+      </div>
+    </div>
+
+    <!-- 🏅 球員持有徽章列表 -->
+    <div>
+      <div class="flex justify-between items-center text-[10px] font-mono text-slate-400 mb-1.5">
+        <span>PLAYER BADGES</span>
+        <span class="text-slate-500">點擊徽章查看實戰用處</span>
+      </div>
+      <div id="detailPlayerBadges" class="flex flex-wrap gap-1.5"></div>
+      
+      <!-- 點擊徽章後展開的解說卡片 -->
+      <div id="badgeDescBox" class="hidden mt-2 p-2.5 rounded-xl border border-indigo-500/30 bg-indigo-950/40 text-xs transition-all">
+        <div class="flex items-center gap-1.5 font-bold text-indigo-300 mb-0.5">
+          <span id="badgeDescIcon">🏅</span>
+          <span id="badgeDescTitle">徽章名稱</span>
+        </div>
+        <p id="badgeDescText" class="text-[11px] text-slate-300 leading-relaxed">徽章說明內容</p>
+      </div>
+    </div>
+
+    <!-- 📊 基礎數據 (Basic Stats) -->
+    <div>
+      <h4 class="text-xs font-black uppercase text-amber-400 font-mono mb-2 flex items-center gap-1.5">
+        <i data-lucide="bar-chart" class="w-3.5 h-3.5"></i> 賽季場均基礎數據 (Basic Stats)
+      </h4>
+      <div id="detailBasicGrid" class="grid grid-cols-4 gap-2 text-center text-xs font-mono"></div>
+    </div>
+
+    <!-- 📈 進階數據 (Advanced Stats) -->
+    <div>
+      <h4 class="text-xs font-black uppercase text-indigo-400 font-mono mb-2 flex items-center gap-1.5">
+        <i data-lucide="activity" class="w-3.5 h-3.5"></i> 核心進階高階指標 (Advanced Stats)
+      </h4>
+      <div id="detailAdvGrid" class="grid grid-cols-3 gap-2 text-center text-xs font-mono"></div>
+    </div>
+
+    <!-- 📱 底部大拇指極佳觸控按鈕 -->
+    <div class="pt-1">
+      <button onclick="closePlayerDetailModal()" type="button" class="w-full bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold py-3.5 rounded-2xl text-sm transition cursor-pointer active:scale-98 shadow-lg flex items-center justify-center gap-1.5 border border-slate-700">
+        <span>✕</span> 關閉詳情 (Close)
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- 📜 10 大徽章全典圖鑑指南 Modal -->
+<div id="badgeGuideModal" onclick="if(event.target === this) closeBadgeGuideModal()" class="fixed inset-0 bg-slate-950/95 backdrop-blur-md z-50 hidden flex items-end sm:items-center justify-center p-3 sm:p-4 ios-safe-modal">
+  <div class="bg-slate-900 border border-indigo-500/60 rounded-3xl w-full max-w-lg p-5 shadow-2xl space-y-3 max-h-[85vh] flex flex-col">
+    <div class="flex justify-between items-center border-b border-slate-800 pb-2.5">
+      <div class="flex items-center gap-2">
+        <span class="text-lg">🏅</span>
+        <h3 class="text-sm font-black text-white">NBA 特色徽章全解析指南</h3>
+      </div>
+      <button onclick="closeBadgeGuideModal()" type="button" class="text-slate-400 hover:text-white modal-close-btn-touch text-lg font-bold cursor-pointer -mr-2 -mt-2">✕</button>
+    </div>
+    
+    <p class="text-[11px] text-slate-400">徽章會直接影響 82 場模擬與季後賽戰局！由球員真實賽季數據驅動：</p>
+    
+    <div id="badgeGuideList" class="space-y-2 overflow-y-auto pr-1 flex-1 text-xs">
+      <!-- 由 JS 動態注入 10 大徽章解說 -->
+    </div>
+
+    <button onclick="closeBadgeGuideModal()" type="button" class="w-full bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold py-3.5 rounded-2xl text-sm transition cursor-pointer active:scale-98 shadow-lg flex items-center justify-center gap-1.5 border border-slate-700">
+      <span>✕</span> 了解完畢並關閉 (Close)
+    </button>
+  </div>
+</div>
+<!-- 🎯 全明星三分球大賽彈窗 (響應式 Flex 版) -->
+<div id="threePtModal" onclick="if(event.target === this) closeThreePointContest()" class="fixed inset-0 z-50 bg-black/85 backdrop-blur-md hidden items-center justify-center p-2.5 sm:p-4 select-none ios-safe-modal overflow-y-auto">
+  <div class="bg-slate-900 border-2 border-amber-500/50 rounded-2xl max-w-lg w-full p-3 sm:p-5 text-white shadow-2xl relative overflow-y-auto flex flex-col items-center max-h-[calc(100dvh-1.5rem)]">
+    
+    <!-- 頂部標題與選手切換下拉選單 -->
+    <div class="w-full flex justify-between items-center border-b border-slate-700/80 pb-3">
+      <div class="flex items-center gap-2">
+        <span class="text-2xl">🎯</span>
+        <div>
+          <div class="flex items-center gap-2">
+            <h3 class="text-lg font-black text-amber-400">NBA 全明星三分球大賽</h3>
+            <span class="text-[10px] bg-amber-500/15 text-amber-300 border border-amber-500/30 px-1.5 py-0.5 rounded font-mono font-bold">每季限玩一次</span>
+          </div>
+          <!-- 允許自選出戰射手 (選定開打即鎖定不可更換) -->
+          <div class="flex items-center gap-1.5 mt-1">
+            <span class="text-xs text-slate-400 whitespace-nowrap">參賽射手:</span>
+            <select id="threePtShooterSelect" onchange="onShooterSelectChange(this.value)" class="bg-slate-800 text-amber-300 text-xs font-bold rounded px-2 py-0.5 border border-slate-700 focus:outline-none transition-all">
+              <!-- JS 動態填入你隊內的球員 -->
+            </select>
+            <span id="threePtShooterLockedBadge" class="hidden text-[10px] text-amber-400 bg-amber-950/80 border border-amber-500/50 px-1.5 py-0.5 rounded font-bold whitespace-nowrap">🔒 已鎖定</span>
+          </div>
+        </div>
+      </div>
+      <button onclick="closeThreePointContest()" class="text-slate-400 hover:text-white modal-close-btn-touch text-xl font-bold -mr-2 -mt-2">✕</button>
+    </div>
+
+    <!-- 5 個投籃點球架進度 (響應式 Flex 排列、移除多餘左右間距) -->
+    <div class="w-full mt-2.5 bg-slate-950/90 py-2 px-1 sm:px-2.5 rounded-xl border border-slate-800 shadow-inner">
+      <div class="flex w-full justify-between items-center text-center text-[10px] sm:text-[11px] font-bold text-slate-400 mb-1.5 whitespace-nowrap gap-1">
+        <span class="flex-1 text-center">左底角</span>
+        <span class="flex-1 text-center">左45°</span>
+        <span class="flex-1 text-center">弧頂</span>
+        <span class="flex-1 text-center">右45°</span>
+        <span class="flex-1 text-center text-amber-400 font-extrabold">花球架★</span>
+      </div>
+      <!-- 5 個響應式 Flex 等寬球架 -->
+      <div id="racksContainer" class="flex w-full items-stretch justify-between gap-1 sm:gap-1.5">
+        <!-- JS 動態填入 5 個球架 -->
+      </div>
+    </div>
+
+    <!-- 即時得分板與反饋 -->
+    <div class="flex justify-between items-center w-full my-4 px-2">
+      <div>
+        <span class="text-xs text-slate-400">目前總分</span>
+        <div class="text-3xl font-black text-amber-400"><span id="threePtScore">0</span> <span class="text-sm font-normal text-slate-400">/ 34分</span></div>
+      </div>
+      <div id="shotFeedback" class="text-center font-black text-base text-emerald-400 tracking-wider">
+        準備就緒！
+      </div>
+      <div class="text-right">
+        <span class="text-xs text-slate-400">剩餘球數</span>
+        <div class="text-2xl font-bold text-slate-300"><span id="threePtBallsLeft">25</span> 球</div>
+      </div>
+    </div>
+
+ <!-- 🏀 NBA LIVE 風格投籃條 (分區視覺動態條) -->
+    <div class="w-full bg-slate-950 p-4 rounded-xl border border-slate-800 flex flex-col items-center">
+      <div class="flex justify-between w-full max-w-sm px-1 mb-2 text-xs font-bold">
+        <span class="text-slate-400">投籃時機 (Shot Timing)</span>
+        <span id="shooterTierBadge" class="text-amber-400 bg-amber-950/60 border border-amber-500/40 px-2 py-0.5 rounded text-[11px]">
+          神射手 (綠區極大)
+        </span>
+      </div>
+      
+      <!-- 投籃條本體槽 (底色為紅色死區，右側依評分放置黃區與綠區) -->
+      <div class="w-full max-w-sm h-8 bg-slate-900 rounded-full relative overflow-hidden border-2 border-slate-700 shadow-inner flex items-center">
+        <!-- 🔴 紅色打鐵底色 (預設全底) -->
+        <div class="absolute inset-0 bg-gradient-to-r from-rose-950/60 via-slate-900 to-rose-950/60"></div>
+        
+        <!-- 🟡 黃色機會區 (依三分評分動態改變寬度與位置) -->
+        <div id="shotMeterYellowZone" class="absolute top-0 bottom-0 bg-amber-400/90 shadow-[0_0_10px_#f59e0b] z-1 transition-all duration-300"></div>
+
+        <!-- 🟢 綠色必進區 (包在黃區正中心頂點，依評分動態縮放) -->
+        <div id="shotMeterGreenZone" class="absolute top-0 bottom-0 bg-emerald-400 shadow-[0_0_14px_#34d399] z-2 transition-all duration-300"></div>
+
+        <!-- ⚪ 充能滑動指針 (白色發光垂直針，精準判定) -->
+        <div id="shotMeterCursor" class="absolute top-0 bottom-0 w-2.5 bg-white rounded-full shadow-[0_0_8px_#ffffff] z-10 -ml-1 transition-none"></div>
+      </div>
+
+      <!-- 底部圖例標籤 -->
+      <div class="w-full max-w-sm flex justify-between text-[11px] font-bold mt-1.5 px-1">
+        <span class="text-rose-400">🔴 早/晚 (打鐵)</span>
+        <span class="text-amber-400">🟡 機會區 (<span id="yellowChanceText">55%</span>)</span>
+        <span class="text-emerald-400">🟢 完美 (100% 必進)</span>
+      </div>
+    </div>
+
+    <!-- 出手控制按鈕 -->
+    <div class="w-full mt-4 flex gap-3">
+      <button id="btnStartContest" onclick="startThreePointRound()" class="flex-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black py-3 rounded-xl shadow-lg transition-transform active:scale-95 text-base">
+        開始挑戰 (Start Round)
+      </button>
+      <button id="btnReleaseShot" onclick="triggerShotRelease()" disabled class="flex-1 bg-emerald-600 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-emerald-500 text-white font-black py-3 rounded-xl shadow-lg transition-transform active:scale-95 text-base">
+        🟢 出手 (SHOOT)!
+      </button>
+    </div>
+
+    <!-- 🏆 排行榜結算面板 (加上 z-30 最上層，保證乾淨遮蓋不被黃條阻擋) -->
+    <div id="contestLeaderboard" class="hidden absolute inset-0 z-30 bg-slate-950/95 flex flex-col items-center justify-center p-6 text-center">
+      <div id="contestTrophyIcon" class="text-5xl mb-2">🏆</div>
+      <h2 id="contestResultTitle" class="text-2xl font-black text-amber-400">大賽結算</h2>
+      <p id="contestResultSub" class="text-sm text-slate-300 mt-1">恭喜打破紀錄！</p>
+      
+      <!-- 成績榜單 -->
+      <div class="w-full max-w-xs bg-slate-900 border border-slate-800 rounded-xl p-3 my-4 space-y-2 text-sm text-left font-bold" id="leaderboardRows">
+        <!-- JS 動態插入排名 -->
+      </div>
+
+      <button onclick="closeThreePointContest()" class="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 text-slate-950 font-black px-8 py-2.5 rounded-xl shadow-lg cursor-pointer transition-transform active:scale-95 text-sm sm:text-base">
+        關閉 (Close)
+      </button>
+    </div>
+
+  </div>
+</div>
+
+<!-- =====================================================
+     🌟 統一 GAME MODAL, CONFIRM, REWARD, TOAST & OVERLAY
+===================================================== -->
+
+<!-- 🍞 統一 Toast 輕量提示容器 (P2: 支援 success, warning, error, info) -->
+<div id="toastContainer" class="fixed top-14 left-1/2 -translate-x-1/2 z-[100] flex flex-col items-center gap-2 pointer-events-none w-full max-w-sm px-4"></div>
+
+<!-- 🔔 統一系統彈窗 (P0: 替代原生 alert, 標準化樣式) -->
+<div id="unifiedGameModal" onclick="if(event.target === this) closeGameModal()" class="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-[90] hidden flex items-end sm:items-center justify-center p-3 sm:p-4 ios-safe-modal">  <div class="bg-slate-900 border border-slate-700/80 rounded-3xl w-full max-w-md p-6 shadow-2xl space-y-4 animate-modal-in relative text-center">
+    <div id="gameModalIconWrapper" class="w-14 h-14 mx-auto rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-3xl">
+      <span id="gameModalIcon">ℹ️</span>
+    </div>
+    <div>
+      <h3 id="gameModalTitle" class="text-lg font-black text-white">系統通知</h3>
+      <p id="gameModalMessage" class="text-sm text-slate-300 mt-2 leading-relaxed whitespace-pre-line"></p>
+    </div>
+    <div id="gameModalCustomContent" class="text-left hidden"></div>
+    <div class="pt-2">
+      <button id="gameModalConfirmBtn" onclick="closeGameModal()" type="button" class="w-full bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-black py-3.5 rounded-2xl text-sm transition cursor-pointer active:scale-98 shadow-lg flex items-center justify-center gap-1.5">
+        確定
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ❓ 統一確認彈窗 (P1: 取代原生 confirm, Promise/Callback 雙向相容) -->
+<div id="unifiedConfirmModal" onclick="if(event.target === this) { const c = document.getElementById('confirmModalCancelBtn'); if(c) c.click(); }" class="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-[92] hidden flex items-end sm:items-center justify-center p-3 sm:p-4 ios-safe-modal">  <div class="bg-slate-900 border border-slate-700/80 rounded-3xl w-full max-w-md p-6 shadow-2xl space-y-4 animate-modal-in relative text-center">
+    <div id="confirmModalIconWrapper" class="w-14 h-14 mx-auto rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-3xl">
+      <span id="confirmModalIcon">⚠️</span>
+    </div>
+    <div>
+      <h3 id="confirmModalTitle" class="text-lg font-black text-white">請確認操作</h3>
+      <p id="confirmModalMessage" class="text-sm text-slate-300 mt-2 leading-relaxed whitespace-pre-line"></p>
+    </div>
+    <div class="flex gap-3 pt-2">
+      <button id="confirmModalCancelBtn" type="button" class="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold py-3 rounded-2xl text-xs transition cursor-pointer active:scale-98 border border-slate-700">
+        取消
+      </button>
+      <button id="confirmModalOkBtn" type="button" class="flex-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black py-3 rounded-2xl text-xs transition cursor-pointer active:scale-98 shadow-lg">
+        確定執行
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- 🎁 統一高規格獎勵結算彈窗 (P1: Reward Window 簽到/升星/奪冠/任務全解) -->
+<div id="unifiedRewardModal" onclick="if(event.target === this) closeRewardModal()" class="fixed inset-0 bg-slate-950/90 backdrop-blur-md z-[95] hidden flex items-end sm:items-center justify-center p-3 sm:p-4 ios-safe-modal">
+  <div class="relative bg-gradient-to-b from-slate-900 to-slate-950 border border-amber-500/60 rounded-3xl w-full max-w-md p-6 shadow-2xl space-y-4 animate-modal-in text-center overflow-hidden">
+    <!-- 光暈背景 -->
+    <div class="absolute -top-24 left-1/2 -translate-x-1/2 w-64 h-64 bg-amber-500/20 rounded-full blur-3xl pointer-events-none reward-glow-pulse"></div>
+    
+    <div class="relative z-10">
+      <div class="text-5xl mb-2" id="rewardModalTrophyIcon">🏆</div>
+      <h3 id="rewardModalTitle" class="text-xl font-black text-amber-400">獲得獎勵！</h3>
+      <p id="rewardModalSubtitle" class="text-xs text-slate-300 mt-1 whitespace-pre-line leading-relaxed"></p>
+    </div>
+
+    <!-- 獎勵物品清單 -->
+    <div id="rewardModalList" class="relative z-10 grid grid-cols-2 gap-2.5 py-2">
+      <!-- 動態插入獎勵卡片 -->
+    </div>
+
+    <!-- 額外特質/備註 -->
+    <div id="rewardModalNoteBox" class="relative z-10 hidden p-2.5 rounded-xl bg-slate-950/80 border border-slate-800 text-[11px] text-amber-200"></div>
+
+    <div class="relative z-10 pt-2">
+      <button id="rewardModalClaimBtn" onclick="closeRewardModal()" type="button" class="w-full bg-gradient-to-r from-amber-400 via-orange-500 to-amber-500 hover:brightness-110 text-slate-950 font-black py-3.5 rounded-2xl text-sm transition cursor-pointer active:scale-98 shadow-xl flex items-center justify-center gap-1.5">
+        <span>🎁</span> 領取獎勵 (Claim)
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ⏳ 統一載入與運算遮罩 (P2: Loading / Processing Indicator) -->
+<div id="loadingOverlay" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[110] hidden flex flex-col items-center justify-center gap-3 select-none">
+  <div class="relative w-14 h-14 flex items-center justify-center">
+    <div class="absolute inset-0 rounded-full border-2 border-amber-500/20 border-t-amber-400 animate-spin"></div>
+    <span class="text-2xl animate-bounce">🏀</span>
+  </div>
+  <p id="loadingOverlayText" class="text-sm font-bold text-amber-300 font-mono tracking-wide">運算模擬中...</p>
+</div>
+
+<!-- 📬 通知中心抽屜 (P2: Notification Center) -->
+<div id="notificationDrawer" onclick="if(event.target === this) toggleNotificationDrawer(false)" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[85] hidden flex justify-end">
+  <div class="bg-slate-900 border-l border-slate-800 w-full max-w-sm h-full flex flex-col shadow-2xl animate-modal-in pt-[max(1rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))]">
+    <div class="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-950/60">
+      <div class="flex items-center gap-2">
+        <i data-lucide="bell" class="w-4 h-4 text-amber-400"></i>
+        <h3 class="font-black text-sm text-white">通知與動態中心</h3>
+      </div>
+      <div class="flex items-center gap-2">
+        <button onclick="clearAllNotifications()" type="button" class="text-[10px] text-slate-400 hover:text-slate-200 cursor-pointer">清空</button>
+        <button onclick="toggleNotificationDrawer(false)" type="button" class="text-slate-400 hover:text-white p-1 text-sm font-bold cursor-pointer">✕</button>
+      </div>
+    </div>
+    <div id="notificationList" class="flex-1 overflow-y-auto p-3 space-y-2 text-xs">
+      <!-- 動態載入通知清單 -->
+    </div>
+  </div>
+</div>
+
+<!-- =====================================================
+     🎉 奪冠香檳遊行慶典彈窗 (CHAMPIONSHIP CELEBRATION MODAL)
+===================================================== -->
+<div id="championshipCelebrationModal" onclick="if(event.target === this) claimCelebrationAndShowRewards()" class="fixed inset-0 bg-slate-950/92 backdrop-blur-lg z-[105] hidden flex items-end sm:items-center justify-center p-3 sm:p-4 ios-safe-modal overflow-y-auto">
+  <canvas id="celebrationConfettiCanvas" class="fixed inset-0 pointer-events-none z-30 w-full h-full"></canvas>
+
+  <div class="relative z-20 bg-gradient-to-b from-slate-900 via-slate-900 to-slate-950 border-2 border-amber-500/80 rounded-3xl w-full max-w-xl p-5 sm:p-6 shadow-[0_0_50px_rgba(245,158,11,0.35)] space-y-4 text-center overflow-hidden newspaper-unfold animate-modal-in">
+    
+    <!-- 背景光環與報紙頭條 -->
+    <div class="absolute -top-24 left-1/2 -translate-x-1/2 w-80 h-80 bg-amber-500/25 rounded-full blur-3xl pointer-events-none reward-glow-pulse"></div>
+    <div class="relative border-b-2 border-amber-500/40 pb-3">
+      <div class="flex items-center justify-between text-[10px] font-mono font-black text-amber-400/90 border-b border-slate-800 pb-1 uppercase tracking-widest">
+        <span>THE HOOPS DAILY · SPECIAL EDITION</span>
+        <span>FINAL 4TH VICTORY</span>
+      </div>
+      <div class="mt-2.5">
+        <span class="inline-block bg-gradient-to-r from-amber-400 to-orange-500 text-slate-950 font-black text-[11px] px-2.5 py-0.5 rounded-full shadow mb-1">
+          👑 WORLD CHAMPIONS
+        </span>
+        <h2 class="text-2xl sm:text-3xl font-black text-white tracking-tight drop-shadow">
+          玩家夢幻隊 勇奪 <span id="celebNewspaperYear" class="text-amber-400 font-mono">2026 NBA CHAMPIONS</span>！
+        </h2>
+        <p class="text-xs text-amber-200/90 mt-1 font-mono">
+          <span id="celebNewspaperRecord" class="font-bold">季後賽戰績 16-3 登頂世界之巔！</span>
+          <span class="mx-1 text-slate-500">|</span>
+          <span id="celebNewspaperOpponent" class="text-slate-300">總決賽力克對手</span>
+        </p>
+      </div>
+    </div>
+
+    <!-- 頒獎台：金盃 + FMVP -->
+    <div class="relative grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+      <div class="bg-slate-950/85 border border-amber-500/40 rounded-2xl p-3.5 flex flex-col items-center justify-between shadow-inner">
+        <div class="flex items-center gap-1.5 text-[11px] font-bold text-amber-300">
+          <span>🏆</span>
+          <span>總冠軍金盃 (CHAMPIONS)</span>
+        </div>
+        <div class="my-1 py-1 flex items-center justify-center">
+          <div id="celebRingPlaceholder" class="ring-3d-floating text-5xl">🏆</div>
+        </div>
+        <div class="w-full bg-slate-900/90 border border-slate-800 rounded-xl p-2 text-center space-y-0.5 font-mono">
+          <div id="celebRingYearText" class="font-black text-amber-400 text-xs tracking-wider">2026 CHAMPIONS</div>
+          <div id="celebRingRecordText" class="text-[10px] text-slate-300 font-bold">季後賽總戰績: 16-3</div>
+          <div id="celebRingOpponentText" class="text-[10px] text-slate-400 truncate">總決賽擊敗: 對手</div>
+        </div>
+      </div>
+
+      <div class="bg-slate-950/85 border border-amber-500/40 rounded-2xl p-3.5 flex flex-col items-center justify-between shadow-inner relative overflow-hidden">
+        <div class="w-full flex items-center justify-between">
+          <span class="fmvp-gold-badge text-slate-950 font-black text-[10px] px-2 py-0.5 rounded-full shadow flex items-center gap-1 border border-amber-200">
+            <span>🏆</span> FMVP 殊榮
+          </span>
+          <span class="text-[10px] text-amber-400 font-bold font-mono">系列賽表現最火燙</span>
+        </div>
+
+        <div class="relative my-2 flex flex-col items-center">
+          <div class="relative w-20 h-20 rounded-full border-2 border-amber-400 p-1 bg-gradient-to-b from-amber-500/20 to-slate-900 shadow-lg flex items-center justify-center overflow-hidden">
+            <img id="celebFmvpAvatar" src="https://cdn.nba.com/logos/leagues/logo-nba.svg" alt="FMVP" class="w-full h-full object-cover rounded-full" />
+          </div>
+          <span class="absolute -bottom-1 -right-1 fmvp-gold-badge text-slate-950 font-black text-[9px] px-1.5 py-0.5 rounded-full border border-amber-200 shadow-md">
+            🏆 FMVP
+          </span>
+        </div>
+
+        <div class="w-full space-y-1 text-center">
+          <div id="celebFmvpName" class="font-black text-white text-sm truncate">球員姓名</div>
+          <div id="celebFmvpTeam" class="text-[10px] text-slate-400">冠軍陣容核心主力</div>
+          <div id="celebFmvpStats" class="text-[11px] font-bold text-amber-300 font-mono">場均 28.5分 7.5板 8.0助</div>
+          <div class="mt-1.5 p-1.5 rounded-lg bg-amber-500/20 border border-amber-400/50 text-amber-300 text-[10px] font-black flex items-center justify-center gap-1">
+            <span>🔥</span>
+<span id="celebFmvpOvr">下賽季能力永久加成：OVR +1</span>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- 🏆 底部操作按鈕組 (收在彈窗內部，不會漏到首頁，且能正常領取獎勵！) -->
+    <div class="relative pt-2 flex flex-col sm:flex-row gap-2.5">
+      <button onclick="goToRingsCabinetFromCelebration()" type="button" class="flex-1 bg-slate-800 hover:bg-slate-700 text-amber-300 border border-amber-500/40 font-bold py-3.5 rounded-2xl text-xs transition cursor-pointer active:scale-98 flex items-center justify-center gap-1.5">
+        <span>🏆</span> 前往總冠軍展示櫃
+      </button>
+      <button onclick="claimCelebrationAndShowRewards()" type="button" class="flex-1 bg-gradient-to-r from-amber-400 via-orange-500 to-amber-500 hover:brightness-110 text-slate-950 font-black py-3.5 rounded-2xl text-sm transition cursor-pointer active:scale-98 shadow-xl flex items-center justify-center gap-1.5">
+        <span>🎁</span> 領取奪冠榮耀獎勵 (Claim)
+      </button>
+    </div>
+
+  </div> <!-- 關閉彈窗白色/深色內容卡片 -->
+</div>   <!-- 關閉 championshipCelebrationModal 最外層全螢幕遮罩 -->
+
+<!-- =====================================================
+     💍 總冠軍戒指展示櫃彈窗 (CHAMPIONSHIP RINGS CABINET)
+===================================================== -->
+<div id="championshipRingsModal" onclick="if(event.target === this) closeChampionshipRingsModal()" class="fixed inset-0 bg-slate-950/90 backdrop-blur-md z-[100] hidden flex items-end sm:items-center justify-center p-3 sm:p-4 ios-safe-modal">
+  <div class="bg-slate-900 border border-amber-500/50 rounded-3xl w-full max-w-4xl p-5 sm:p-6 shadow-2xl space-y-4 relative animate-modal-in flex flex-col max-h-[92vh]">
+    
+    <!-- 頂部標題與計數 -->
+    <div class="flex justify-between items-center border-b border-slate-800 pb-3">
+      <div class="flex items-center gap-2.5">
+        <div class="w-10 h-10 rounded-2xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-xl shadow">
+          💍
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <h3 class="font-black text-base sm:text-lg text-white">總冠軍戒指展示櫃</h3>
+            <span id="ringsCabinetTotalCount" class="bg-amber-500 text-slate-950 font-black px-2.5 py-0.5 rounded-full text-xs font-mono">0 枚</span>
+          </div>
+          <p class="text-[11px] text-slate-400">每次奪冠刻印：奪冠賽季年份、季後賽總戰績、總決賽對手與 FMVP 殊榮</p>
+        </div>
+      </div>
+      <button onclick="closeChampionshipRingsModal()" class="text-slate-400 hover:text-white modal-close-btn-touch text-lg font-bold cursor-pointer -mr-2 -mt-2">✕</button>
+    </div>
+
+    <!-- 戒指展示櫃陳列網格 (支援水平滾動/響應式網格) -->
+    <div class="flex-1 overflow-y-auto pr-1">
+      <div id="ringsCabinetGrid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3.5">
+        <!-- 動態渲染每顆 3D 冠軍戒指 -->
+      </div>
+    </div>
+
+    <!-- 底部說明與大拇指按鈕 -->
+    <div class="pt-3 border-t border-slate-800 flex flex-col sm:flex-row justify-between items-center gap-2.5 text-[11px] text-slate-400">
+      <span class="hidden sm:inline">💡 點擊任一戒指可全景檢視 3D 造型與冠軍戰績細節</span>
+      <button onclick="closeChampionshipRingsModal()" class="w-full sm:w-auto bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold py-3.5 sm:py-2.5 px-6 rounded-2xl cursor-pointer text-sm active:scale-98 border border-slate-700 flex items-center justify-center gap-1.5 shadow-lg">
+        <span>✕</span> 返回遊戲 (Close)
+      </button>
+    </div>
+
+  </div>
+</div>
+
+<!-- =====================================================
+     🔍 冠軍戒指全景詳細檢視彈窗 (RING DETAIL INSPECT MODAL)
+===================================================== -->
+<div id="ringDetailModal" onclick="if(event.target === this) closeRingDetailModal()" class="fixed inset-0 bg-slate-950/92 backdrop-blur-md z-[108] hidden flex items-end sm:items-center justify-center p-3 sm:p-4 ios-safe-modal">
+  <div class="bg-slate-900 border border-amber-500/60 rounded-3xl w-full max-w-md p-6 shadow-2xl space-y-4 text-center relative animate-modal-in">
+    
+    <div class="flex justify-between items-center border-b border-slate-800 pb-2">
+      <h3 id="detailRingYear" class="font-black text-base text-amber-400 font-mono">2026 NBA 總冠軍戒指</h3>
+      <button onclick="closeRingDetailModal()" class="text-slate-400 hover:text-white modal-close-btn-touch text-lg font-bold cursor-pointer -mr-2 -mt-2">✕</button>
+    </div>
+
+    <!-- 3D 戒指放大展示 -->
+    <div class="py-2 flex items-center justify-center">
+      <div id="detailRing3DBox" class="ring-3d-floating drop-shadow-[0_15px_30px_rgba(245,158,11,0.5)]">
+        <!-- 大尺寸 SVG 戒指 -->
+      </div>
+    </div>
+
+    <!-- 刻印戰功名牌 -->
+    <div class="bg-slate-950 border border-slate-800 rounded-2xl p-4 text-left space-y-2.5 text-xs font-mono">
+      <div class="flex justify-between items-center pb-2 border-b border-slate-800/80">
+        <span class="text-slate-400">季後賽總戰績</span>
+        <span id="detailRingRecord" class="text-emerald-400 font-black text-sm">16-3</span>
+      </div>
+
+      <div class="flex justify-between items-center pb-2 border-b border-slate-800/80">
+        <span class="text-slate-400">總決賽擊潰對手</span>
+        <span id="detailRingOpponent" class="text-slate-200 font-bold">波士頓塞爾提克</span>
+      </div>
+
+      <div class="space-y-1 pt-1">
+        <div class="flex items-center justify-between">
+          <span class="text-amber-400 font-bold flex items-center gap-1">
+            <span>🏆</span> 系列賽 FMVP
+          </span>
+          <span id="detailRingFmvp" class="text-white font-black">球員姓名</span>
+        </div>
+        <div id="detailRingFmvpStats" class="text-[11px] text-amber-300/90 pl-5">
+          場均 28.5分 7.5板 8.0助 (下季能力永久 +1)
+        </div>
+      </div>
+    </div>
+
+    <button onclick="closeRingDetailModal()" class="w-full bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold py-3.5 rounded-2xl text-sm transition cursor-pointer active:scale-98 border border-slate-700 flex items-center justify-center gap-1.5 shadow-lg">
+      <span>✕</span> 關閉檢視 (Close)
+    </button>
+  </div>
+</div>
+<!-- 📱 手機專用：點擊卡片指定上陣位置選單 -->
+<div id="quickAssignModal" onclick="if(event.target === this) closeQuickAssignModal()" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[115] hidden flex items-end sm:items-center justify-center p-0 sm:p-4 ios-safe-modal">
+  <div class="bg-slate-900 border-t sm:border border-slate-700/80 rounded-t-3xl sm:rounded-3xl w-full max-w-sm p-5 shadow-2xl space-y-3 animate-modal-in">
+    <div class="flex justify-between items-center border-b border-slate-800 pb-2.5">
+      <div>
+        <div class="flex items-center gap-2">
+          <h4 id="qaPlayerName" class="text-sm font-black text-white">指定球員上陣</h4>
+          <button id="qaEyeBtn" onclick="if(currentAssignCardId) showPlayerDetails(event, currentAssignCardId)" type="button" class="text-slate-400 hover:text-white p-0.5 hover:scale-125 transition cursor-pointer text-sm" title="查看球員真實數據">👁️</button>
+        </div>
+        <p id="qaPlayerPos" class="text-[10px] text-amber-400 font-mono">原位置: PG</p>
+      </div>
+      <button onclick="closeQuickAssignModal()" type="button" class="text-slate-400 hover:text-white modal-close-btn-touch text-lg font-bold cursor-pointer -mr-2 -mt-2">✕</button>
+    </div>
+
+    <div class="space-y-1.5 text-xs">
+      <span class="text-[10px] text-slate-400 font-bold block">⭐️ 指定先發位置 (Starting 5)</span>
+      <div class="grid grid-cols-5 gap-1.5 font-mono">
+        <button onclick="assignToStarterSlot('PG')" type="button" class="py-2.5 bg-slate-950 hover:bg-amber-500 hover:text-slate-950 border border-slate-800 rounded-xl font-bold transition">PG</button>
+        <button onclick="assignToStarterSlot('SG')" type="button" class="py-2.5 bg-slate-950 hover:bg-amber-500 hover:text-slate-950 border border-slate-800 rounded-xl font-bold transition">SG</button>
+        <button onclick="assignToStarterSlot('SF')" type="button" class="py-2.5 bg-slate-950 hover:bg-amber-500 hover:text-slate-950 border border-slate-800 rounded-xl font-bold transition">SF</button>
+        <button onclick="assignToStarterSlot('PF')" type="button" class="py-2.5 bg-slate-950 hover:bg-amber-500 hover:text-slate-950 border border-slate-800 rounded-xl font-bold transition">PF</button>
+        <button onclick="assignToStarterSlot('C')" type="button" class="py-2.5 bg-slate-950 hover:bg-amber-500 hover:text-slate-950 border border-slate-800 rounded-xl font-bold transition">C</button>
+      </div>
+
+      <span class="text-[10px] text-slate-400 font-bold block pt-1.5">🛡️ 或是放入板凳</span>
+      <button onclick="assignToBenchSlot()" type="button" class="w-full py-2.5 bg-indigo-950/60 hover:bg-indigo-900 border border-indigo-700/50 text-indigo-300 font-bold rounded-xl transition">
+        + 放入替補席 (Bench 6)
+      </button>
+
+      <!-- 📱 底部取消關閉按鈕 -->
+      <button onclick="closeQuickAssignModal()" type="button" class="w-full py-3.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold rounded-2xl text-xs transition active:scale-98 border border-slate-700 flex items-center justify-center gap-1.5 shadow-lg mt-2">
+        ✕ 取消並關閉 (Cancel)
+      </button>
+    </div>
+  </div>
+</div>
+<script src="./js/bootstrap.js"></script>
+<script src="./js/ui-v2/visual-match-simulator.js"></script>
+<script src="./js/season-journey.js"></script>
+<script src="./js/ui-v2/ui-v2-adapter.js?v=20261001-4"></script>
+<script src="./js/ui-v2/home-v2.js?v=20261001-4"></script>
+<script src="./js/ui-v2/team-v2.js"></script>
+<script src="./js/ui-v2/normal-card-v2.js?v=20261001-4"></script>
+<script src="./js/ui-v2/card-themes.js"></script>
+<script src="./js/ui-v2/card-v2.js?v=20261001-4"></script>
+<script src="./js/ui-v2/player-dossier-v2.js?v=20261001-4"></script>
+<script src="./js/ui-v2/gacha-v2.js?v=20261001-4"></script>
+</body>
+</html>
+

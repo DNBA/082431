@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 760" role="img" aria-labelledby="title desc">
+  <title id="title">Featured player placeholder</title>
+  <desc id="desc">A friendly basketball player silhouette for an empty collection state.</desc>
+  <defs>
+    <radialGradient id="halo" cx="50%" cy="38%" r="55%">
+      <stop offset="0" stop-color="#f4cc75" stop-opacity=".68"/>
+      <stop offset=".46" stop-color="#7547c7" stop-opacity=".36"/>
+      <stop offset="1" stop-color="#1b1028" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="body" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#b8a2dc"/>
+      <stop offset="1" stop-color="#473260"/>
+    </linearGradient>
+  </defs>
+  <ellipse cx="260" cy="350" rx="230" ry="300" fill="url(#halo)"/>
+  <circle cx="260" cy="190" r="88" fill="url(#body)"/>
+  <path d="M133 650c8-168 28-296 127-296s119 128 127 296H133Z" fill="url(#body)"/>
+  <path d="M186 372c18 50 130 50 148 0l34 44-108 88-108-88 34-44Z" fill="#f3d17c" fill-opacity=".72"/>
+  <circle cx="414" cy="238" r="61" fill="#d19045"/>
+  <path d="M355 238h118M414 179c-21 20-31 39-31 59s10 39 31 59M414 179c21 20 31 39 31 59s-10 39-31 59" fill="none" stroke="#704118" stroke-width="7" opacity=".8"/>
+  <path d="M163 460c-58 55-87 112-96 173M357 455c38-37 54-80 57-126" fill="none" stroke="url(#body)" stroke-linecap="round" stroke-width="64"/>
+  <g fill="#fff3cf" opacity=".9">
+    <path d="m82 112 8 19 19 8-19 8-8 19-8-19-19-8 19-8 8-19Z"/>
+    <path d="m449 385 5 12 12 5-12 5-5 12-5-12-12-5 12-5 5-12Z"/>
+  </g>
+</svg>

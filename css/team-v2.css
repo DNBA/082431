@@ -1,0 +1,68 @@
+.team-v2-switch {
+  width: min(100%, 560px);
+  margin: 0 auto 14px;
+  padding: 4px;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 4px;
+  border: 1px solid rgba(255, 255, 255, .08);
+  border-radius: 18px;
+  background: rgba(14, 15, 23, .92);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, .18);
+}
+
+.team-v2-switch button {
+  min-height: 45px;
+  border: 0;
+  border-radius: 14px;
+  display: grid;
+  place-content: center;
+  gap: 2px;
+  color: #8e909d;
+  background: transparent;
+  cursor: pointer;
+  transition: color 160ms ease, background-color 160ms ease, transform 160ms ease;
+}
+
+.team-v2-switch button:active { transform: scale(.97); }
+
+.team-v2-switch button span {
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: .07em;
+}
+
+.team-v2-switch button small {
+  font-size: 8px;
+  font-weight: 700;
+}
+
+.team-v2-switch button.is-active {
+  color: #2e210d;
+  background: linear-gradient(180deg, #f7dda0, #e7bb63);
+  box-shadow: 0 6px 16px rgba(226, 171, 75, .18);
+}
+
+.team-v2-position-readout {
+  margin: 3px auto;
+  display: grid;
+  gap: 1px;
+  color: #9da1af;
+  font: 700 7px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.team-v2-position-readout strong { color: #fb7185; }
+.team-v2-position-readout--bench { font-size: 6.5px; }
+
+.team-v2-candidate-placement {
+  overflow: hidden;
+  color: #8d91a0;
+  font: 700 7px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (min-width: 640px) {
+  .team-v2-position-readout { font-size: 7.5px; }
+  .team-v2-candidate-placement { font-size: 8px; }
+}

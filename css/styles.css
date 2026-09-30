@@ -1,0 +1,349 @@
+.rainbow-glow { box-shadow: 0 0 20px rgba(236, 72, 153, 0.7), inset 0 0 10px rgba(59, 130, 246, 0.5); border-color: #ec4899 !important; }
+    .gold-glow { box-shadow: 0 0 18px rgba(245, 158, 11, 0.6), inset 0 0 8px rgba(245, 158, 11, 0.3); border-color: #f59e0b !important; }
+    .purple-glow { box-shadow: 0 0 16px rgba(168, 85, 247, 0.5), inset 0 0 6px rgba(168, 85, 247, 0.2); border-color: #a855f7 !important; }
+    .silver-black-glow {
+      box-shadow: 0 0 24px rgba(226, 232, 240, 0.8), inset 0 0 12px rgba(15, 23, 42, 0.9);
+      border-color: #e2e8f0 !important;
+      background: linear-gradient(135deg, #090d16 0%, #1e293b 50%, #020617 100%) !important;
+    }
+    @keyframes gachaGlowPulse {
+      0%, 100% { filter: brightness(1); transform: scale(1); }
+      50% { filter: brightness(1.18); transform: scale(1.025); }
+    }
+    .gacha-unrevealed { animation: gachaGlowPulse 1.35s ease-in-out infinite; }
+    .gacha-blue-glow { box-shadow: 0 0 16px rgba(59, 130, 246, 0.55), inset 0 0 8px rgba(59, 130, 246, 0.18); }
+    .gacha-normal-glow { box-shadow: 0 0 10px rgba(148, 163, 184, 0.25), inset 0 0 6px rgba(148, 163, 184, 0.08); }
+    .perspective-1000 { perspective: 1000px; }
+    .transform-style-preserve-3d { transform-style: preserve-3d; }
+    .backface-hidden { backface-visibility: hidden; }
+    .rotate-y-180 { transform: rotateY(180deg); }
+    @keyframes floatCard { 0%, 100% { transform: translateY(0px); } 50% { transform: translateY(-6px); } }
+    .card-floating { animation: floatCard 2.5s ease-in-out infinite; }
+    @keyframes packRip {
+      0% { transform: scale(1) rotate(0deg); opacity: 1; }
+      40% { transform: scale(1.08) rotate(-2deg); filter: brightness(1.5); }
+      70% { transform: scale(0.95) rotate(4deg); opacity: 0.8; }
+      100% { transform: scale(1.4) translateY(-100px); opacity: 0; }
+    }
+    .pack-ripping { animation: packRip 0.75s forwards ease-in-out; }
+/* 📜 羊皮紙卷軸展開與收合動畫 */
+    @keyframes scrollUnroll {
+      0% { transform: scaleY(0.1) scaleX(0.85); opacity: 0; transform-origin: bottom right; }
+      70% { transform: scaleY(1.03) scaleX(1.01); }
+      100% { transform: scaleY(1) scaleX(1); opacity: 1; transform-origin: bottom right; }
+    }
+    .scroll-open { animation: scrollUnroll 0.38s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+    .parchment-border {
+      box-shadow: 0 0 25px rgba(245, 158, 11, 0.25), inset 0 0 15px rgba(0, 0, 0, 0.6);
+      background: linear-gradient(180deg, #181512 0%, #0f1117 100%);
+    }
+
+    /* 統一 Game Modal, Overlay & Toast 視覺規範 */
+    @keyframes modalScaleIn {
+      0% { opacity: 0; transform: scale(0.93) translateY(8px); }
+      100% { opacity: 1; transform: scale(1) translateY(0); }
+    }
+    @keyframes toastSlideIn {
+      0% { opacity: 0; transform: translateY(-16px) scale(0.96); }
+      100% { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    @keyframes toastSlideOut {
+      0% { opacity: 1; transform: translateY(0) scale(1); }
+      100% { opacity: 0; transform: translateY(-12px) scale(0.94); }
+    }
+    @keyframes rewardGlow {
+      0%, 100% { transform: scale(1); opacity: 0.6; }
+      50% { transform: scale(1.08); opacity: 0.95; }
+    }
+    .animate-modal-in { animation: modalScaleIn 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+    .animate-toast-in { animation: toastSlideIn 0.24s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+    .animate-toast-out { animation: toastSlideOut 0.2s cubic-bezier(0.4, 0, 1, 1) forwards; }
+    .reward-glow-pulse { animation: rewardGlow 2.4s ease-in-out infinite; }
+
+    /* 💍 3D 總冠軍戒指與奪冠特刊視覺動態 */
+    @keyframes ringFloat3D {
+      0%, 100% { transform: translateY(0px) rotateX(14deg) rotateY(-10deg); }
+      50% { transform: translateY(-7px) rotateX(18deg) rotateY(12deg); }
+    }
+    .ring-float-3d {
+      animation: ringFloat3D 4.5s ease-in-out infinite;
+      transform-style: preserve-3d;
+    }
+    @keyframes gemSparkleGlow {
+      0%, 100% { filter: brightness(1) drop-shadow(0 0 8px rgba(245, 158, 11, 0.6)); }
+      50% { filter: brightness(1.3) drop-shadow(0 0 20px rgba(245, 158, 11, 0.95)); }
+    }
+    .gem-sparkle { animation: gemSparkleGlow 2s ease-in-out infinite; }
+    @keyframes goldFoilShimmer {
+      0% { background-position: -200% 0; }
+      100% { background-position: 200% 0; }
+    }
+    .fmvp-gold-badge {
+      background: linear-gradient(110deg, #d97706 0%, #fef08a 35%, #f59e0b 60%, #fef08a 85%, #b45309 100%);
+      background-size: 200% 100%;
+      animation: goldFoilShimmer 3.2s linear infinite;
+    }
+    @keyframes newspaperUnfold {
+      0% { opacity: 0; transform: scale(0.88) translateY(14px) rotate(-1.5deg); }
+      100% { opacity: 1; transform: scale(1) translateY(0) rotate(0deg); }
+    }
+    .newspaper-unfold {
+      animation: newspaperUnfold 0.38s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+button, select, input, .cursor-pointer {
+      touch-action: manipulation;
+    }
+    .modal-scroll-touch {
+      -webkit-overflow-scrolling: touch;
+      overscroll-behavior: contain;
+    }
+    /* 📱 iOS PWA (加入主畫面) 專屬：避開 iPhone 14/15/16 動態島、瀏海與底部橫條 */
+    .ios-safe-modal {
+      padding-top: max(env(safe-area-inset-top), 2.75rem) !important;
+      padding-bottom: max(env(safe-area-inset-bottom), 1.5rem) !important;
+      padding-left: max(env(safe-area-inset-left), 0.75rem) !important;
+      padding-right: max(env(safe-area-inset-right), 0.75rem) !important;
+    }
+    /* 頂部關閉按鈕觸控熱區放大 (Apple HIG 建議 >= 44x44px) */
+    .modal-close-btn-touch {
+      min-width: 44px;
+      min-height: 44px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      touch-action: manipulation;
+    }
+/* 🌈 Prizm / Refractor 體育卡動態折射光效 */
+    .prizm-card-container {
+      position: relative;
+      overflow: hidden;
+    }
+/* 🏆 FMVP 專屬：經典黑金斜向滿版浮水印底紋 (不暈眩、高質感) */ 
+   .fmvp-watermark-bg {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      border-radius: inherit;
+      z-index: 10;
+      opacity: 0.18;
+      background-image: repeating-linear-gradient(
+        -45deg,
+        rgba(245, 158, 11, 0.45) 0,
+        rgba(245, 158, 11, 0.45) 16px,
+        transparent 16px,
+        transparent 32px
+      );
+      mask-image: radial-gradient(circle at center, rgba(0,0,0,0.9) 30%, rgba(0,0,0,0.3) 100%);
+      -webkit-mask-image: radial-gradient(circle at center, rgba(0,0,0,0.9) 30%, rgba(0,0,0,0.3) 100%);
+    }
+
+    /* 斜向 FMVP 文字滿版平鋪矩陣 */
+    .fmvp-text-pattern {
+      position: absolute;
+      inset: -50%;
+      width: 200%;
+      height: 200%;
+      pointer-events: none;
+      z-index: 11;
+      display: flex;
+      flex-wrap: wrap;
+      align-content: space-around;
+      justify-content: space-around;
+      transform: rotate(-25deg);
+      opacity: 0.12;
+      font-family: 'Arial Black', Impact, sans-serif;
+      font-size: 11px;
+      font-weight: 900;
+      color: #fbbf24;
+      letter-spacing: 2px;
+      user-select: none;
+    }
+    .prizm-badge-shimmer {
+      background: linear-gradient(90deg, #ec4899, #f59e0b, #10b981, #3b82f6, #ec4899);
+      background-size: 300% 100%;
+      animation: goldFoilShimmer 2.5s linear infinite;
+    }
+
+/* 🃏 Tinder 式單字滑卡樣式與動畫 */
+
+    .card-swipe-active {
+      transition: none !important;
+      cursor: grabbing !important;
+    }
+    .card-swipe-smooth {
+      transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.28s ease !important;
+    }
+    .swipe-stamp {
+      position: absolute;
+      top: 12px;
+      padding: 3px 8px;
+      font-size: 11px;
+      font-weight: 900;
+      border-radius: 8px;
+      text-transform: uppercase;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.15s ease;
+      z-index: 20;
+    }
+    .swipe-stamp-like {
+      right: 14px;
+      color: #34d399;
+      border: 2px solid #34d399;
+      background: rgba(6, 78, 59, 0.7);
+      transform: rotate(10deg);
+    }
+    .swipe-stamp-nope {
+      left: 14px;
+      color: #f87171;
+      border: 2px solid #f87171;
+      background: rgba(136, 19, 55, 0.7);
+      transform: rotate(-10deg);
+    }
+
+    /* 📱 行動端防誤觸 */
+    button, select, input, .cursor-pointer {
+      touch-action: manipulation;
+    }
+
+    /* 🃏 獨立球員卡庫：手機優先、避免卡片與工具列水平溢出 */
+    .inventory-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0.5rem;
+      min-width: 0;
+    }
+
+    .inventory-player-card,
+    .inventory-player-card > * {
+      min-width: 0;
+    }
+
+    @media (min-width: 430px) {
+      .inventory-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+    }
+
+    @media (min-width: 640px) {
+      .inventory-grid {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 0.75rem;
+      }
+    }
+
+    @media (min-width: 768px) {
+      .inventory-grid {
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 639px) {
+      #tab-inventory {
+        min-width: 0;
+      }
+
+      .inventory-panel {
+        padding: 0.75rem !important;
+        border-radius: 1.25rem !important;
+      }
+
+      .inventory-toolbar select,
+      .inventory-toolbar button {
+        width: 100%;
+        min-width: 0;
+        min-height: 42px;
+        font-size: 11px;
+      }
+
+      .inventory-player-card {
+        padding: 0.5rem !important;
+        border-radius: 0.875rem !important;
+        aspect-ratio: 3 / 4.25;
+      }
+
+      .inventory-card-header {
+        gap: 0.2rem;
+        font-size: 9px !important;
+      }
+
+      .inventory-card-meta {
+        gap: 0.15rem !important;
+      }
+
+      .inventory-player-photo {
+        width: 3.5rem !important;
+        height: 3.5rem !important;
+      }
+    }
+
+    @media (max-width: 359px) {
+      .inventory-grid {
+        gap: 0.375rem;
+      }
+
+      .inventory-player-card {
+        padding: 0.375rem !important;
+      }
+    }
+
+/* =====================================================
+   Season Journey — restrained NBA broadcast presentation
+===================================================== */
+.sj-shell { text-align: left; }
+.sj-scoreboard {
+  background:
+    radial-gradient(circle at 78% 18%, rgba(245,158,11,.10), transparent 30%),
+    linear-gradient(145deg, rgba(15,23,42,.98), rgba(2,6,23,.98));
+}
+.sj-kicker { letter-spacing: .16em; text-transform: uppercase; }
+.sj-energy-ball {
+  width: 28px; height: 28px; border-radius: 999px;
+  display: inline-grid; place-items: center;
+  background: #c2410c; color: #fff7ed; border: 2px solid #fb923c;
+  font-size: 13px; box-shadow: inset -3px -3px 0 rgba(67,20,7,.25);
+}
+.sj-game-cell { min-height: 31px; transition: transform .15s ease, border-color .15s ease; }
+.sj-game-cell.is-current { border-color: #f59e0b; color: #fbbf24; transform: translateY(-1px); }
+.sj-game-cell.is-win { background: rgba(6,78,59,.58); color: #6ee7b7; border-color: rgba(16,185,129,.45); }
+.sj-game-cell.is-loss { background: rgba(127,29,29,.45); color: #fda4af; border-color: rgba(244,63,94,.38); }
+.sj-quarter.active { color: #fbbf24; border-color: rgba(245,158,11,.65); background: rgba(120,53,15,.26); }
+.sj-play-feed { scrollbar-width: thin; scrollbar-color: #334155 transparent; }
+.sj-comic-panel {
+  min-height: 300px;
+  background:
+    linear-gradient(115deg, transparent 0 47%, rgba(255,255,255,.04) 48% 52%, transparent 53%),
+    radial-gradient(circle at 50% 25%, rgba(245,158,11,.18), transparent 42%), #020617;
+}
+.sj-impact { font-size: clamp(2.3rem, 12vw, 5.5rem); line-height: .9; letter-spacing: -.06em; }
+.sj-cardback {
+  min-height: 88px; position: relative; overflow: hidden;
+  background: linear-gradient(145deg, rgba(15,23,42,.96), rgba(2,6,23,.96));
+}
+.sj-cardback::after { content: ''; position: absolute; inset: 0; pointer-events: none; opacity: .32; }
+.sj-back-champion { background: linear-gradient(145deg, #422006, #020617 68%); }
+.sj-back-champion::after { background: repeating-linear-gradient(45deg, transparent 0 12px, rgba(251,191,36,.18) 13px 14px); }
+.sj-back-fmvp { background: radial-gradient(circle at 50% 5%, #fbbf24 0, #713f12 18%, #020617 65%); }
+.sj-back-fmvp::after { background: linear-gradient(90deg, transparent, rgba(255,255,255,.28), transparent); }
+.sj-back-mvp { background: radial-gradient(circle at 50% 35%, #9a3412, #020617 72%); }
+.sj-back-mvp::after { background: conic-gradient(from 0deg at 50% 20%, transparent, rgba(251,146,60,.4), transparent 20%); }
+.sj-back-dpoy { background: linear-gradient(145deg, #083344, #0f172a 55%, #020617); }
+.sj-back-dpoy::after { background: repeating-linear-gradient(120deg, transparent 0 16px, rgba(103,232,249,.18) 17px 18px); }
+.sj-back-record { background: linear-gradient(135deg, #3b0764, #0f172a 55%, #020617); }
+.sj-back-record::after { background: linear-gradient(115deg, transparent 38%, rgba(232,121,249,.65) 40%, transparent 43%, transparent 58%, rgba(192,132,252,.35) 60%, transparent 62%); }
+.sj-back-legend { background: radial-gradient(circle at 50% 0, #78350f, #111827 38%, #020617 76%); }
+.sj-back-legend::after { background: linear-gradient(90deg, transparent 15%, rgba(251,191,36,.25) 16% 18%, transparent 19% 81%, rgba(251,191,36,.25) 82% 84%, transparent 85%); }
+.sj-cardback > * { position: relative; z-index: 1; }
+.sj-cardback.unlocked { border-color: rgba(245,158,11,.6); }
+.sj-cardback.active { box-shadow: 0 0 0 2px #f59e0b, 0 12px 30px rgba(245,158,11,.12); }
+.sj-card-surface { background-color: #020617 !important; background-size: cover !important; }
+.sj-surface-champion { background-image: repeating-linear-gradient(45deg, transparent 0 18px, rgba(251,191,36,.13) 19px 20px), linear-gradient(145deg, #422006, #020617 72%) !important; }
+.sj-surface-fmvp { background-image: radial-gradient(circle at 50% 0, rgba(251,191,36,.78), rgba(113,63,18,.52) 18%, #020617 68%) !important; }
+.sj-surface-mvp { background-image: conic-gradient(from 0deg at 50% 15%, #020617, rgba(154,52,18,.8), #020617 28%) !important; }
+.sj-surface-dpoy { background-image: repeating-linear-gradient(120deg, transparent 0 18px, rgba(103,232,249,.12) 19px 20px), linear-gradient(145deg, #083344, #020617 74%) !important; }
+.sj-surface-record { background-image: linear-gradient(115deg, transparent 38%, rgba(232,121,249,.42) 40%, transparent 43%), linear-gradient(135deg, #3b0764, #020617 68%) !important; }
+.sj-surface-legend { background-image: linear-gradient(90deg, transparent 12%, rgba(251,191,36,.18) 14% 16%, transparent 18% 82%, rgba(251,191,36,.18) 84% 86%, transparent 88%), radial-gradient(circle at 50% 0, #78350f, #111827 40%, #020617 78%) !important; }
+@media (max-width: 639px) {
+  .sj-scoreboard { border-radius: 1.25rem; }
+  .sj-game-cell { min-height: 28px; font-size: 9px; }
+}
