@@ -1,0 +1,19 @@
+{
+  "name": "ToeicQuest NBA",
+  "short_name": "ToeicQuest",
+  "description": "TOEIC study and basketball card collection game.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#020617",
+  "theme_color": "#12051f",
+  "icons": [
+    {
+      "src": "./assets/icons/toeicquest-kobe-ios-v1.png",
+      "sizes": "1024x1024",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
