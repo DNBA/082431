@@ -123,9 +123,8 @@
       ['TS%', pick('TS%')], ['eFG%', pick('eFG%')], ['USG%', pick('USG%')],
       ['AST%', pick('AST%')], ['TOV%', pick('TOV%')], ['TRB%', pick('TRB%', 'REB%')],
       ['ORB%', pick('ORB%')], ['DRB%', pick('DRB%')], ['STL%', pick('STL%')],
-      ['BLK%', pick('BLK%')], ['OffRtg', pick('OffRtg', 'ORTG', 'ORtg')],
-      ['DefRtg', pick('DefRtg', 'DRTG', 'DRtg')], ['NetRtg', pick('NetRtg', 'NETRTG', 'NetRtg')],
-      ['+/-', pick('+/-', 'plusMinus')]
+      ['BLK%', pick('BLK%')], ['PER', pick('PER')], ['WS', pick('WS')],
+      ['BPM', pick('BPM')], ['VORP', pick('VORP')]
     ];
   }
 
@@ -159,6 +158,14 @@
       <div class="player-dossier-v2__stat">
         <strong>${escapeHtml(displayValue(value))}</strong><span>${escapeHtml(label)}</span>
       </div>`).join('')}</div>`;
+  }
+
+  function seasonStatsSourceNote(player, fallbackText) {
+    if (player?.statsSeason !== '2025-26' || player?.statsSource?.name !== 'Sports Reference') {
+      return fallbackText;
+    }
+    const sourceUrl = player.statsSource.url || 'https://www.basketball-reference.com/';
+    return `2025-26 賽季資料：<a href="${escapeHtml(sourceUrl)}" target="_blank" rel="noopener noreferrer">Sports Reference</a>`;
   }
 
   function careerProgress(legacy) {
@@ -237,8 +244,8 @@
       </nav>
       <div class="player-dossier-v2__body">
         <section class="player-dossier-v2__panel is-active" data-dossier-panel="info">${renderInfo(player, placement)}</section>
-        <section class="player-dossier-v2__panel" data-dossier-panel="basic">${statGrid(basicStats(player))}<p class="player-dossier-v2__note">賽季基礎數據；沒有可靠來源的欄位顯示 --。</p></section>
-        <section class="player-dossier-v2__panel" data-dossier-panel="advanced">${statGrid(advancedStats(player), 'player-dossier-v2__stat-grid--advanced')}<p class="player-dossier-v2__note">只顯示現有比賽資料可可靠提供的指標。</p></section>
+        <section class="player-dossier-v2__panel" data-dossier-panel="basic">${statGrid(basicStats(player))}<p class="player-dossier-v2__note">${seasonStatsSourceNote(player, '賽季基礎數據；沒有可靠來源的欄位顯示 --。')}</p></section>
+        <section class="player-dossier-v2__panel" data-dossier-panel="advanced">${statGrid(advancedStats(player), 'player-dossier-v2__stat-grid--advanced')}<p class="player-dossier-v2__note">${seasonStatsSourceNote(player, '只顯示現有比賽資料可可靠提供的指標。')}</p></section>
         <section class="player-dossier-v2__panel" data-dossier-panel="badges">${renderBadges(player)}</section>
         <section class="player-dossier-v2__panel" data-dossier-panel="career">${renderCareer(player)}</section>
       </div>

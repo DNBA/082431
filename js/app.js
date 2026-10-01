@@ -25235,6 +25235,53 @@ function playSound(type) {
   ]
 };
 
+    function normalizeSeasonStatsPlayerName(value) {
+      return String(value || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/[.'’]/g, '')
+        .replace(/[^a-z0-9]+/g, ' ')
+        .trim();
+    }
+
+    function find2025_26SeasonStats(playerName) {
+      const dataset = globalThis.PLAYER_STATS_2025_26;
+      if (!dataset?.records) return null;
+      const normalized = normalizeSeasonStatsPlayerName(playerName);
+      const relaxed = normalized.replace(/\s+(jr|ii|iii)$/, '');
+      const aliasKey = dataset.aliases?.[normalized] || dataset.aliases?.[relaxed];
+      return dataset.records[normalized]
+        || dataset.records[relaxed]
+        || (aliasKey ? dataset.records[aliasKey] : null)
+        || null;
+    }
+
+    function attach2025_26SeasonStats(teamData) {
+      const report = { matched: 0, missing: [] };
+      Object.entries(teamData || {}).forEach(([team, players]) => {
+        (players || []).forEach(player => {
+          const stats = find2025_26SeasonStats(player.name);
+          if (!stats) {
+            report.missing.push({ name: player.name, team });
+            return;
+          }
+          player.basic = { ...stats.basic };
+          player.advanced = { ...stats.advanced };
+          player.srId = stats.srId;
+          player.statsSeason = '2025-26';
+          player.statsSource = {
+            name: 'Sports Reference',
+            url: 'https://www.basketball-reference.com/'
+          };
+          report.matched += 1;
+        });
+      });
+      return report;
+    }
+
+    const PLAYER_STATS_2025_26_IMPORT = attach2025_26SeasonStats(TEAM_DATA_2026);
+
     // Current-season systems (team pools, binder and opponent rosters) use the 2026-27 list.
     const TEAM_DATA = TEAM_DATA_2026;
 
@@ -25416,6 +25463,9 @@ function createCard(basePlayer, star = 1) {
     isRookie: ROOKIE_PLAYERS.has(name),
     basic: basePlayer.basic ? { ...basePlayer.basic } : null,
     advanced: basePlayer.advanced ? { ...basePlayer.advanced } : null,
+    srId: basePlayer.srId || null,
+    statsSeason: basePlayer.statsSeason || null,
+    statsSource: basePlayer.statsSource ? { ...basePlayer.statsSource } : null,
     designId: basePlayer.designId || null,
     legacy: {
       seasons: 0, games: 0, pts: 0, reb: 0, ast: 0, rings: 0, mvps: 0, fmvps: fmvpBonus, traits: []
@@ -28570,6 +28620,15 @@ function saveGame() {
 
         if (!c.rarity) {
           c.rarity = refPlayer?.rarity || determineRarityByOvr(c.baseOvr);
+        }
+
+        // 既有 ('26) 卡在讀檔時同步最新 2025-26 賽季資料；不影響 OVR、星級或其他年度卡片。
+        if (c.edition === '26' && refPlayer?.statsSeason === '2025-26') {
+          c.basic = refPlayer.basic ? { ...refPlayer.basic } : (c.basic || null);
+          c.advanced = refPlayer.advanced ? { ...refPlayer.advanced } : (c.advanced || null);
+          c.srId = refPlayer.srId || c.srId || null;
+          c.statsSeason = refPlayer.statsSeason || c.statsSeason || null;
+          c.statsSource = refPlayer.statsSource ? { ...refPlayer.statsSource } : (c.statsSource || null);
         }
 
         return c;
