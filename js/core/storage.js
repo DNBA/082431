@@ -14,6 +14,14 @@ const defaultState = {
       streak: 0,
       studyLogs: [], // 存放格式如 ["2026-09-17", "2026-09-16"]
       studyDetails: {}, // 格式如: { "2026-9-17": { lTotal: 30, lCorrect: 26, rTotal: 40, rCorrect: 32 } }
+      pomodoro: {
+        sessionId: '', status: 'idle', sessionStartAt: null,
+        plannedDuration: 25 * 60 * 1000, pausedAccumulatedMs: 0, completedAt: null
+      },
+      focusMode: {
+        active: false, totalFocusedMs: 0, dailyDate: '', dailyFocusedMs: 0,
+        rewardsDate: '', rewardsClaimedToday: 0, rewardedSessionIds: [], dailyRewardCap: 20
+      },
       isAdmin: false,
       claimedTeamRewards: [],
       redeemedCodes: [],

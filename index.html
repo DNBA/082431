@@ -724,12 +724,15 @@
         <h3 class="text-base font-black text-white mb-1 flex items-center justify-center gap-2">
           <i data-lucide="clock" class="text-indigo-400 w-4 h-4"></i> 多益 25 分鐘衝刺番茄鐘
         </h3>
-        <p class="text-xs text-slate-400 mb-4">專注完成一個番茄鐘，自動增加 25 分鐘時長並贈送 1 🎟️ 抽卡券！</p>
+        <p class="text-xs text-slate-400 mb-2">每完成 25 分鐘可獲得 1 🎟️ 抽卡券，每日最多獎勵 20 張。</p>
+        <p class="text-[10px] text-indigo-200/70 mb-4">鎖屏或進入背景後會依時間戳重算；瀏覽器不保證背景程式與完成通知準時執行。</p>
         <div id="timerDisplay" class="text-5xl font-black font-mono text-indigo-300 my-3">25:00</div>
+        <div id="focusRewardStatus" class="text-[11px] text-slate-400 font-mono mb-3">今日專注 0 分鐘｜獎勵 0 / 20</div>
         <div class="flex justify-center gap-3">
           <button id="timerToggleBtn" onclick="togglePomodoroTimer()" class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-6 py-2 rounded-xl text-xs transition">開始專注</button>
           <button onclick="resetPomodoroTimer()" class="bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold px-4 py-2 rounded-xl text-xs transition">重置</button>
         </div>
+        <button id="focusModeToggleBtn" onclick="toggleFocusMode()" class="mt-3 w-full max-w-xs bg-indigo-950/80 hover:bg-indigo-900 border border-indigo-500/40 text-indigo-200 font-bold px-4 py-2.5 rounded-xl text-xs transition">開啟專注模式</button>
       </div>
 
 <div class="bg-slate-900 p-5 rounded-3xl border border-slate-800 shadow space-y-4">
@@ -1197,8 +1200,38 @@
     </div>
   </nav>
 
+  <div id="focusModeOverlay" class="hidden fixed inset-0 z-[140] bg-slate-950/95 backdrop-blur-xl px-4 py-[max(1.5rem,env(safe-area-inset-top))] overflow-y-auto" role="dialog" aria-modal="true" aria-labelledby="focusModeTitle">
+    <div class="min-h-full max-w-md mx-auto flex items-center justify-center">
+      <div class="w-full bg-gradient-to-br from-indigo-950 via-slate-900 to-slate-950 border border-indigo-500/40 rounded-3xl p-6 text-center shadow-2xl">
+        <div class="text-4xl mb-2" aria-hidden="true">🛡️</div>
+        <h2 id="focusModeTitle" class="text-xl font-black text-white">ToeicQuest 專注模式</h2>
+        <p class="text-xs text-slate-400 mt-2">遊戲、抽卡與賽季操作暫時鎖定；番茄鐘與單字學習仍可使用。</p>
+        <div id="focusModeTimerDisplay" class="text-6xl font-black font-mono text-indigo-300 my-7">25:00</div>
+        <div id="focusModeProgress" class="text-xs text-indigo-100/80 font-mono mb-5">今日專注 0 分鐘｜獎勵 0 / 20</div>
+        <div class="grid grid-cols-2 gap-2">
+          <button onclick="openFocusStudy('stats')" class="bg-indigo-600 hover:bg-indigo-500 text-white font-black py-3 rounded-xl text-xs">⏱️ 番茄鐘</button>
+          <button onclick="openFocusStudy('vocab')" class="bg-emerald-700 hover:bg-emerald-600 text-white font-black py-3 rounded-xl text-xs">📚 單字學習</button>
+        </div>
+        <button id="focusOverlayTimerBtn" onclick="togglePomodoroTimer()" class="mt-2 w-full bg-slate-800 hover:bg-slate-700 text-slate-100 font-bold py-3 rounded-xl text-xs">暫停倒數</button>
+        <button onclick="endFocusMode()" class="mt-3 text-xs text-slate-500 hover:text-rose-300 underline underline-offset-4">結束專注模式（保留計時進度）</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="focusModeDock" class="hidden fixed left-3 right-3 bottom-[calc(5.5rem+env(safe-area-inset-bottom))] z-[130] max-w-md mx-auto bg-indigo-950/95 border border-indigo-500/50 rounded-2xl px-3 py-2 shadow-2xl backdrop-blur-md">
+    <div class="flex items-center gap-3">
+      <button onclick="showFocusModePanel()" class="flex-1 text-left min-w-0">
+        <span class="block text-[10px] text-indigo-300 font-bold">🛡️ 專注模式進行中</span>
+        <span class="block text-[10px] text-slate-400 truncate">只允許番茄鐘與單字學習</span>
+      </button>
+      <span id="focusDockTimerDisplay" class="text-lg text-white font-black font-mono">25:00</span>
+      <button onclick="showFocusModePanel()" class="bg-indigo-600 text-white text-[10px] font-bold px-3 py-2 rounded-xl">返回</button>
+    </div>
+  </div>
+
   <script src="./js/ui-v2/position-utils.js"></script>
-  <script src="./js/app.js?v=20261001-5"></script>
+  <script src="./js/focus-timer.js?v=20261002-1"></script>
+  <script src="./js/app.js?v=20261002-1"></script>
 <!-- 🏀 季後賽逐場動態播報彈窗 -->
 <div id="playoffSeriesModal" onclick="if(event.target === this && !document.getElementById('posNextRoundBtn').disabled) closeSeriesAndShowBoxScore()" class="fixed inset-0 bg-slate-950/90 backdrop-blur-md z-50 hidden flex items-end sm:items-center justify-center p-3 sm:p-4 ios-safe-modal">
   <div class="bg-slate-900 border border-amber-500/50 rounded-3xl w-full max-w-lg p-6 shadow-2xl space-y-4 relative animate-modal-in">
