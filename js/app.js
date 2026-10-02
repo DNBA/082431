@@ -28441,6 +28441,7 @@ const defaultState = {
       streak: 0,
       studyLogs: [], // 存放格式如 ["2026-09-17", "2026-09-16"]
       studyDetails: {}, // 格式如: { "2026-9-17": { lTotal: 30, lCorrect: 26, rTotal: 40, rCorrect: 32 } }
+      appliedStudyRecoveries: [],
       pomodoro: {
         sessionId: '',
         status: 'idle',
@@ -28525,6 +28526,16 @@ function saveGame() {
           result[key] = JSON.parse(JSON.stringify(defaults[key]));
         }
       }
+      // Preserve dynamic save keys that cannot exist in defaultState, such as
+      // studyDetails["YYYY-MM-DD"]. The previous merge silently discarded them.
+      if (saved && typeof saved === 'object' && !Array.isArray(saved)) {
+        Object.keys(saved).forEach(key => {
+          if (['__proto__', 'prototype', 'constructor'].includes(key)) return;
+          if (!Object.prototype.hasOwnProperty.call(defaults, key)) {
+            result[key] = saved[key];
+          }
+        });
+      }
       return result;
     }
 
@@ -28556,6 +28567,28 @@ function saveGame() {
       if (typeof s.season.hasPlayedPlayoffs === 'undefined') s.season.hasPlayedPlayoffs = false;
       if (!Array.isArray(s.championshipRings)) s.championshipRings = [];
       if (!s.playoffStats || typeof s.playoffStats !== 'object') s.playoffStats = { wins: 0, losses: 0, finalsPlayerStats: {} };
+
+      // One-time owner recovery after the legacy deep merge removed dated studyDetails.
+      // Only applies to an admin save and never overwrites an existing record.
+      const recoveryId = 'owner-study-2026-10-01-international-village-listening-1';
+      if (!Array.isArray(s.appliedStudyRecoveries)) s.appliedStudyRecoveries = [];
+      if (s.isAdmin && !s.appliedStudyRecoveries.includes(recoveryId)) {
+        const recoveryDate = '2026-10-01';
+        if (!s.studyDetails || typeof s.studyDetails !== 'object') s.studyDetails = {};
+        if (!s.studyDetails[recoveryDate]) {
+          s.studyDetails[recoveryDate] = {
+            quizName: '多益國際學村第一回（聽力）',
+            totalScore: 315,
+            lTotal: 100,
+            lCorrect: 63,
+            rTotal: 0,
+            rCorrect: 0
+          };
+        }
+        if (!Array.isArray(s.studyLogs)) s.studyLogs = [];
+        if (!s.studyLogs.includes(recoveryDate)) s.studyLogs.push(recoveryDate);
+        s.appliedStudyRecoveries.push(recoveryId);
+      }
 
       // 2. 建立選手快查表 (依據官方 NBA_PLAYERS 補齊 nbaId、realOvr、positions)
       const playerLookup = new Map();
