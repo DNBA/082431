@@ -177,8 +177,8 @@
 
   function installLegacyNavigationBridges() {
     const trainItems = [
-      { label: 'FOCUS / CALENDAR', tab: 'planner', view: 'planner', anchor: 'plannerFocusCard' },
-      { label: 'VOCAB', tab: 'vocab' }
+      { label: 'VOCAB', tab: 'vocab' },
+      { label: 'CALENDAR / FOCUS', tab: 'planner', view: 'planner', anchor: 'plannerMonthTitle' }
     ];
     const vocab = byId('tab-vocab');
     const stats = byId('tab-stats');

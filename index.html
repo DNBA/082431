@@ -14,10 +14,13 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="ToeicQuest">
   <meta name="application-name" content="ToeicQuest">
+  <meta name="color-scheme" content="light dark">
 
   <!-- 🤖 3. Android Chrome 偽 App 設定（隱藏網址列、主題顏色） -->
   <meta name="mobile-web-app-capable" content="yes">
-  <meta name="theme-color" content="#020617">
+  <meta name="theme-color" content="#f2f2f7" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+  <script src="./js/system-theme.js?v=20261003-system-theme-1"></script>
 <script src="./data/toeic1000.js"></script>
 <script src="./data/player-stats-2025-26.js?v=20261001-1"></script>
   <script src="https://cdn.tailwindcss.com"></script>
@@ -33,6 +36,7 @@
     <link rel="stylesheet" href="./css/gacha-v2.css?v=20261003-mobile-flip-1">
     <link rel="stylesheet" href="./css/season-v2.css?v=20261003-season-interactions-2">
     <link rel="stylesheet" href="./css/study-planner.css?v=20261003-planner-3">
+    <link rel="stylesheet" href="./css/system-theme.css?v=20261003-system-theme-1">
 </head>
 <body data-v2-active="home" class="bg-slate-950 text-slate-100 min-h-screen pb-24 font-sans selection:bg-amber-500 selection:text-black">
 
@@ -1327,7 +1331,7 @@
       <button onclick="switchTab('roster')" class="v2-nav-tab" data-v2-target="team"><span class="v2-nav-icon" aria-hidden="true">♟</span><span>TEAM</span></button>
       <button onclick="switchTab('gacha')" class="v2-nav-tab v2-nav-gacha" data-v2-target="gacha" aria-label="GACHA 抽卡"><span class="v2-nav-icon" aria-hidden="true"><span class="v2-nav-pack-icon">✦</span></span><span>GACHA</span></button>
       <button onclick="switchTab('season')" class="v2-nav-tab" data-v2-target="season"><span class="v2-nav-icon" aria-hidden="true">▶</span><span>SEASON</span></button>
-      <button onclick="openPlannerCalendarView()" class="v2-nav-tab" data-v2-target="train"><span class="v2-nav-icon" aria-hidden="true">🏀</span><span>TRAIN</span></button>
+      <button onclick="switchTab('vocab')" class="v2-nav-tab" data-v2-target="train"><span class="v2-nav-icon" aria-hidden="true">🏀</span><span>TRAIN</span></button>
     </div>
   </nav>
 
@@ -2047,7 +2051,7 @@
 <script src="./js/ui-v2/visual-match-simulator.js?v=20261003-season-interactions-2"></script>
 <script src="./js/season-journey.js?v=20261003-season-interactions-2"></script>
 <script src="./js/ui-v2/ui-v2-adapter.js?v=20261001-4"></script>
-<script src="./js/ui-v2/home-v2.js?v=20261003-study-planner-4"></script>
+<script src="./js/ui-v2/home-v2.js?v=20261003-train-vocab-1"></script>
 <script src="./js/study-planner.js?v=20261003-study-planner-3"></script>
 <script src="./js/ui-v2/team-v2.js"></script>
 <script src="./js/ui-v2/normal-card-v2.js?v=20261003-mobile-hydrate-2"></script>
