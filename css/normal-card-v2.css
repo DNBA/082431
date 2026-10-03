@@ -25,6 +25,7 @@
   position: absolute;
   inset: 0;
   transform-style: preserve-3d;
+  -webkit-transform-style: preserve-3d;
   transition: transform 520ms cubic-bezier(.2, .72, .24, 1);
 }
 
@@ -39,8 +40,14 @@
   -webkit-backface-visibility: hidden;
 }
 
+.normal-card-v2__front {
+  transform: rotateY(0deg) translateZ(1px);
+  -webkit-transform: rotateY(0deg) translateZ(1px);
+}
+
 .normal-card-v2__back {
-  transform: rotateY(180deg);
+  transform: rotateY(180deg) translateZ(1px);
+  -webkit-transform: rotateY(180deg) translateZ(1px);
   background: #0a0b10;
 }
 

@@ -41,9 +41,8 @@
     return `<div class="gacha-v2-reveal ${compact ? 'gacha-v2-reveal--compact' : 'gacha-v2-reveal--single'} ${rarityClass(card)}" data-rarity="${escapeHtml(card.rarity)}" onclick="flipCardDirect(${index}, '${id}')">
       <div id="${id}" class="gacha-v2-reveal__inner gacha-v2-card-inner">
         <section class="gacha-v2-reveal__face gacha-v2-reveal__back" aria-label="尚未翻開的球員卡">
-          <div class="gacha-v2-reveal__signal" aria-hidden="true"></div>
           <img src="${PACK_ART}" alt="">
-          <span>RARITY SIGNAL</span>
+          <span>PLAYER CARD</span>
           <strong>TAP</strong>
         </section>
         <section class="gacha-v2-reveal__face gacha-v2-reveal__front" aria-label="抽卡結果 ${escapeHtml(displayName(card))}">
