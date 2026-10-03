@@ -28548,8 +28548,20 @@ const defaultState = {
         sessionStartAt: null,
         pausedAccumulatedMs: 0,
         rewardedIntervals: 0,
-        trackingVersion: 2
+        trackingVersion: 2,
+        taskId: null,
+        subject: '',
+        plannedMinutes: 0,
+        plannerStartAt: null,
+        taskType: 'study'
       },
+      studyPlanner: {
+        tasks: [],
+        logs: []
+      },
+      studyStreak: 0,
+      studyStreakLastDate: '',
+      studyActivityDates: [],
       isAdmin: false,
       claimedTeamRewards: [],
       redeemedCodes: [],
@@ -28657,6 +28669,12 @@ function saveGame() {
       if (typeof s.season.hasPlayedPlayoffs === 'undefined') s.season.hasPlayedPlayoffs = false;
       if (!Array.isArray(s.championshipRings)) s.championshipRings = [];
       if (!s.playoffStats || typeof s.playoffStats !== 'object') s.playoffStats = { wins: 0, losses: 0, finalsPlayerStats: {} };
+      if (!s.studyPlanner || typeof s.studyPlanner !== 'object') s.studyPlanner = { tasks: [], logs: [] };
+      if (!Array.isArray(s.studyPlanner.tasks)) s.studyPlanner.tasks = [];
+      if (!Array.isArray(s.studyPlanner.logs)) s.studyPlanner.logs = [];
+      if (!Array.isArray(s.studyActivityDates)) s.studyActivityDates = [];
+      s.studyStreak = Math.max(0, Number(s.studyStreak) || 0);
+      s.studyStreakLastDate = typeof s.studyStreakLastDate === 'string' ? s.studyStreakLastDate : '';
 
       // One-time owner recovery after the legacy deep merge removed dated studyDetails.
       // Only applies to an admin save and never overwrites an existing record.
@@ -30364,6 +30382,7 @@ updateVocabProgressBar();
 renderStudyCalendar();
 renderDailyQuests();
 renderScoreTrendChart();
+      if (typeof window.renderStudyPlanner === 'function') window.renderStudyPlanner();
       lucide.createIcons();
     }
 
@@ -30391,8 +30410,8 @@ renderScoreTrendChart();
     }
 
     function switchTab(tabKey) {
-      if (state.focusMode?.active && !['stats', 'vocab'].includes(tabKey)) {
-        showToast('🛡️ 專注模式中，只能使用番茄鐘與單字學習。', 'warning');
+      if (state.focusMode?.active && !['stats', 'planner', 'vocab'].includes(tabKey)) {
+        showToast('🛡️ 專注模式中，只能使用專注、行事曆與單字學習。', 'warning');
         showFocusModePanel();
         return false;
       }
@@ -30550,6 +30569,11 @@ playSound('click');
       focus.sessionStartAt = focus.status === 'running' ? (Number(focus.sessionStartAt) || Date.now()) : null;
       focus.pausedAccumulatedMs = Math.max(0, Number(focus.pausedAccumulatedMs) || 0);
       focus.rewardedIntervals = Math.max(0, Math.floor(Number(focus.rewardedIntervals) || 0));
+      focus.taskId = focus.taskId ? String(focus.taskId) : null;
+      focus.subject = typeof focus.subject === 'string' ? focus.subject : '';
+      focus.plannedMinutes = Math.max(0, Number(focus.plannedMinutes) || 0);
+      focus.plannerStartAt = Number(focus.plannerStartAt) || null;
+      focus.taskType = typeof focus.taskType === 'string' ? focus.taskType : 'study';
       resetDailyFocusCounters();
     }
 
@@ -30684,21 +30708,24 @@ playSound('click');
       let completed = 0;
       let rewarded = 0;
       let completedToday = 0;
+      const completedActivityDates = new Set();
       for (let interval = alreadySettled + 1; interval <= completedIntervals; interval += 1) {
         const msNeededInCurrentSegment = Math.max(0, interval * duration - focus.pausedAccumulatedMs);
         const achievedAt = focus.status === 'running' && focus.sessionStartAt
           ? Math.min(now, focus.sessionStartAt + msNeededInCurrentSegment)
           : now;
+        const achievedDate = getDateStringAt(achievedAt);
         const completion = window.ToeicQuestFocusTimer.recordCompletion(state.focusMode, {
           sessionId: `${focus.sessionId}:interval:${interval}`,
           durationMs: duration,
-          dateKey: getDateStringAt(achievedAt),
+          dateKey: achievedDate,
           dailyRewardCap: 20
         });
         state.focusMode = completion.focus;
         if (!completion.firstCompletion) continue;
         completed += 1;
-        if (getDateStringAt(achievedAt) === getTodayString()) completedToday += 1;
+        completedActivityDates.add(achievedDate);
+        if (achievedDate === getTodayString()) completedToday += 1;
         if (completion.rewardGranted) {
           rewarded += 1;
           state.tickets = (Number(state.tickets) || 0) + 1;
@@ -30711,6 +30738,9 @@ playSound('click');
         checkAndResetDailyQuests();
         state.dailyQuests.pomodoroDoneToday = (state.dailyQuests.pomodoroDoneToday || 0) + completedToday;
         state.toeic.totalListening = (Number(state.toeic.totalListening) || 0) + completed * 25;
+        if (typeof window.recordStudyActivityForPlanner === 'function') {
+          completedActivityDates.forEach(date => window.recordStudyActivityForPlanner(date));
+        }
       }
       saveGame();
       updateTimerDisplay(now);
@@ -30745,6 +30775,9 @@ playSound('click');
         state.dailyQuests.pomodoroDoneToday = (state.dailyQuests.pomodoroDoneToday || 0) + 1;
         state.toeic.totalListening = (Number(state.toeic.totalListening) || 0) + 25;
         if (completion.rewardGranted) state.tickets = (Number(state.tickets) || 0) + 1;
+        if (typeof window.recordPlannerFocusLog === 'function') {
+          window.recordPlannerFocusLog({ title: '25 分鐘番茄鐘', type: 'study', plannedMinutes: 25, actualMinutes: 25, completedAt: new Date(now).toISOString() });
+        }
       }
       saveGame();
       renderAll();
@@ -30758,6 +30791,14 @@ playSound('click');
       const timerApi = window.ToeicQuestFocusTimer;
       if (state.pomodoro.status === 'running' && timerApi.remainingMs(state.pomodoro, now) <= 0) completePomodoro(now);
       if (state.focusMode.status === 'running') settleFocusMilestones(now);
+      if (
+        state.focusMode.active && state.focusMode.status === 'running' && state.focusMode.taskId
+        && state.focusMode.plannedMinutes > 0
+        && focusElapsedMs(now) >= state.focusMode.plannedMinutes * 60000
+      ) {
+        finishFocusModeSession(now, true);
+        return;
+      }
       updateTimerDisplay(now);
       updateFocusModeDisplay(now);
       if (state.pomodoro.status !== 'running' && state.focusMode.status !== 'running') {
@@ -30824,6 +30865,12 @@ playSound('click');
       const button = document.getElementById('focusOverlayTimerBtn');
       if (button) button.innerText = state.focusMode.status === 'running' ? '暫停專注計時' : '繼續專注計時';
       if (state.focusMode.status === 'running') document.title = `${display} · ToeicQuest 專注模式`;
+      const subject = document.getElementById('focusModeSubject');
+      if (subject) {
+        subject.textContent = state.focusMode.subject
+          ? `${state.focusMode.subject}${state.focusMode.plannedMinutes ? ` · ${state.focusMode.plannedMinutes} MIN` : ''}`
+          : '自由專注';
+      }
     }
 
     function renderFocusModeUi(now = Date.now()) {
@@ -30857,6 +30904,11 @@ playSound('click');
       state.focusMode.sessionStartAt = now;
       state.focusMode.pausedAccumulatedMs = 0;
       state.focusMode.rewardedIntervals = 0;
+      state.focusMode.taskId = null;
+      state.focusMode.subject = '';
+      state.focusMode.plannedMinutes = 0;
+      state.focusMode.plannerStartAt = now;
+      state.focusMode.taskType = 'study';
       isFocusPanelMinimized = false;
       requestFocusNotificationPermission('focus', now);
       startPomodoroUiTicker();
@@ -30891,28 +30943,91 @@ playSound('click');
     }
 
     function openFocusStudy(tabKey) {
-      if (!['stats', 'vocab'].includes(tabKey)) return;
+      if (!['stats', 'planner', 'vocab'].includes(tabKey)) return;
       isFocusPanelMinimized = true;
       renderFocusModeUi();
       switchTab(tabKey);
     }
 
-    function endFocusMode() {
+    function finishFocusModeSession(now = Date.now(), plannedCompletion = false) {
       ensureFocusState();
-      const now = Date.now();
       if (state.focusMode.status === 'running') {
         settleFocusMilestones(now);
         state.focusMode.pausedAccumulatedMs = focusElapsedMs(now);
       }
+      const actualMs = Math.max(0, state.focusMode.pausedAccumulatedMs);
+      const actualMinutes = Math.max(0, Math.round(actualMs / 60000));
+      const linkedTask = state.focusMode.taskId ? {
+        taskId: state.focusMode.taskId,
+        title: state.focusMode.subject,
+        type: state.focusMode.taskType,
+        plannedMinutes: state.focusMode.plannedMinutes,
+        startAt: state.focusMode.plannerStartAt,
+        actualMinutes,
+        completedAt: new Date(now).toISOString()
+      } : null;
+      const linkedTaskCompleted = !!linkedTask && (
+        plannedCompletion
+        || (linkedTask.plannedMinutes > 0 && actualMs >= linkedTask.plannedMinutes * 60000)
+      );
       state.focusMode.active = false;
       state.focusMode.status = 'idle';
       state.focusMode.sessionStartAt = null;
+      state.focusMode.taskId = null;
+      state.focusMode.subject = '';
+      state.focusMode.plannedMinutes = 0;
+      state.focusMode.plannerStartAt = null;
       isFocusPanelMinimized = false;
       clearFocusSystemNotification();
       saveGame();
       renderFocusModeUi();
-      showToast(`專注模式已結束，本次專注 ${formatTimerMs(state.focusMode.pausedAccumulatedMs)}。`, 'info');
+      if (linkedTaskCompleted && typeof window.completeStudyPlannerTaskFromFocus === 'function') {
+        window.completeStudyPlannerTaskFromFocus(linkedTask);
+      } else if (linkedTask && actualMs >= 60000 && typeof window.recordStudyPlannerTaskProgressFromFocus === 'function') {
+        window.recordStudyPlannerTaskProgressFromFocus(linkedTask);
+      } else if (actualMinutes >= 25 && typeof window.recordPlannerFocusLog === 'function') {
+        window.recordPlannerFocusLog({ title: '自由專注', type: 'study', plannedMinutes: actualMinutes, actualMinutes, completedAt: new Date(now).toISOString() });
+      }
+      const toastMessage = linkedTaskCompleted
+        ? `✓「${linkedTask.title}」專注完成`
+        : linkedTask
+          ? `已記錄 ${formatTimerMs(actualMs)}，行程保留為未完成。`
+          : `專注模式已結束，本次專注 ${formatTimerMs(actualMs)}。`;
+      showToast(toastMessage, linkedTaskCompleted ? 'success' : 'info');
     }
+
+    function endFocusMode() {
+      finishFocusModeSession(Date.now(), false);
+    }
+
+    function startFocusModeFromPlanner(taskId, title, plannedMinutes, taskType = 'study') {
+      ensureFocusState();
+      if (state.focusMode.active) {
+        showToast('已有專注計時進行中，請先結束目前的專注。', 'warning');
+        showFocusModePanel();
+        return false;
+      }
+      const now = Date.now();
+      state.focusMode.active = true;
+      state.focusMode.status = 'running';
+      state.focusMode.sessionId = createFocusSessionId(now);
+      state.focusMode.sessionStartAt = now;
+      state.focusMode.pausedAccumulatedMs = 0;
+      state.focusMode.rewardedIntervals = 0;
+      state.focusMode.taskId = String(taskId || '');
+      state.focusMode.subject = String(title || '學習任務');
+      state.focusMode.plannedMinutes = Math.max(1, Number(plannedMinutes) || 25);
+      state.focusMode.plannerStartAt = now;
+      state.focusMode.taskType = String(taskType || 'study');
+      isFocusPanelMinimized = false;
+      requestFocusNotificationPermission('focus', now);
+      startPomodoroUiTicker();
+      saveGame();
+      renderFocusModeUi(now);
+      return true;
+    }
+
+    window.startFocusModeFromPlanner = startFocusModeFromPlanner;
 
     function initializeFocusTimer() {
       ensureFocusState();
@@ -31648,6 +31763,16 @@ function finishVocabQuiz() {
   state.tickets += bonusTickets;
   state.scoutPoints = (Number(state.scoutPoints) || 0) + bonusShards;
 
+  if (typeof window.recordPlannerQuizLog === 'function') {
+    window.recordPlannerQuizLog({
+      title: quizSessionMode === 'wrong' ? '錯題複習 Quiz' : '單字 Quiz',
+      type: 'vocab',
+      score: quizScore,
+      totalQuestions,
+      sourceType: 'vocab'
+    });
+  }
+
   saveGame();
   renderAll();
 
@@ -31707,7 +31832,20 @@ function calculateStudyRates() {
   }
 }
 
-// 渲染月曆打卡網格
+function normalizeStudyLogDate(value) {
+  const match = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(String(value || ''));
+  if (!match) return '';
+  return `${match[1]}-${String(Number(match[2])).padStart(2, '0')}-${String(Number(match[3])).padStart(2, '0')}`;
+}
+
+function getStudyDetailForDate(date) {
+  const details = state.studyDetails || {};
+  if (details[date]) return details[date];
+  const key = Object.keys(details).find(value => normalizeStudyLogDate(value) === date);
+  return key ? details[key] : null;
+}
+
+// 渲染舊版打卡資料；月曆畫面已由 Study Planner 統一顯示。
 function renderStudyCalendar() {
   const container = document.getElementById('studyCalendarGrid');
   const monthBadge = document.getElementById('calendarMonthBadge');
@@ -31726,11 +31864,11 @@ function renderStudyCalendar() {
   const firstDayIndex = new Date(year, month, 1).getDay();
   const totalDays = new Date(year, month + 1, 0).getDate();
 
-  const loggedDates = new Set(state.studyLogs || []);
+  const loggedDates = new Set((state.studyLogs || []).map(normalizeStudyLogDate).filter(Boolean));
   const isTodayLogged = loggedDates.has(todayDateStr);
 
   // 若今日已打卡，回填儲存的數據並鎖定輸入
-  const todayDetails = (state.studyDetails && state.studyDetails[todayDateStr]) || null;
+  const todayDetails = getStudyDetailForDate(todayDateStr);
   if (todayDetails) {
 const qNameInput = document.getElementById('inputQuizName');
   const scoreInput = document.getElementById('inputTotalScore');
@@ -31787,7 +31925,7 @@ for (let d = 1; d <= totalDays; d++) {
   const dStr = `${year}-${mStr}-${dayStr}`; // 產出如 2026-09-20
   const isLogged = loggedDates.has(dStr);
   const isToday = (d === todayNum);
-  const detail = (state.studyDetails && state.studyDetails[dStr]) || null;
+  const detail = getStudyDetailForDate(dStr);
 
 let hoverTip = `${dStr}`;
 if (detail) {
@@ -31964,28 +32102,17 @@ function renderScoreTrendChart() {
 }
 // 保存進度並完成打卡
 function submitStudyLog() {
-// 獲取打卡目標日期 (管理員可覆寫)
+  // 獲取打卡目標日期（管理員可從整合後的 Calendar 選擇日期）
   let today = getTodayString();
   if (state.isAdmin) {
     const adminDateVal = document.getElementById('adminDateInput')?.value;
-    if (adminDateVal) {
-      // 將 HTML Date Picker 的 YYYY-MM-DD 轉為系統儲存用的格式 YYYY-M-D
-      const d = new Date(adminDateVal);
-      if (state.isAdmin) {
-  const adminDateVal = document.getElementById('adminDateInput')?.value;
-  if (adminDateVal) {
-    const d = new Date(adminDateVal);
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    today = `${d.getFullYear()}-${m}-${day}`;
-  }
-}
-    }
+    if (/^\d{4}-\d{2}-\d{2}$/.test(String(adminDateVal || ''))) today = adminDateVal;
   }
   if (!state.studyLogs) state.studyLogs = [];
   if (!state.studyDetails) state.studyDetails = {};
+  const alreadyLogged = state.studyLogs.some(value => normalizeStudyLogDate(value) === today);
 
-  if (!state.isAdmin && state.studyLogs.includes(today)) {
+  if (!state.isAdmin && alreadyLogged) {
     showToast("⚠️ 今天已經完成過打卡囉！明天繼續加油！", "warning");
     return;
   }
@@ -32016,13 +32143,19 @@ function submitStudyLog() {
     rCorrect: rCor
   };
 
-  if (!state.studyLogs.includes(today)) {
+  if (!alreadyLogged) {
     state.studyLogs.push(today);
   }
 
-  if (!state.isAdmin) state.tickets += 1;
+  const ticketReward = state.isAdmin ? 0 : 1;
+  if (ticketReward) state.tickets += ticketReward;
+
+  if (typeof window.recordStudyActivityForPlanner === 'function') {
+    window.recordStudyActivityForPlanner(today);
+  }
 
   saveGame();
+  if (typeof window.closePlannerSheets === 'function') window.closePlannerSheets();
   renderAll();
 
   const lRate = lTot > 0 ? `${Math.round((lCor / lTot) * 100)}%` : '--%';
@@ -32030,16 +32163,16 @@ function submitStudyLog() {
 
   addNotification({
     title: '📝 今日多益打卡保存！',
-    message: `${quizName} 完成！聽力 ${lRate} ｜ 閱讀 ${rRate}，獲得 🎟️ 抽卡券 +1 張！`,
+    message: `${quizName} 完成！聽力 ${lRate} ｜ 閱讀 ${rRate}${ticketReward ? '，獲得 🎟️ 抽卡券 +1 張！' : '，實戰紀錄已更新。'}`,
     icon: '📅',
     type: 'system'
   });
 
   const rewardItems = [
-    { icon: '🎟️', name: '每日打卡獎勵', amount: '+1 張抽卡券' },
     { icon: '🎧', name: '聽力正確率', amount: `${lRate} (${lCor}/${lTot})` },
     { icon: '📖', name: '閱讀正確率', amount: `${rRate} (${rCor}/${rTot})` }
   ];
+  if (ticketReward) rewardItems.unshift({ icon: '🎟️', name: '每日打卡獎勵', amount: '+1 張抽卡券' });
   if (totalScore > 0) {
     rewardItems.unshift({ icon: '🏆', name: '測驗模考總分', amount: `${totalScore} 分` });
   }

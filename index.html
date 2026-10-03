@@ -32,6 +32,7 @@
     <link rel="stylesheet" href="./css/player-dossier-v2.css?v=20261003-mobile-hydrate-2">
     <link rel="stylesheet" href="./css/gacha-v2.css?v=20261003-mobile-flip-1">
     <link rel="stylesheet" href="./css/season-v2.css?v=20261003-season-interactions-2">
+    <link rel="stylesheet" href="./css/study-planner.css?v=20261003-planner-3">
 </head>
 <body data-v2-active="home" class="bg-slate-950 text-slate-100 min-h-screen pb-24 font-sans selection:bg-amber-500 selection:text-black">
 
@@ -728,9 +729,128 @@
       </div>
     </section>
 
+    <!-- TRAIN · CALENDAR / PLANNER -->
+    <section id="tab-planner" class="tab-content hidden">
+      <div id="plannerFocusMount" class="planner-focus-mount" aria-label="專注計時"></div>
+      <div class="study-planner" aria-label="Study Planner">
+        <header class="planner-month-header">
+          <div>
+            <p>CALENDAR / PLANNER</p>
+            <h2 id="plannerMonthTitle">OCTOBER 2026</h2>
+          </div>
+          <div class="planner-month-controls">
+            <button type="button" onclick="changePlannerMonth(-1)" aria-label="上個月">‹</button>
+            <button type="button" onclick="goPlannerToday()">TODAY</button>
+            <button type="button" onclick="changePlannerMonth(1)" aria-label="下個月">›</button>
+          </div>
+        </header>
+
+        <div class="planner-weekdays" aria-hidden="true">
+          <span>SUN</span><span>MON</span><span>TUE</span><span>WED</span><span>THU</span><span>FRI</span><span>SAT</span>
+        </div>
+        <div id="plannerCalendarGrid" class="planner-calendar-grid" role="grid" aria-label="月曆"></div>
+
+        <section class="planner-day-panel" aria-live="polite">
+          <div class="planner-day-heading">
+            <div>
+              <p id="plannerSelectedDateTitle">TODAY</p>
+              <strong id="plannerStudyStreak">🔥 0 DAY STUDY STREAK</strong>
+            </div>
+            <span id="plannerTodayCount">0 / 3</span>
+          </div>
+
+          <div id="plannerDailyQuestSection" class="planner-day-section">
+            <h3>DAILY QUEST</h3>
+            <div id="plannerDailyQuestList" class="planner-simple-list"></div>
+          </div>
+
+          <div class="planner-day-section">
+            <div class="planner-section-title"><h3>MY PLAN</h3><span id="plannerPlanCount">0 PLAN</span></div>
+            <div id="plannerTaskList" class="planner-task-list"></div>
+          </div>
+
+          <div class="planner-day-section planner-log-section">
+            <div class="planner-section-title"><h3>STUDY LOG</h3><span id="plannerLogTotal">0 MIN</span></div>
+            <div id="plannerLogList" class="planner-simple-list"></div>
+          </div>
+
+          <div class="planner-day-section planner-toeic-section">
+            <div class="planner-section-title"><h3>TOEIC PRACTICE</h3><span id="plannerToeicStatus">尚未登錄</span></div>
+            <div id="plannerToeicRecord" class="planner-toeic-record"></div>
+            <button id="plannerOpenCheckinBtn" class="planner-checkin-button" type="button" onclick="openPlannerCheckinSheet()">登錄實戰明細 · +1 🎟️</button>
+          </div>
+
+          <div id="plannerTodayComplete" class="planner-today-complete hidden">
+            <strong>TODAY COMPLETE ✓</strong>
+            <span id="plannerTodayCompleteMeta">0 / 0 PLANS FINISHED</span>
+          </div>
+        </section>
+
+        <button class="planner-fab" type="button" onclick="openPlannerTaskSheet()" aria-label="新增行程">＋</button>
+      </div>
+
+      <div id="plannerSheetBackdrop" class="planner-sheet-backdrop hidden" onclick="if(event.target===this) closePlannerSheets()">
+        <section id="plannerTaskSheet" class="planner-sheet hidden" role="dialog" aria-modal="true" aria-labelledby="plannerTaskSheetTitle">
+          <div class="planner-sheet-handle"></div>
+          <div class="planner-sheet-head"><h3 id="plannerTaskSheetTitle">新增行程</h3><button type="button" onclick="closePlannerSheets()">✕</button></div>
+          <form id="plannerTaskForm" onsubmit="savePlannerTask(event)" class="planner-form">
+            <input id="plannerTaskId" type="hidden">
+            <label class="planner-field planner-field-wide"><span>標題</span><input id="plannerTaskTitle" required maxlength="60" placeholder="國學第一章"></label>
+            <label class="planner-field"><span>日期</span><input id="plannerTaskDate" type="date" required></label>
+            <label class="planner-field"><span>開始時間</span><input id="plannerTaskTime" type="time" required></label>
+            <label class="planner-field"><span>預計分鐘</span><input id="plannerTaskMinutes" type="number" min="1" max="480" value="30" required></label>
+            <label class="planner-field"><span>類型</span><select id="plannerTaskType"><option value="study">📖 學習</option><option value="review">🔁 複習</option><option value="homework">✏️ 作業</option><option value="test">📝 測驗</option><option value="vocab">🔤 單字</option><option value="phrase">💬 片語</option></select></label>
+            <label class="planner-field planner-field-wide"><span>提醒</span><select id="plannerTaskReminder"><option value="0">準時</option><option value="5">5 分鐘前</option><option value="10">10 分鐘前</option><option value="30">30 分鐘前</option><option value="60">1 小時前</option><option value="-1">不提醒</option></select></label>
+            <label class="planner-field planner-field-wide"><span>備註</span><textarea id="plannerTaskNote" rows="3" maxlength="240" placeholder="選填"></textarea></label>
+            <p class="planner-reminder-note planner-field-wide">提醒會在 ToeicQuest 網頁／PWA 開啟時檢查；純網頁無法保證 App 完全關閉後仍通知。</p>
+            <button class="planner-primary planner-field-wide" type="submit">儲存行程</button>
+          </form>
+        </section>
+
+        <section id="plannerDetailSheet" class="planner-sheet hidden" role="dialog" aria-modal="true" aria-labelledby="plannerDetailTitle">
+          <div class="planner-sheet-handle"></div>
+          <div class="planner-sheet-head"><p id="plannerDetailType">📖 學習</p><button type="button" onclick="closePlannerSheets()">✕</button></div>
+          <h3 id="plannerDetailTitle" class="planner-detail-title">國學第一章</h3>
+          <p id="plannerDetailWhen" class="planner-detail-when">今天 16:00</p>
+          <p id="plannerDetailMinutes" class="planner-detail-minutes">預計 30 MIN</p>
+          <p id="plannerDetailNote" class="planner-detail-note"></p>
+          <button id="plannerStartFocusBtn" class="planner-focus-button" type="button">START FOCUS</button>
+          <div class="planner-detail-actions">
+            <button id="plannerEditBtn" type="button">編輯</button>
+            <button id="plannerCompleteBtn" type="button">完成</button>
+            <button id="plannerReviewBtn" type="button">再次複習</button>
+            <button id="plannerDeleteBtn" type="button" class="is-danger">刪除</button>
+          </div>
+        </section>
+
+        <section id="plannerReviewSheet" class="planner-sheet hidden" role="dialog" aria-modal="true" aria-labelledby="plannerReviewTitle">
+          <div class="planner-sheet-handle"></div>
+          <div class="planner-sheet-head"><h3 id="plannerReviewTitle">下次複習</h3><button type="button" onclick="closePlannerSheets()">✕</button></div>
+          <div class="planner-review-options">
+            <button type="button" onclick="schedulePlannerReview(1)">明天</button>
+            <button type="button" onclick="schedulePlannerReview(3)">3 天後</button>
+            <button type="button" onclick="schedulePlannerReview(7)">7 天後</button>
+            <button type="button" onclick="schedulePlannerReview(14)">14 天後</button>
+            <label><span>自訂日期</span><input id="plannerReviewCustomDate" type="date"><button type="button" onclick="schedulePlannerReview('custom')">建立</button></label>
+          </div>
+        </section>
+
+        <section id="plannerCheckinSheet" class="planner-sheet hidden" role="dialog" aria-modal="true" aria-labelledby="plannerCheckinTitle">
+          <div class="planner-sheet-handle"></div>
+          <div class="planner-sheet-head"><h3 id="plannerCheckinTitle">多益實戰明細</h3><button type="button" onclick="closePlannerSheets()">✕</button></div>
+          <div id="plannerCheckinMount"></div>
+        </section>
+      </div>
+
+      <details class="planner-trend-disclosure">
+        <summary>查看多益模考分數趨勢</summary>
+        <div id="plannerTrendMount"></div>
+      </details>
+    </section>
+
     <!-- TAB 5: 📊 學習打卡 & 番茄鐘 -->
     <section id="tab-stats" class="tab-content space-y-6 hidden">
-      <div class="bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 p-5 rounded-3xl border border-indigo-900/40 shadow-xl text-center">
+      <div id="plannerFocusCard" class="bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 p-5 rounded-3xl border border-indigo-900/40 shadow-xl text-center">
         <h3 class="text-base font-black text-white mb-1 flex items-center justify-center gap-2">
           <i data-lucide="clock" class="text-indigo-400 w-4 h-4"></i> 多益 25 分鐘番茄鐘
         </h3>
@@ -745,8 +865,8 @@
         <button id="focusModeToggleBtn" onclick="toggleFocusMode()" class="mt-3 w-full max-w-xs bg-indigo-950/80 hover:bg-indigo-900 border border-indigo-500/40 text-indigo-200 font-bold px-4 py-2.5 rounded-xl text-xs transition">開啟專注模式</button>
       </div>
 
-<div class="bg-slate-900 p-5 rounded-3xl border border-slate-800 shadow space-y-4">
-  <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+<div id="legacyStudyTracker" class="bg-slate-900 p-5 rounded-3xl border border-slate-800 shadow space-y-4">
+  <div class="hidden flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
     <div>
       <h3 class="text-base font-black text-white flex items-center gap-2">
         <i data-lucide="calendar" class="text-amber-400 w-5 h-5"></i> 學習打卡日曆 (Monthly Tracker)
@@ -759,7 +879,7 @@
   </div>
 
   <!-- 星期表頭 (日 ~ 六) -->
-  <div class="grid grid-cols-7 gap-1.5 text-center text-[11px] font-bold text-slate-400">
+  <div class="hidden grid-cols-7 gap-1.5 text-center text-[11px] font-bold text-slate-400">
     <div class="text-rose-400">日</div>
     <div>一</div>
     <div>二</div>
@@ -770,12 +890,12 @@
   </div>
 
   <!-- 圓形日期網格 -->
-  <div id="studyCalendarGrid" class="grid grid-cols-7 gap-2 p-3 bg-slate-950/80 rounded-2xl border border-slate-800/80">
+  <div id="studyCalendarGrid" class="hidden grid-cols-7 gap-2 p-3 bg-slate-950/80 rounded-2xl border border-slate-800/80">
     <!-- JS 自動產生圓形日期 -->
   </div>
 
 <!-- 今日多益實戰紀錄與打卡操作區 -->
-  <div class="pt-4 border-t border-slate-800/80 space-y-4">
+  <div id="legacyStudyEntry" class="pt-4 border-t border-slate-800/80 space-y-4">
     <div class="flex justify-between items-center text-xs">
       <span class="font-black text-amber-400 flex items-center gap-1.5">
         <i data-lucide="edit-3" class="w-4 h-4"></i> 今日實戰明細登錄
@@ -843,8 +963,9 @@
       <button id="checkInBtn" onclick="submitStudyLog()" type="button" class="w-full sm:w-auto bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 text-slate-950 font-black px-6 py-2.5 rounded-xl text-xs shadow-lg transition flex items-center justify-center gap-1.5 cursor-pointer">
         <i data-lucide="check-circle-2" class="w-4 h-4"></i> 保存今日紀錄並打卡 (+1 🎟️)
       </button>
-    </div><!-- 📈 多益模考分數走勢圖 (Score Trend Chart) -->
-<div class="bg-slate-900 p-4 rounded-2xl border border-slate-800 shadow mt-4 space-y-3">
+    </div>
+  </div><!-- 📈 多益模考分數走勢圖 (Score Trend Chart) -->
+<div id="legacyScoreTrend" class="bg-slate-900 p-4 rounded-2xl border border-slate-800 shadow mt-4 space-y-3">
   <div class="flex justify-between items-center">
     <div class="flex items-center gap-2">
       <div class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></div>
@@ -871,7 +992,7 @@
     <!-- JS 動態填入回數或日期 -->
   </div>
 </div>
-  </div>
+</div>
     </section>
   </main>
 
@@ -1206,7 +1327,7 @@
       <button onclick="switchTab('roster')" class="v2-nav-tab" data-v2-target="team"><span class="v2-nav-icon" aria-hidden="true">♟</span><span>TEAM</span></button>
       <button onclick="switchTab('gacha')" class="v2-nav-tab v2-nav-gacha" data-v2-target="gacha" aria-label="GACHA 抽卡"><span class="v2-nav-icon" aria-hidden="true"><span class="v2-nav-pack-icon">✦</span></span><span>GACHA</span></button>
       <button onclick="switchTab('season')" class="v2-nav-tab" data-v2-target="season"><span class="v2-nav-icon" aria-hidden="true">▶</span><span>SEASON</span></button>
-      <button onclick="switchTab('vocab')" class="v2-nav-tab" data-v2-target="train"><span class="v2-nav-icon" aria-hidden="true">🏀</span><span>TRAIN</span></button>
+      <button onclick="openPlannerCalendarView()" class="v2-nav-tab" data-v2-target="train"><span class="v2-nav-icon" aria-hidden="true">🏀</span><span>TRAIN</span></button>
     </div>
   </nav>
 
@@ -1216,10 +1337,12 @@
         <div class="text-4xl mb-2" aria-hidden="true">🛡️</div>
         <h2 id="focusModeTitle" class="text-xl font-black text-white">ToeicQuest 專注模式</h2>
         <p class="text-xs text-slate-400 mt-2">獨立累積專注時間；遊戲、抽卡與賽季操作暫時鎖定，番茄鐘與單字學習仍可使用。</p>
+        <p id="focusModeSubject" class="text-xs text-indigo-200 font-bold mt-3">自由專注</p>
         <div id="focusModeTimerDisplay" class="text-6xl font-black font-mono text-indigo-300 my-7">00:00</div>
         <div id="focusModeProgress" class="text-xs text-indigo-100/80 font-mono mb-5">今日專注 0 分鐘｜獎勵 0 / 20</div>
-        <div class="grid grid-cols-2 gap-2">
-          <button onclick="openFocusStudy('stats')" class="bg-indigo-600 hover:bg-indigo-500 text-white font-black py-3 rounded-xl text-xs">⏱️ 番茄鐘</button>
+        <div class="grid grid-cols-3 gap-2">
+          <button onclick="openPlannerFocusView()" class="bg-indigo-600 hover:bg-indigo-500 text-white font-black py-3 rounded-xl text-xs">⏱️ 番茄鐘</button>
+          <button onclick="openPlannerCalendarView()" class="bg-slate-700 hover:bg-slate-600 text-white font-black py-3 rounded-xl text-xs">📅 行事曆</button>
           <button onclick="openFocusStudy('vocab')" class="bg-emerald-700 hover:bg-emerald-600 text-white font-black py-3 rounded-xl text-xs">📚 單字學習</button>
         </div>
         <button id="focusOverlayTimerBtn" onclick="toggleFocusTracking()" class="mt-2 w-full bg-slate-800 hover:bg-slate-700 text-slate-100 font-bold py-3 rounded-xl text-xs">暫停專注計時</button>
@@ -1232,7 +1355,7 @@
     <div class="flex items-center gap-3">
       <button onclick="showFocusModePanel()" class="flex-1 text-left min-w-0">
         <span class="block text-[10px] text-indigo-300 font-bold">🛡️ 專注模式進行中</span>
-        <span class="block text-[10px] text-slate-400 truncate">只允許番茄鐘與單字學習</span>
+        <span class="block text-[10px] text-slate-400 truncate">專注、行事曆與單字學習</span>
       </button>
       <span id="focusDockTimerDisplay" class="text-lg text-white font-black font-mono">00:00</span>
       <button onclick="showFocusModePanel()" class="bg-indigo-600 text-white text-[10px] font-bold px-3 py-2 rounded-xl">返回</button>
@@ -1241,7 +1364,7 @@
 
   <script src="./js/ui-v2/position-utils.js"></script>
   <script src="./js/focus-timer.js?v=20261003-split-focus-2"></script>
-  <script src="./js/app.js?v=20261003-vocab-pool-1"></script>
+  <script src="./js/app.js?v=20261003-study-planner-3"></script>
 <!-- 🏀 季後賽逐場動態播報彈窗 -->
 <div id="playoffSeriesModal" onclick="if(event.target === this && !document.getElementById('posNextRoundBtn').disabled) closeSeriesAndShowBoxScore()" class="fixed inset-0 bg-slate-950/90 backdrop-blur-md z-50 hidden flex items-end sm:items-center justify-center p-3 sm:p-4 ios-safe-modal">
   <div class="bg-slate-900 border border-amber-500/50 rounded-3xl w-full max-w-lg p-6 shadow-2xl space-y-4 relative animate-modal-in">
@@ -1924,7 +2047,8 @@
 <script src="./js/ui-v2/visual-match-simulator.js?v=20261003-season-interactions-2"></script>
 <script src="./js/season-journey.js?v=20261003-season-interactions-2"></script>
 <script src="./js/ui-v2/ui-v2-adapter.js?v=20261001-4"></script>
-<script src="./js/ui-v2/home-v2.js?v=20261001-4"></script>
+<script src="./js/ui-v2/home-v2.js?v=20261003-study-planner-3"></script>
+<script src="./js/study-planner.js?v=20261003-study-planner-3"></script>
 <script src="./js/ui-v2/team-v2.js"></script>
 <script src="./js/ui-v2/normal-card-v2.js?v=20261003-mobile-hydrate-2"></script>
 <script src="./js/ui-v2/card-themes.js"></script>

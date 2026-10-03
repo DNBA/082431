@@ -11,8 +11,10 @@
     gacha: 'gacha',
     season: 'season',
     vocab: 'train',
-    stats: 'train'
+    stats: 'train',
+    planner: 'train'
   };
+  let activeTrainView = 'calendar';
 
   function byId(id) { return document.getElementById(id); }
 
@@ -161,26 +163,49 @@
       const button = document.createElement('button');
       button.type = 'button';
       button.textContent = item.label;
-      button.onclick = () => switchTab(item.tab);
+      button.onclick = () => {
+        activeTrainView = item.view || item.tab;
+        switchTab(item.tab);
+        if (item.anchor) requestAnimationFrame(() => byId(item.anchor)?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+      };
       button.dataset.tab = item.tab;
+      button.dataset.view = item.view || item.tab;
       bar.appendChild(button);
     });
     return bar;
   }
 
   function installLegacyNavigationBridges() {
-    const trainItems = [{ label: 'VOCAB TRAINING', tab: 'vocab' }, { label: 'STUDY & FOCUS', tab: 'stats' }];
+    const trainItems = [
+      { label: 'FOCUS', tab: 'planner', view: 'focus', anchor: 'plannerFocusCard' },
+      { label: 'CALENDAR', tab: 'planner', view: 'calendar', anchor: 'plannerMonthTitle' },
+      { label: 'VOCAB', tab: 'vocab' }
+    ];
     const vocab = byId('tab-vocab');
     const stats = byId('tab-stats');
+    const planner = byId('tab-planner');
     if (vocab && !byId('v2TrainSwitchVocab')) vocab.prepend(makeSectionSwitch('v2TrainSwitchVocab', trainItems));
     if (stats && !byId('v2TrainSwitchStats')) stats.prepend(makeSectionSwitch('v2TrainSwitchStats', trainItems));
+    if (planner && !byId('v2TrainSwitchPlanner')) planner.prepend(makeSectionSwitch('v2TrainSwitchPlanner', trainItems));
   }
 
   function syncSectionSwitches(tabKey) {
     document.querySelectorAll('.v2-section-switch button').forEach(button => {
-      button.classList.toggle('is-active', button.dataset.tab === tabKey);
+      const sameTab = button.dataset.tab === tabKey;
+      const active = tabKey === 'planner' ? sameTab && button.dataset.view === activeTrainView : sameTab;
+      button.classList.toggle('is-active', active);
     });
   }
+
+  function openPlannerView(view) {
+    activeTrainView = view === 'focus' ? 'focus' : 'calendar';
+    switchTab('planner');
+    const anchor = activeTrainView === 'focus' ? 'plannerFocusCard' : 'plannerMonthTitle';
+    requestAnimationFrame(() => byId(anchor)?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+  }
+
+  global.openPlannerFocusView = () => openPlannerView('focus');
+  global.openPlannerCalendarView = () => openPlannerView('calendar');
 
   V2.renderHome = renderHome;
   V2.playFromHome = playFromHome;

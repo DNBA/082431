@@ -22,8 +22,13 @@ const defaultState = {
       focusMode: {
         active: false, totalFocusedMs: 0, dailyDate: '', dailyFocusedMs: 0,
         rewardsDate: '', rewardsClaimedToday: 0, rewardCountsByDate: {}, rewardedSessionIds: [], dailyRewardCap: 20,
-        sessionId: '', status: 'idle', sessionStartAt: null, pausedAccumulatedMs: 0, rewardedIntervals: 0, trackingVersion: 2
+        sessionId: '', status: 'idle', sessionStartAt: null, pausedAccumulatedMs: 0, rewardedIntervals: 0, trackingVersion: 2,
+        taskId: null, subject: '', plannedMinutes: 0, plannerStartAt: null, taskType: 'study'
       },
+      studyPlanner: { tasks: [], logs: [] },
+      studyStreak: 0,
+      studyStreakLastDate: '',
+      studyActivityDates: [],
       isAdmin: false,
       claimedTeamRewards: [],
       redeemedCodes: [],
