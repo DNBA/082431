@@ -35,7 +35,7 @@
     { name: 'Gold', min: 15, next: 30, multiplier: 1.65, label: '金' },
     { name: 'Hall of Fame', min: 30, next: null, multiplier: 2, label: '名人堂' }
   ]);
-  const MANUAL_SHOT_QUARTERS = [1, 3, 4];
+  const MAX_INTERACTIVE_EVENTS = 4;
   const CARD_BACKS = [
     { id: 'champion', icon: '💍', name: 'CHAMPION', tone: 'text-amber-300', hint: '成為冠軍隊成員' },
     { id: 'fmvp', icon: '🏆', name: 'FINALS MVP', tone: 'text-yellow-200', hint: '獲得總決賽 MVP' },
@@ -117,6 +117,10 @@
   let activeComic = null;
   let shootingChallenge = null;
   let defenseChallenge = null;
+  let offenseChallenge = null;
+  let arenaMusicTimer = null;
+  let arenaMusicStep = 0;
+  let arenaMusicMuted = false;
   let energyTimer = null;
   let autoMode = { running: false, remaining: 0, timer: null };
 
@@ -129,6 +133,57 @@
   }
   function randomInt(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
   function randomOf(list) { return list[Math.floor(Math.random() * list.length)]; }
+  function shuffled(list) {
+    const copy = [...list];
+    for (let i = copy.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [copy[i], copy[j]] = [copy[j], copy[i]];
+    }
+    return copy;
+  }
+
+  function buildInteractionPlan() {
+    const types = shuffled(['shoot', 'defense', 'offense']);
+    return { 1: types[0], 2: types[1], 3: types[2] };
+  }
+
+  function playJourneySound(type) {
+    try {
+      if (typeof playSound === 'function') playSound(type);
+    } catch (error) {}
+  }
+
+  function stopJourneyArenaMusic() {
+    if (arenaMusicTimer) clearTimeout(arenaMusicTimer);
+    arenaMusicTimer = null;
+  }
+
+  function scheduleJourneyArenaBeat() {
+    stopJourneyArenaMusic();
+    if (arenaMusicMuted || !activeGame || activeGame.finalized || typeof getAudioContext !== 'function') return;
+    try {
+      const ctx = getAudioContext();
+      const notes = [110, 110, 146.83, 110, 164.81, 146.83, 98, 110];
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = arenaMusicStep % 4 === 0 ? 'triangle' : 'sine';
+      osc.frequency.setValueAtTime(notes[arenaMusicStep % notes.length], ctx.currentTime);
+      gain.gain.setValueAtTime(.018, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(.001, ctx.currentTime + .32);
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.start(); osc.stop(ctx.currentTime + .34);
+      arenaMusicStep += 1;
+    } catch (error) {}
+    arenaMusicTimer = setTimeout(scheduleJourneyArenaBeat, 520);
+  }
+
+  function toggleJourneyArenaMusic() {
+    arenaMusicMuted = !arenaMusicMuted;
+    const button = document.getElementById('sjMusicToggle');
+    if (button) button.textContent = arenaMusicMuted ? '🔇' : '♫';
+    if (arenaMusicMuted) stopJourneyArenaMusic();
+    else scheduleJourneyArenaBeat();
+  }
 
   function badgeTierForTriggers(triggers) {
     const count = Math.max(0, Number(triggers) || 0);
@@ -802,7 +857,7 @@
           <div class="w-full bg-slate-900 border border-slate-700 rounded-3xl shadow-2xl overflow-hidden">
             <header class="px-4 py-3 border-b border-slate-800 flex justify-between items-center">
               <div><span id="sjModalGame" class="text-[10px] text-amber-400 font-black sj-kicker"></span><h3 id="sjModalTeams" class="text-sm sm:text-base font-black text-white"></h3></div>
-              <div class="flex items-center gap-1"><button id="sjModalAutoStop" onclick="stopJourneyAutoMode('已停止掛機，這場可改為手動操作')" class="hidden text-[10px] text-rose-300 bg-rose-950/60 border border-rose-700/50 px-2.5 py-1.5 rounded-lg">停止掛機</button><button onclick="closeJourneyGame()" class="text-slate-400 hover:text-white p-2">✕</button></div>
+              <div class="flex items-center gap-1"><button id="sjMusicToggle" onclick="toggleJourneyArenaMusic()" class="text-slate-300 hover:text-white bg-slate-800 border border-slate-700 w-8 h-8 rounded-lg" title="切換比賽背景音樂">♫</button><button id="sjModalAutoStop" onclick="stopJourneyAutoMode('已停止掛機，這場可改為手動操作')" class="hidden text-[10px] text-rose-300 bg-rose-950/60 border border-rose-700/50 px-2.5 py-1.5 rounded-lg">停止掛機</button><button onclick="closeJourneyGame()" class="text-slate-400 hover:text-white p-2">✕</button></div>
             </header>
             <div class="p-4 sm:p-6">
               <section id="sjMatchupPanel" class="sj-matchup-panel"></section>
@@ -834,6 +889,7 @@
               <section id="sjHalftimePanel" class="sj-strategy-panel sj-halftime-panel hidden mt-4" aria-label="中場調整"></section>
               <section id="sjShootingChallenge" class="sj-shooting-challenge hidden mt-4" aria-live="polite"></section>
               <section id="sjDefenseChallenge" class="sj-defense-challenge hidden mt-4" aria-live="polite"></section>
+              <section id="sjOffenseChallenge" class="sj-offense-challenge hidden mt-4" aria-live="polite"></section>
               <section id="sjGameAnalysis" class="sj-game-analysis hidden mt-4"></section>
               <div id="sjGameActions" class="grid grid-cols-2 gap-2 mt-4">
                 <button id="sjContinueBtn" onclick="advanceJourneyQuarter()" class="bg-amber-500 hover:bg-amber-400 text-slate-950 font-black py-3.5 rounded-2xl">開始第一節</button>
@@ -929,25 +985,33 @@
         <div><b>對手優勢</b>${scout.strengths.map(item => `<p>${item.icon} ${safeText(item.key)} <strong>${item.value}</strong></p>`).join('')}</div>
         <div><b>可能弱點</b>${scout.weaknesses.map(item => `<p>• ${safeText(item.key)} <strong>${item.value}</strong></p>`).join('')}</div>
       </div>
-      <div class="sj-defensive-matchups"><div><b>DEFENSIVE MATCHUP</b><span>指定誰負責主防每位對手</span></div><div class="sj-matchup-selects">${assignments}</div></div>
+      <div class="sj-defensive-matchups"><div><b>DEFENSIVE MATCHUP</b><span>一對一對位；改選時會自動交換防守任務</span></div><div class="sj-matchup-selects">${assignments}</div></div>
       <button type="button" onclick="confirmJourneyMatchup()" class="sj-confirm-matchup">確認對位並設定戰術</button>`;
   }
 
   function updateJourneyMatchup(opponentIndex, starterIndex) {
     if (!activeGame || activeGame.matchupConfirmed) return;
-    activeGame.matchups[Number(opponentIndex)] = clamp(Number(starterIndex) || 0, 0, 4);
+    const targetIndex = clamp(Number(opponentIndex) || 0, 0, 4);
+    const nextDefender = clamp(Number(starterIndex) || 0, 0, 4);
+    const previousDefender = Number(activeGame.matchups[targetIndex]);
+    const occupiedIndex = activeGame.matchups.findIndex((assigned, index) => index !== targetIndex && Number(assigned) === nextDefender);
+    activeGame.matchups[targetIndex] = nextDefender;
+    if (occupiedIndex >= 0) activeGame.matchups[occupiedIndex] = previousDefender;
+    renderMatchupPanel();
   }
 
   function confirmJourneyMatchup() {
     if (!activeGame || activeGame.matchupConfirmed) return;
-    const assignmentCount = {};
-    activeGame.matchups.forEach(starterIndex => { assignmentCount[starterIndex] = (assignmentCount[starterIndex] || 0) + 1; });
+    const uniqueAssignments = new Set(activeGame.matchups.map(Number));
+    if (uniqueAssignments.size !== activeGame.opponentRoster.length) {
+      if (typeof showToast === 'function') showToast('每名先發只能主防一名對手，請重新設定對位。', 'warning');
+      return;
+    }
     const matchupResults = activeGame.opponentRoster.map((opponent, index) => {
       const starterIndex = Number(activeGame.matchups[index]) || 0;
       const defender = activeGame.starters[starterIndex];
       const defense = matchupDefenseRating(defender, opponent);
-      const overloadPenalty = Math.max(0, Number(assignmentCount[starterIndex] || 1) - 1) * 5;
-      const edge = defense - Number(opponent.ovr || 0) - overloadPenalty;
+      const edge = defense - Number(opponent.ovr || 0);
       return {
         opponent: opponent.name, defender: defender.name, opponentPosition: opponent.position,
         defense, opponentOvr: opponent.ovr, edge,
@@ -988,7 +1052,8 @@
       feed: [], moments: [], pendingMoments: [], finalized: false, boxScore: null,
       pregameStrategy: 'balanced', secondHalfStrategy: null, awaitingHalftime: false, halftimeReport: null,
       opponentRoster, scouting: scoutOpponent(scheduleGame), matchups: [0, 1, 2, 3, 4], matchupResults: [], matchupBonus: 0, matchupConfirmed: false,
-      manualShots: {}, manualShotCount: 0, defenseDecisions: {},
+      manualShots: {}, manualShotCount: 0, defenseDecisions: {}, offenseDecisions: {},
+      manualScoreAdjustments: {}, interactiveEventCount: 0, interactionPlan: buildInteractionPlan(), clutchDecision: null, awaitingClutch: false,
       featuredStar: [...starters].sort((a, b) => (Number(b.ovr || b.baseOvr || 0) + moraleValue(b)) - (Number(a.ovr || a.baseOvr || 0) + moraleValue(a)))[0] || null,
       visual: null
     };
@@ -1005,6 +1070,8 @@
     document.getElementById('sjFinalActions').classList.add('hidden');
     document.getElementById('sjFinalActions').classList.remove('grid');
     document.getElementById('sjGameActions').classList.remove('hidden');
+    playJourneySound('whistle');
+    scheduleJourneyArenaBeat();
     renderActiveGame(); renderJourneySeasonTab();
   }
 
@@ -1079,7 +1146,44 @@
     setTimeout(() => wrap.classList.remove('is-scoring'), MATCH_PRESENTATION_TIMING.scorePulse);
   }
 
-  function finishQuarterPresentation(q) {
+  function shouldOpenClutchChallenge(q, allowClutch) {
+    return allowClutch && q === 4 && !autoMode.running && !activeGame.clutchDecision
+      && Math.abs(activeGame.homeScore - activeGame.awayScore) <= 3 && canOpenInteractiveEvent();
+  }
+
+  function openClutchStrategyChallenge() {
+    const panel = document.getElementById('sjShootingChallenge');
+    if (!panel || !activeGame) return;
+    activeGame.awaitingClutch = true;
+    activeGame.interactiveEventCount += 1;
+    panel.classList.remove('hidden');
+    panel.innerHTML = `
+      <div class="sj-shot-head"><div><span>FINAL POSSESSION · CLOSE GAME</span><b>選擇最後一擊戰術</b></div><strong>進球勝利 · 失手落敗</strong></div>
+      <div class="sj-clutch-strategies">
+        <button type="button" onclick="selectJourneyClutchStrategy('iso')"><b>🐍 ISO STAR</b><span>讓王牌單打完成最後一擊</span></button>
+        <button type="button" onclick="selectJourneyClutchStrategy('pnr')"><b>🧠 PICK & ROLL</b><span>由最佳組織者發動擋拆</span></button>
+        <button type="button" onclick="selectJourneyClutchStrategy('post')"><b>💪 POST UP</b><span>交給最強內線低位進攻</span></button>
+        <button type="button" onclick="selectJourneyClutchStrategy('corner')"><b>🎯 CORNER 3</b><span>為最佳射手製造底角空檔</span></button>
+      </div>`;
+    document.getElementById('sjGameActions')?.classList.add('hidden');
+    activeGame.feed.push('⏱️ 比分進入最後一擊：選擇戰術，命中即勝利。');
+    renderActiveGame();
+  }
+
+  function selectJourneyClutchStrategy(strategy) {
+    if (!activeGame?.awaitingClutch || shootingChallenge) return;
+    const starters = activeGame.starters.filter(Boolean);
+    const byOvr = list => [...list].sort((a, b) => playerOvr(b) - playerOvr(a))[0];
+    const labels = { iso: 'ISO STAR', pnr: 'PICK & ROLL', post: 'POST UP', corner: 'CORNER 3' };
+    let shooter = activeGame.featuredStar || byOvr(starters);
+    if (strategy === 'corner') shooter = [...starters].sort((a, b) => shootingRating(b) - shootingRating(a))[0] || shooter;
+    else if (strategy === 'post') shooter = byOvr(starters.filter(card => normalizePositions(card).some(pos => ['PF', 'C'].includes(pos)))) || shooter;
+    else if (strategy === 'pnr') shooter = [...starters].sort((a, b) => (statNumber(b, 'AST') * 7 + playerOvr(b)) - (statNumber(a, 'AST') * 7 + playerOvr(a)))[0] || shooter;
+    activeGame.clutchStrategy = strategy;
+    openShootingChallenge(4, { clutch: true, shooter, strategy, strategyLabel: labels[strategy] || 'CLUTCH SHOT' });
+  }
+
+  function finishQuarterPresentation(q, allowClutch = true) {
     if (!activeGame) return;
     const visual = activeGame.visual;
     if (visual) {
@@ -1096,6 +1200,10 @@
       activeGame.halftimeReport = buildHalftimeReport();
       activeGame.awaitingHalftime = true;
       activeGame.feed.push('⏱️ HALFTIME：查看數據並決定下半場戰術');
+    }
+    if (shouldOpenClutchChallenge(q, allowClutch)) {
+      openClutchStrategyChallenge();
+      return;
     }
     if (q >= 4 && activeGame.homeScore !== activeGame.awayScore) finishJourneyGame();
     else if (q >= 6 && activeGame.homeScore === activeGame.awayScore) activeGame.homeScore += 1;
@@ -1125,6 +1233,9 @@
       return;
     }
     window.VisualMatchSimulator.applyEvent(visual, event);
+    if (['THREE_POINT_MADE', 'AND_ONE', 'FAST_BREAK_SCORE', 'CLUTCH_SCORE'].includes(event.type)) {
+      playJourneySound(event.team === 'user' ? 'coin' : 'click');
+    }
     renderActiveGame();
     pulseVisualScore(event.team, event.points);
     clearVisualEventTimer();
@@ -1248,16 +1359,43 @@
     return Number.isFinite(pct) ? pct : 0;
   }
 
-  function shouldOpenShootingChallenge(q) {
-    return activeGame && activeGame.matchupConfirmed && !autoMode.running && MANUAL_SHOT_QUARTERS.includes(q)
-      && !activeGame.manualShots[q] && !shootingChallenge;
+  function syncVisualScoreFromGame() {
+    if (!activeGame?.visual) return;
+    activeGame.visual.displayHomeScore = activeGame.homeScore;
+    activeGame.visual.displayAwayScore = activeGame.awayScore;
+    activeGame.visual.momentum = clamp(((activeGame.awayScore - activeGame.homeScore) / 30) * 100, -100, 100);
   }
 
-  function openShootingChallenge(q) {
+  function applyImmediateScore(q, homeDelta = 0, awayDelta = 0) {
+    if (!activeGame) return;
+    const homePoints = Math.max(0, Number(homeDelta) || 0);
+    const awayPoints = Math.max(0, Number(awayDelta) || 0);
+    activeGame.homeScore += homePoints;
+    activeGame.awayScore += awayPoints;
+    const current = activeGame.manualScoreAdjustments[q] || { home: 0, away: 0 };
+    current.home += homePoints;
+    current.away += awayPoints;
+    activeGame.manualScoreAdjustments[q] = current;
+    syncVisualScoreFromGame();
+    renderActiveGame();
+    if (homePoints) pulseVisualScore('user', homePoints);
+    if (awayPoints) pulseVisualScore('opponent', awayPoints);
+  }
+
+  function canOpenInteractiveEvent() {
+    return activeGame && Number(activeGame.interactiveEventCount || 0) < MAX_INTERACTIVE_EVENTS;
+  }
+
+  function shouldOpenShootingChallenge(q) {
+    return activeGame && activeGame.matchupConfirmed && !autoMode.running && activeGame.interactionPlan?.[q] === 'shoot'
+      && !activeGame.manualShots[q] && !shootingChallenge && canOpenInteractiveEvent();
+  }
+
+  function openShootingChallenge(q, options = {}) {
     const panel = document.getElementById('sjShootingChallenge');
     if (!panel || !activeGame) return;
     const shooters = [...activeGame.starters].sort((a, b) => shootingRating(b) - shootingRating(a));
-    const shooter = q === 4 ? (activeGame.featuredStar || shooters[0]) : shooters[(activeGame.manualShotCount || 0) % Math.min(3, shooters.length)];
+    const shooter = options.shooter || shooters[(activeGame.manualShotCount || 0) % Math.min(3, shooters.length)];
     const threePct = shootingRating(shooter);
     const greenWidth = Math.max(3.5, Math.min(15, (threePct - 24) * .58));
     const yellowSpread = Math.max(3.5, Math.min(10, (threePct - 25) * .35));
@@ -1267,13 +1405,13 @@
     const yellowStart = Math.max(0, greenStart - yellowSpread);
     const yellowEnd = Math.min(100, greenEnd + yellowSpread);
     shootingChallenge = {
-      q, shooter, threePct, greenStart, greenEnd, yellowStart, yellowEnd,
+      q, shooter, threePct, greenStart, greenEnd, yellowStart, yellowEnd, clutch: !!options.clutch, strategy: options.strategy || null,
       yellowHitRate: Math.max(.18, Math.min(.66, (threePct - 20) / 36)),
       meterSpeed: Math.max(1.8, 3.8 - (threePct / 20)), meterProgress: 0, meterDirection: 1, animFrameId: null
     };
     panel.classList.remove('hidden');
     panel.innerHTML = `
-      <div class="sj-shot-head"><div><span>KEY POSSESSION · ${quarterName(q)}</span><b>${safeText(shooter.name)} · OPEN THREE</b></div><strong>3 次操作中的第 ${activeGame.manualShotCount + 1} 次</strong></div>
+      <div class="sj-shot-head"><div><span>${options.clutch ? 'GAME WINNER · FINAL POSSESSION' : `KEY POSSESSION · ${quarterName(q)}`}</span><b>${safeText(shooter.name)} · ${options.clutch ? safeText(options.strategyLabel || 'CLUTCH SHOT') : 'OPEN THREE'}</b></div><strong>${options.clutch ? '進球勝利 · 失手落敗' : `互動 ${activeGame.interactiveEventCount + 1} / ${MAX_INTERACTIVE_EVENTS}`}</strong></div>
       <div class="sj-contest-meter-wrap">
         <div class="sj-contest-meter-label"><span>投籃時機 (Shot Timing)</span><strong>${threePct >= 40 ? '🔥 頂級射手' : threePct >= 35 ? '🎯 穩定射手' : '⚠️ 外線弱'} (${threePct.toFixed(1)}%)</strong></div>
         <div class="sj-contest-shot-meter"><div class="sj-meter-red"></div><div class="sj-meter-yellow" style="left:${yellowStart}%;width:${yellowEnd - yellowStart}%"></div><div class="sj-meter-green" style="left:${greenStart}%;width:${greenWidth}%"></div><i id="sjShotCursor"></i></div>
@@ -1282,6 +1420,7 @@
       <button type="button" onclick="stopJourneyShot()">🟢 出手 (SHOOT)!</button>`;
     const actions = document.getElementById('sjGameActions');
     if (actions) actions.classList.add('hidden');
+    if (!options.clutch) activeGame.interactiveEventCount += 1;
     startJourneyShotMeterLoop();
   }
 
@@ -1314,12 +1453,37 @@
     else if (position >= shot.yellowStart && position <= shot.yellowEnd) zone = 'YELLOW';
     const made = zone === 'GREEN' || (zone === 'YELLOW' && Math.random() < shot.yellowHitRate);
     const points = made ? 3 : 0;
+    playJourneySound(made ? (shot.clutch ? 'ur_ssr' : 'correct') : 'buzz');
+    if (shot.clutch) {
+      const tiedScore = Math.max(activeGame.homeScore, activeGame.awayScore);
+      const oldHome = activeGame.homeScore;
+      const oldAway = activeGame.awayScore;
+      activeGame.homeScore = tiedScore + (made ? 3 : 0);
+      activeGame.awayScore = tiedScore + (made ? 0 : 2);
+      const quarterIndex = Math.max(0, activeGame.homeQuarters.length - 1);
+      activeGame.homeQuarters[quarterIndex] = Number(activeGame.homeQuarters[quarterIndex] || 0) + activeGame.homeScore - oldHome;
+      activeGame.awayQuarters[quarterIndex] = Number(activeGame.awayQuarters[quarterIndex] || 0) + activeGame.awayScore - oldAway;
+      activeGame.clutchDecision = { player: shot.shooter.name, strategy: shot.strategy, zone, made, points, position: Math.round(position) };
+      activeGame.awaitingClutch = false;
+      activeGame.feed.push(`${made ? '🏆' : '💔'} GAME WINNER：${shot.shooter.name} ${made ? '命中，直接贏下比賽！' : '失手，比賽告負。'}`);
+      syncVisualScoreFromGame();
+      const panel = document.getElementById('sjShootingChallenge');
+      if (panel) panel.innerHTML = `<div class="sj-shot-result ${made ? 'is-made' : 'is-missed'}"><strong>${zone}</strong><b>${made ? 'GAME WINNER!' : 'MISSED · LOSS'}</b><span>${safeText(shot.shooter.name)} ${made ? '完成致勝一擊' : '未能命中最後一球'}</span></div>`;
+      shootingChallenge = null;
+      renderActiveGame();
+      setTimeout(() => {
+        document.getElementById('sjShootingChallenge')?.classList.add('hidden');
+        finishJourneyGame();
+      }, 850);
+      return;
+    }
     activeGame.manualShots[shot.q] = { player: shot.shooter.name, threePct: shot.threePct, zone, made, points, position: Math.round(position) };
     activeGame.manualShotCount += 1;
     activeGame.feed.push(`${made ? '🎯' : '❌'} 關鍵投籃：${shot.shooter.name} ${zone} ${made ? '三分命中' : '偏出'}`);
+    if (made) applyImmediateScore(shot.q, 3, 0);
     const panel = document.getElementById('sjShootingChallenge');
     if (panel) {
-      panel.innerHTML = `<div class="sj-shot-result ${made ? 'is-made' : 'is-missed'}"><strong>${zone}</strong><b>${made ? 'SWISH! +3' : 'MISSED'}</b><span>${safeText(shot.shooter.name)} 的操作結果會計入本節比分</span></div>`;
+      panel.innerHTML = `<div class="sj-shot-result ${made ? 'is-made' : 'is-missed'}"><strong>${zone}</strong><b>${made ? 'SWISH! +3' : 'MISSED'}</b><span>${made ? '記分板已立即加上 3 分' : '本次進攻沒有得分'}</span></div>`;
     }
     shootingChallenge = null;
     setTimeout(() => {
@@ -1330,8 +1494,8 @@
   }
 
   function shouldOpenDefenseChallenge(q) {
-    return activeGame && activeGame.matchupConfirmed && !autoMode.running && q === 2
-      && !activeGame.defenseDecisions[q] && !defenseChallenge;
+    return activeGame && activeGame.matchupConfirmed && !autoMode.running && activeGame.interactionPlan?.[q] === 'defense'
+      && !activeGame.defenseDecisions[q] && !defenseChallenge && canOpenInteractiveEvent();
   }
 
   function openDefenseChallenge(q) {
@@ -1360,6 +1524,7 @@
         <button type="button" onclick="resolveJourneyDefense('sag')"><b>↩️ 放投</b><span>退一步防突破，考驗對手投射</span></button>
         <button type="button" onclick="resolveJourneyDefense('double')"><b>⚡ 包夾</b><span>逼迫王牌出球，但可能漏掉空檔</span></button>
       </div>`;
+    activeGame.interactiveEventCount += 1;
     document.getElementById('sjGameActions')?.classList.add('hidden');
   }
 
@@ -1373,8 +1538,8 @@
       : clamp(.10 + (rating - 75) * .006, .08, .34);
     const success = Math.random() < successChance;
     let outcome;
-    if (readCorrect && success) outcome = { homeDelta: 2, awayDelta: -4, turnover: true, label: 'PERFECT READ', detail: `${challenge.defender.name} 判斷正確並製造失誤，直接形成反擊！` };
-    else if (readCorrect) outcome = { homeDelta: 0, awayDelta: -1, turnover: false, label: 'GOOD CONTEST', detail: '站位正確，但對手仍用高難度出手得到分數。' };
+    if (readCorrect && success) outcome = { homeDelta: 2, awayDelta: 0, turnover: true, label: 'PERFECT READ', detail: `${challenge.defender.name} 判斷正確並製造失誤，直接形成反擊！` };
+    else if (readCorrect) outcome = { homeDelta: 0, awayDelta: 2, turnover: false, label: 'GOOD CONTEST', detail: '站位正確，但對手仍用高難度出手得到兩分。' };
     else if (success) outcome = { homeDelta: 0, awayDelta: 0, turnover: false, label: 'RECOVERED', detail: `${challenge.defender.name} 靠防守能力補回失位，沒有付出代價。` };
     else outcome = { homeDelta: 0, awayDelta: 3, turnover: false, label: 'DEFENSE BROKEN', detail: choice === 'double' ? '包夾被看穿，對手傳到底角命中三分。' : choice === 'sag' ? '退得太深，對手直接拔起命中。' : '過度收縮禁區，弱側空切完成得分。' };
     activeGame.defenseDecisions[challenge.q] = {
@@ -1382,11 +1547,85 @@
       choice, correct: readCorrect, success, rating, ...outcome
     };
     activeGame.feed.push(`${success ? '🛡️' : '⚠️'} 防守決策：${outcome.label} — ${outcome.detail}`);
+    playJourneySound(success ? 'correct' : 'buzz');
+    applyImmediateScore(challenge.q, outcome.homeDelta, outcome.awayDelta);
     const panel = document.getElementById('sjDefenseChallenge');
     if (panel) panel.innerHTML = `<div class="sj-defense-result ${success ? 'is-success' : 'is-failure'}"><strong>${outcome.label}</strong><b>${readCorrect ? '戰術判斷正確' : '戰術判斷錯誤'}</b><span>${safeText(outcome.detail)}</span><em>防守能力 ${rating} · 成功率 ${Math.round(successChance * 100)}%</em></div>`;
     defenseChallenge = null;
     setTimeout(() => {
       document.getElementById('sjDefenseChallenge')?.classList.add('hidden');
+      document.getElementById('sjGameActions')?.classList.remove('hidden');
+      simulateOneQuarter(false);
+    }, 850);
+  }
+
+  function shouldOpenOffenseChallenge(q) {
+    return activeGame && activeGame.matchupConfirmed && !autoMode.running && activeGame.interactionPlan?.[q] === 'offense'
+      && !activeGame.offenseDecisions[q] && !offenseChallenge && canOpenInteractiveEvent();
+  }
+
+  function openOffenseChallenge(q) {
+    const panel = document.getElementById('sjOffenseChallenge');
+    if (!panel || !activeGame) return;
+    const handlers = [...activeGame.starters].sort((a, b) => {
+      const aVision = statNumber(a, 'AST') * 7 + playerOvr(a);
+      const bVision = statNumber(b, 'AST') * 7 + playerOvr(b);
+      return bVision - aVision;
+    });
+    const handler = handlers[0] || activeGame.featuredStar || activeGame.starters[0];
+    const scenarios = [
+      { key: 'drop', title: '對手中鋒退守禁區', detail: '掩護後持球者獲得中距離空間。', correct: 'pullup' },
+      { key: 'switch', title: '對手直接換防', detail: '慢速長人被迫站到持球者面前。', correct: 'reject' },
+      { key: 'help', title: '弱側提前協防 Roll Man', detail: '底角射手暫時處於無人看守。', correct: 'kickout' },
+      { key: 'blitz', title: '兩人強勢夾擊持球者', detail: '短擋拆接應點在罰球線附近出現。', correct: 'roll' }
+    ];
+    const scenario = randomOf(scenarios);
+    offenseChallenge = { q, handler, scenario };
+    panel.classList.remove('hidden');
+    panel.innerHTML = `
+      <div class="sj-defense-head"><div><span>PICK & ROLL READ · ${quarterName(q)}</span><b>${safeText(scenario.title)}</b><p>${safeText(scenario.detail)}</p></div><div><small>BALL HANDLER</small><strong>${safeText(handler.name)}</strong><em>AST ${statNumber(handler, 'AST').toFixed(1)} · OVR ${playerOvr(handler)}</em></div></div>
+      <div class="sj-defense-options sj-offense-options">
+        <button type="button" data-offense-choice="pullup"><b>🎯 持球投</b><span>利用防守退縮直接出手</span></button>
+        <button type="button" data-offense-choice="roll"><b>🛫 傳 Roll Man</b><span>把球送進順下路線</span></button>
+        <button type="button" data-offense-choice="kickout"><b>↗️ Kick Out</b><span>找到弱側底角射手</span></button>
+        <button type="button" data-offense-choice="reject"><b>⚡ Reject Screen</b><span>反向突破攻擊錯位</span></button>
+      </div>`;
+    panel.querySelectorAll('[data-offense-choice]').forEach(button => {
+      button.addEventListener('click', event => {
+        event.preventDefault();
+        event.stopPropagation();
+        resolveJourneyOffense(button.dataset.offenseChoice);
+      }, { once: true });
+    });
+    activeGame.interactiveEventCount += 1;
+    document.getElementById('sjGameActions')?.classList.add('hidden');
+  }
+
+  function resolveJourneyOffense(choice) {
+    if (!offenseChallenge || !activeGame) return;
+    const challenge = offenseChallenge;
+    const readCorrect = choice === challenge.scenario.correct;
+    const vision = statNumber(challenge.handler, 'AST');
+    const playmakingBadge = (typeof getPlayerBadges === 'function' ? getPlayerBadges(challenge.handler) : [])
+      .some(badge => ['組織大師', '無私', '助人為樂'].includes(badge.name));
+    const successChance = readCorrect
+      ? clamp(.62 + vision * .025 + (playmakingBadge ? .1 : 0), .58, .95)
+      : clamp(.16 + vision * .012 + (playmakingBadge ? .05 : 0), .12, .42);
+    const success = Math.random() < successChance;
+    const shotValue = ['pullup', 'kickout'].includes(choice) ? 3 : 2;
+    let outcome;
+    if (success) outcome = { homeDelta: shotValue, awayDelta: 0, label: readCorrect ? 'PERFECT READ' : 'TOUGH BUCKET', detail: readCorrect ? `閱讀防守成功，${challenge.handler.name} 創造 ${shotValue} 分。` : `判斷不是最佳解，但靠個人能力拿下 ${shotValue} 分。` };
+    else if (readCorrect) outcome = { homeDelta: 0, awayDelta: 0, label: 'GOOD LOOK · MISSED', detail: '戰術選擇正確，但最後出手沒有命中。' };
+    else outcome = { homeDelta: 0, awayDelta: 2, label: 'TURNOVER', detail: '傳球路線被預判，對手抄截後快攻得到兩分。' };
+    activeGame.offenseDecisions[challenge.q] = { handler: challenge.handler.name, scenario: challenge.scenario.key, choice, correct: readCorrect, success, ...outcome };
+    activeGame.feed.push(`${success ? '🧠' : '⚠️'} 擋拆判斷：${outcome.label} — ${outcome.detail}`);
+    playJourneySound(success ? 'coin' : 'buzz');
+    applyImmediateScore(challenge.q, outcome.homeDelta, outcome.awayDelta);
+    const panel = document.getElementById('sjOffenseChallenge');
+    if (panel) panel.innerHTML = `<div class="sj-defense-result ${success ? 'is-success' : 'is-failure'}"><strong>${outcome.label}</strong><b>${readCorrect ? '判斷正確' : '判斷失誤'}</b><span>${safeText(outcome.detail)}</span><em>成功率 ${Math.round(successChance * 100)}% · 比分已即時更新</em></div>`;
+    offenseChallenge = null;
+    setTimeout(() => {
+      document.getElementById('sjOffenseChallenge')?.classList.add('hidden');
       document.getElementById('sjGameActions')?.classList.remove('hidden');
       simulateOneQuarter(false);
     }, 850);
@@ -1441,7 +1680,7 @@
   }
 
   function simulateOneQuarter(silent) {
-    if (!activeGame || !activeGame.matchupConfirmed || activeGame.finalized || activeGame.awaitingHalftime || activeGame.visual?.busy || activeGame.visual?.awaitingBadge || shootingChallenge || defenseChallenge) return;
+    if (!activeGame || !activeGame.matchupConfirmed || activeGame.finalized || activeGame.awaitingHalftime || activeGame.awaitingClutch || activeGame.visual?.busy || activeGame.visual?.awaitingBadge || shootingChallenge || defenseChallenge || offenseChallenge) return;
     const q = activeGame.quarter + 1;
     const diff = activeGame.teamOvr - activeGame.scheduleGame.opponentOvr;
     let home = clamp(randomInt(20, 32) + Math.round(diff * .12), 15, 40);
@@ -1451,10 +1690,9 @@
     home = adjusted.home;
     away = adjusted.away;
     const badgeImpact = badgeQuarterImpact(q);
-    const shotBonus = Number(activeGame.manualShots[q]?.points || 0);
-    const defenseDecision = activeGame.defenseDecisions[q] || null;
-    home = clamp(home + badgeImpact.home + shotBonus + Number(defenseDecision?.homeDelta || 0), q > 4 ? 5 : 15, q > 4 ? 18 : 45);
-    away = clamp(away + badgeImpact.away - Number(activeGame.matchupBonus || 0) + Number(defenseDecision?.awayDelta || 0), q > 4 ? 5 : 15, q > 4 ? 18 : 45);
+    home = clamp(home + badgeImpact.home, q > 4 ? 5 : 15, q > 4 ? 18 : 45);
+    away = clamp(away + badgeImpact.away - Number(activeGame.matchupBonus || 0), q > 4 ? 5 : 15, q > 4 ? 18 : 45);
+    const manualScore = activeGame.manualScoreAdjustments[q] || { home: 0, away: 0 };
     const visualEvents = window.VisualMatchSimulator?.buildQuarterEvents({
       quarter: q,
       homePoints: home,
@@ -1465,10 +1703,10 @@
     activeGame.quarter = q;
     activeGame.homeScore += home;
     activeGame.awayScore += away;
-    activeGame.homeQuarters.push(home); activeGame.awayQuarters.push(away);
+    activeGame.homeQuarters.push(home + manualScore.home); activeGame.awayQuarters.push(away + manualScore.away);
     if (q === 1) activeGame.feed.push(`🎯 GAME PLAN：${GAME_STRATEGIES[activeGame.pregameStrategy].short}`);
     if (q === 1 && (badgeImpact.home || badgeImpact.away)) activeGame.feed.push(`✨ 徽章陣容加成：進攻 +${badgeImpact.home}／防守 ${badgeImpact.away}`);
-    activeGame.feed.push(`${quarterName(q)}：本節比分 ${home}-${away}`);
+    activeGame.feed.push(`${quarterName(q)}：本節比分 ${home + manualScore.home}-${away + manualScore.away}`);
     const moment = selectBadgeMoment(q);
     let badgeVisualEvent = null;
     if (moment) {
@@ -1484,7 +1722,7 @@
         if (badgeVisualEvent) window.VisualMatchSimulator.consumeEvents(activeGame.visual, [badgeVisualEvent]);
       }
       if (moment) activeGame.pendingMoments.push(moment);
-      finishQuarterPresentation(q);
+      finishQuarterPresentation(q, !silent);
       return;
     }
     startVisualQuarter(visualEvents, q, badgeVisualEvent, moment);
@@ -1495,6 +1733,10 @@
     const nextQuarter = activeGame.quarter + 1;
     if (shouldOpenDefenseChallenge(nextQuarter)) {
       openDefenseChallenge(nextQuarter);
+      return;
+    }
+    if (shouldOpenOffenseChallenge(nextQuarter)) {
+      openOffenseChallenge(nextQuarter);
       return;
     }
     if (shouldOpenShootingChallenge(nextQuarter)) {
@@ -1838,6 +2080,8 @@
   function finishJourneyGame() {
     if (!activeGame || activeGame.finalized) return;
     activeGame.finalized = true;
+    stopJourneyArenaMusic();
+    playJourneySound('whistle');
     const win = activeGame.homeScore > activeGame.awayScore;
     const badgeEffects = typeof analyzeLineupBadges === 'function' ? analyzeLineupBadges() : null;
     const gameData = generateGameBoxScoreData({
@@ -1856,7 +2100,9 @@
       played: true, win, myScore: activeGame.homeScore, oppScore: activeGame.awayScore,
       boxScore: gameData.boxScore, opponentBoxScore: gameData.opponentBoxScore, opponentBenchPts: gameData.opponentBenchPts,
       moments: gameData.badgeMoments, analysis: gameData.analysis, manualShots: activeGame.manualShots,
-      defensiveMatchups: activeGame.matchupResults, defenseDecisions: activeGame.defenseDecisions
+      defensiveMatchups: activeGame.matchupResults, defenseDecisions: activeGame.defenseDecisions,
+      offenseDecisions: activeGame.offenseDecisions, clutchDecision: activeGame.clutchDecision,
+      interactionPlan: activeGame.interactionPlan, interactiveEventCount: activeGame.interactiveEventCount
     });
     const j = state.seasonJourney;
     j.gameIndex += 1; j.wins += win ? 1 : 0; j.losses += win ? 0 : 1;
@@ -2125,11 +2371,13 @@
       if (!window.confirm('比賽尚未結束，離開後本場體力不會退還。確定離開嗎？')) return;
     }
     modal.classList.add('hidden');
+    stopJourneyArenaMusic();
     if (activeGame && !activeGame.finalized) {
       clearVisualEventTimer();
       if (shootingChallenge?.animFrameId) cancelAnimationFrame(shootingChallenge.animFrameId);
       shootingChallenge = null;
       defenseChallenge = null;
+      offenseChallenge = null;
       activeGame = null;
       visualGameState = null;
     }
@@ -2248,6 +2496,9 @@
   window.confirmJourneyMatchup = confirmJourneyMatchup;
   window.stopJourneyShot = stopJourneyShot;
   window.resolveJourneyDefense = resolveJourneyDefense;
+  window.resolveJourneyOffense = resolveJourneyOffense;
+  window.selectJourneyClutchStrategy = selectJourneyClutchStrategy;
+  window.toggleJourneyArenaMusic = toggleJourneyArenaMusic;
   window.selectJourneyPregameStrategy = selectJourneyPregameStrategy;
   window.selectJourneyHalftimeStrategy = selectJourneyHalftimeStrategy;
   window.nextComicPage = nextComicPage;

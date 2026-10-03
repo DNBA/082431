@@ -169,13 +169,10 @@
       }
     }
 
-    const direction = event.team === 'user' ? -1 : 1;
-    const baseSwing = MOMENTUM_SWING[event.type] || (points >= 3 ? 8 : 5);
-    const clutchMultiplier = event.type === 'CLUTCH_SCORE' ? 1.25 : 1;
-    state.momentum *= 0.92;
-    state.momentum += direction * baseSwing * clutchMultiplier;
-    state.momentum += direction * runBonus(state.currentRunPoints);
-    state.momentum = clamp(state.momentum, -100, 100);
+    // GAME FLOW follows the cumulative score differential instead of a temporary run.
+    // User advantage moves left; opponent advantage moves right. A 30-point lead is the hard visual limit.
+    const scoreDifferential = state.displayAwayScore - state.displayHomeScore;
+    state.momentum = clamp((scoreDifferential / 30) * 100, -100, 100);
 
     const currentLeader = leaderFor(state.displayHomeScore, state.displayAwayScore);
     const closeClutch = (state.quarter > 4 || (state.quarter === 4 && state.clock <= 120))
