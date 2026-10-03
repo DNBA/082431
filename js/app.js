@@ -28531,7 +28531,6 @@ const defaultState = {
         sessionStartAt: null,
         plannedDuration: 25 * 60 * 1000,
         pausedAccumulatedMs: 0,
-        rewardedIntervals: 0,
         completedAt: null
       },
       focusMode: {
@@ -28543,7 +28542,13 @@ const defaultState = {
         rewardsClaimedToday: 0,
         rewardCountsByDate: {},
         rewardedSessionIds: [],
-        dailyRewardCap: 20
+        dailyRewardCap: 20,
+        sessionId: '',
+        status: 'idle',
+        sessionStartAt: null,
+        pausedAccumulatedMs: 0,
+        rewardedIntervals: 0,
+        trackingVersion: 2
       },
       isAdmin: false,
       claimedTeamRewards: [],
@@ -30467,9 +30472,19 @@ playSound('click');
 
     function ensureFocusState() {
       const timerApi = window.ToeicQuestFocusTimer;
-      state.pomodoro = timerApi.normalize(state.pomodoro);
       if (!state.focusMode || typeof state.focusMode !== 'object') state.focusMode = {};
       const focus = state.focusMode;
+      const legacyContinuousPomodoro = state.pomodoro && Object.prototype.hasOwnProperty.call(state.pomodoro, 'rewardedIntervals');
+      if (legacyContinuousPomodoro && focus.trackingVersion !== 2) {
+        focus.sessionId = state.pomodoro.sessionId || createFocusSessionId();
+        focus.status = state.pomodoro.status === 'running' ? 'running' : (state.pomodoro.status === 'paused' ? 'paused' : 'idle');
+        focus.sessionStartAt = focus.status === 'running' ? state.pomodoro.sessionStartAt : null;
+        focus.pausedAccumulatedMs = Math.max(0, Number(state.pomodoro.pausedAccumulatedMs) || 0);
+        focus.rewardedIntervals = Math.max(0, Math.floor(Number(state.pomodoro.rewardedIntervals) || 0));
+        state.pomodoro = timerApi.reset();
+      }
+      focus.trackingVersion = 2;
+      state.pomodoro = timerApi.normalize(state.pomodoro);
       focus.active = !!focus.active;
       focus.totalFocusedMs = Math.max(0, Number(focus.totalFocusedMs) || 0);
       focus.dailyDate = typeof focus.dailyDate === 'string' ? focus.dailyDate : '';
@@ -30482,6 +30497,11 @@ playSound('click');
       }
       focus.rewardedSessionIds = Array.isArray(focus.rewardedSessionIds) ? focus.rewardedSessionIds.slice(-100) : [];
       focus.dailyRewardCap = 20;
+      focus.sessionId = typeof focus.sessionId === 'string' ? focus.sessionId : '';
+      focus.status = ['idle', 'running', 'paused'].includes(focus.status) ? focus.status : 'idle';
+      focus.sessionStartAt = focus.status === 'running' ? (Number(focus.sessionStartAt) || Date.now()) : null;
+      focus.pausedAccumulatedMs = Math.max(0, Number(focus.pausedAccumulatedMs) || 0);
+      focus.rewardedIntervals = Math.max(0, Math.floor(Number(focus.rewardedIntervals) || 0));
       resetDailyFocusCounters();
     }
 
@@ -30502,8 +30522,9 @@ playSound('click');
       return `focus_${now}_${Math.random().toString(36).slice(2, 10)}`;
     }
 
-    function formatTimerMs(milliseconds) {
-      const totalSeconds = Math.max(0, Math.floor(milliseconds / 1000));
+    function formatTimerMs(milliseconds, rounding = 'floor') {
+      const round = rounding === 'ceil' ? Math.ceil : Math.floor;
+      const totalSeconds = Math.max(0, round(milliseconds / 1000));
       const mins = Math.floor(totalSeconds / 60).toString().padStart(2, '0');
       const secs = (totalSeconds % 60).toString().padStart(2, '0');
       return `${mins}:${secs}`;
@@ -30568,48 +30589,61 @@ playSound('click');
       }
     }
 
-    async function requestFocusNotificationPermission(now = Date.now()) {
+    async function requestFocusNotificationPermission(kind = 'pomodoro', now = Date.now()) {
       if (!('Notification' in window)) return;
       try {
         const permission = Notification.permission === 'default'
           ? await Notification.requestPermission()
           : Notification.permission;
-        if (permission !== 'granted' || state.pomodoro.status !== 'running') return;
-        const remaining = window.ToeicQuestFocusTimer.remainingMs(state.pomodoro, now);
+        const isPomodoro = kind === 'pomodoro';
+        if (permission !== 'granted' || (isPomodoro ? state.pomodoro.status !== 'running' : state.focusMode.status !== 'running')) return;
+        const remaining = isPomodoro
+          ? window.ToeicQuestFocusTimer.remainingMs(state.pomodoro, now)
+          : Math.max(1, 25 * 60 * 1000 - (focusElapsedMs(now) % (25 * 60 * 1000)));
         const expectedAt = new Date(now + remaining).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' });
         await showFocusSystemNotification(
-          'ToeicQuest 專注進行中',
-          `下一張抽獎券預計 ${expectedAt} 達成；之後每 25 分鐘會繼續累積。`
+          isPomodoro ? 'ToeicQuest 番茄鐘進行中' : 'ToeicQuest 專注模式進行中',
+          isPomodoro ? `預計 ${expectedAt} 完成本次 25 分鐘倒數。` : `下一張抽獎券預計 ${expectedAt} 達成；之後每 25 分鐘繼續累積。`
         );
       } catch (error) {
         console.warn('Focus notification permission unavailable:', error);
       }
     }
 
-    function showFocusCompletionNotification(count) {
-      return showFocusSystemNotification('ToeicQuest 專注獎勵', `已完成 ${count} 個 25 分鐘區段，計時會繼續累積。`);
+    function showFocusCompletionNotification(count, continuous = false) {
+      return showFocusSystemNotification(
+        continuous ? 'ToeicQuest 專注獎勵' : 'ToeicQuest 番茄鐘完成',
+        continuous ? `已完成 ${count} 個 25 分鐘區段，專注計時會繼續累積。` : '本次 25 分鐘番茄鐘已完成。'
+      );
+    }
+
+    function focusElapsedMs(now = Date.now()) {
+      const focus = state.focusMode;
+      const runningMs = focus.status === 'running' && focus.sessionStartAt
+        ? Math.max(0, now - focus.sessionStartAt)
+        : 0;
+      return focus.pausedAccumulatedMs + runningMs;
     }
 
     function settleFocusMilestones(now = Date.now()) {
       ensureFocusState();
-      const timerApi = window.ToeicQuestFocusTimer;
-      const sessionId = state.pomodoro.sessionId || createFocusSessionId(now);
-      state.pomodoro.sessionId = sessionId;
-      const completedIntervals = timerApi.completedIntervals(state.pomodoro, now);
-      const alreadySettled = Math.max(0, Number(state.pomodoro.rewardedIntervals) || 0);
+      const focus = state.focusMode;
+      const duration = 25 * 60 * 1000;
+      const completedIntervals = Math.floor(focusElapsedMs(now) / duration);
+      const alreadySettled = focus.rewardedIntervals;
       if (completedIntervals <= alreadySettled) return { completed: 0, rewarded: 0 };
 
       let completed = 0;
       let rewarded = 0;
       let completedToday = 0;
       for (let interval = alreadySettled + 1; interval <= completedIntervals; interval += 1) {
-        const msNeededInCurrentSegment = Math.max(0, interval * state.pomodoro.plannedDuration - state.pomodoro.pausedAccumulatedMs);
-        const achievedAt = state.pomodoro.status === 'running' && state.pomodoro.sessionStartAt
-          ? Math.min(now, state.pomodoro.sessionStartAt + msNeededInCurrentSegment)
+        const msNeededInCurrentSegment = Math.max(0, interval * duration - focus.pausedAccumulatedMs);
+        const achievedAt = focus.status === 'running' && focus.sessionStartAt
+          ? Math.min(now, focus.sessionStartAt + msNeededInCurrentSegment)
           : now;
-        const completion = timerApi.recordCompletion(state.focusMode, {
-          sessionId: `${sessionId}:interval:${interval}`,
-          durationMs: state.pomodoro.plannedDuration,
+        const completion = window.ToeicQuestFocusTimer.recordCompletion(state.focusMode, {
+          sessionId: `${focus.sessionId}:interval:${interval}`,
+          durationMs: duration,
           dateKey: getDateStringAt(achievedAt),
           dailyRewardCap: 20
         });
@@ -30622,7 +30656,7 @@ playSound('click');
           state.tickets = (Number(state.tickets) || 0) + 1;
         }
       }
-      state.pomodoro.rewardedIntervals = completedIntervals;
+      state.focusMode.rewardedIntervals = completedIntervals;
       resetDailyFocusCounters();
 
       if (completed > 0) {
@@ -30640,16 +30674,48 @@ playSound('click');
         type: 'system'
       });
       showToast(rewarded > 0 ? `🎟️ 專注獎勵 +${rewarded} 張抽獎券，計時持續中` : '今日專注獎勵已達 20 張上限', rewarded > 0 ? 'success' : 'info');
-      showFocusCompletionNotification(completed);
+      showFocusCompletionNotification(completed, true);
       return { completed, rewarded };
+    }
+
+    function completePomodoro(now = Date.now()) {
+      ensureFocusState();
+      const timerApi = window.ToeicQuestFocusTimer;
+      if (state.pomodoro.status === 'completed') return false;
+      const sessionId = state.pomodoro.sessionId || createFocusSessionId(now);
+      state.pomodoro.sessionId = sessionId;
+      state.pomodoro = timerApi.complete(state.pomodoro, now);
+      const completion = timerApi.recordCompletion(state.focusMode, {
+        sessionId: `pomodoro:${sessionId}`,
+        durationMs: state.pomodoro.plannedDuration,
+        dateKey: getTodayString(),
+        dailyRewardCap: 20
+      });
+      state.focusMode = completion.focus;
+      if (completion.firstCompletion) {
+        checkAndResetDailyQuests();
+        state.dailyQuests.pomodoroDoneToday = (state.dailyQuests.pomodoroDoneToday || 0) + 1;
+        state.toeic.totalListening = (Number(state.toeic.totalListening) || 0) + 25;
+        if (completion.rewardGranted) state.tickets = (Number(state.tickets) || 0) + 1;
+      }
+      saveGame();
+      renderAll();
+      showToast(completion.rewardGranted ? '🍅 番茄鐘完成，獲得 1 張抽獎券' : '🍅 番茄鐘完成，今日獎勵已達上限', completion.rewardGranted ? 'success' : 'info');
+      showFocusCompletionNotification(1, false);
+      return true;
     }
 
     function syncPomodoroFromClock(now = Date.now()) {
       ensureFocusState();
       const timerApi = window.ToeicQuestFocusTimer;
-      if (state.pomodoro.status === 'running') settleFocusMilestones(now);
+      if (state.pomodoro.status === 'running' && timerApi.remainingMs(state.pomodoro, now) <= 0) completePomodoro(now);
+      if (state.focusMode.status === 'running') settleFocusMilestones(now);
       updateTimerDisplay(now);
-      if (state.pomodoro.status === 'running') startPomodoroUiTicker();
+      updateFocusModeDisplay(now);
+      if (state.pomodoro.status !== 'running' && state.focusMode.status !== 'running') {
+        document.title = 'ToeicQuest NBA - 全能多益備戰與季後賽爭冠系統';
+      }
+      if (state.pomodoro.status === 'running' || state.focusMode.status === 'running') startPomodoroUiTicker();
       else stopPomodoroUiTicker();
     }
 
@@ -30658,18 +30724,18 @@ playSound('click');
       const timerApi = window.ToeicQuestFocusTimer;
       const now = Date.now();
       if (state.pomodoro.status === 'running') {
-        settleFocusMilestones(now);
+        if (timerApi.remainingMs(state.pomodoro, now) <= 0) {
+          completePomodoro(now);
+          return;
+        }
         state.pomodoro = timerApi.pause(state.pomodoro, now);
-        stopPomodoroUiTicker();
         clearFocusSystemNotification();
       } else {
         if (state.pomodoro.status === 'completed' || state.pomodoro.status === 'idle') {
           state.pomodoro.sessionId = createFocusSessionId(now);
         }
         state.pomodoro = timerApi.start(state.pomodoro, now, state.pomodoro.sessionId);
-        state.focusMode.active = true;
-        isFocusPanelMinimized = false;
-        requestFocusNotificationPermission(now);
+        requestFocusNotificationPermission('pomodoro', now);
         startPomodoroUiTicker();
       }
       saveGame();
@@ -30677,8 +30743,11 @@ playSound('click');
     }
 
     function resetPomodoroTimer() {
-      if (state.pomodoro?.status === 'running') settleFocusMilestones(Date.now());
-      stopPomodoroUiTicker();
+      if (state.pomodoro?.status === 'running' && window.ToeicQuestFocusTimer.remainingMs(state.pomodoro, Date.now()) <= 0) {
+        completePomodoro(Date.now());
+        return;
+      }
+      if (state.focusMode.status !== 'running') stopPomodoroUiTicker();
       clearFocusSystemNotification();
       state.pomodoro = window.ToeicQuestFocusTimer.reset();
       saveGame();
@@ -30687,30 +30756,37 @@ playSound('click');
 
     function updateTimerDisplay(now = Date.now()) {
       if (!state.pomodoro) return;
-      const elapsed = window.ToeicQuestFocusTimer.elapsedMs(state.pomodoro, now);
-      const display = formatTimerMs(elapsed);
-      ['timerDisplay', 'focusModeTimerDisplay', 'focusDockTimerDisplay'].forEach(id => {
+      const display = formatTimerMs(window.ToeicQuestFocusTimer.remainingMs(state.pomodoro, now), 'ceil');
+      const timerDisplay = document.getElementById('timerDisplay');
+      if (timerDisplay) timerDisplay.innerText = display;
+      const running = state.pomodoro.status === 'running';
+      const completed = state.pomodoro.status === 'completed';
+      const buttonLabel = running ? '暫停倒數' : (completed ? '再來一輪' : (state.pomodoro.status === 'paused' ? '繼續倒數' : '開始番茄鐘'));
+      const timerButton = document.getElementById('timerToggleBtn');
+      if (timerButton) timerButton.innerText = buttonLabel;
+      if (running) document.title = `${display} · ToeicQuest 番茄鐘`;
+    }
+
+    function updateFocusModeDisplay(now = Date.now()) {
+      const display = formatTimerMs(focusElapsedMs(now));
+      ['focusModeTimerDisplay', 'focusDockTimerDisplay'].forEach(id => {
         const element = document.getElementById(id);
         if (element) element.innerText = display;
       });
-      const running = state.pomodoro.status === 'running';
-      const buttonLabel = running ? '暫停計時' : (state.pomodoro.status === 'paused' ? '繼續專注' : '開始專注');
-      const timerButton = document.getElementById('timerToggleBtn');
-      const overlayButton = document.getElementById('focusOverlayTimerBtn');
-      if (timerButton) timerButton.innerText = buttonLabel;
-      if (overlayButton) overlayButton.innerText = buttonLabel;
-      document.title = running ? `${display} · ToeicQuest 專注中` : 'ToeicQuest NBA - 全能多益備戰與季後賽爭冠系統';
+      const button = document.getElementById('focusOverlayTimerBtn');
+      if (button) button.innerText = state.focusMode.status === 'running' ? '暫停專注計時' : '繼續專注計時';
+      if (state.focusMode.status === 'running') document.title = `${display} · ToeicQuest 專注模式`;
     }
 
     function renderFocusModeUi(now = Date.now()) {
       ensureFocusState();
       updateTimerDisplay(now);
+      updateFocusModeDisplay(now);
       const focus = state.focusMode;
-      const progressText = `今日專注 ${Math.floor(focus.dailyFocusedMs / 60000)} 分鐘｜獎勵 ${focus.rewardsClaimedToday} / ${focus.dailyRewardCap}`;
-      ['focusRewardStatus', 'focusModeProgress'].forEach(id => {
-        const element = document.getElementById(id);
-        if (element) element.innerText = progressText;
-      });
+      const rewardStatus = document.getElementById('focusRewardStatus');
+      if (rewardStatus) rewardStatus.innerText = `今日有效學習 ${Math.floor(focus.dailyFocusedMs / 60000)} 分鐘｜獎勵 ${focus.rewardsClaimedToday} / ${focus.dailyRewardCap}`;
+      const modeProgress = document.getElementById('focusModeProgress');
+      if (modeProgress) modeProgress.innerText = `本次專注 ${Math.floor(focusElapsedMs(now) / 60000)} 分鐘｜今日獎勵 ${focus.rewardsClaimedToday} / ${focus.dailyRewardCap}`;
       const overlay = document.getElementById('focusModeOverlay');
       const dock = document.getElementById('focusModeDock');
       if (overlay) overlay.classList.toggle('hidden', !focus.active || isFocusPanelMinimized);
@@ -30726,13 +30802,38 @@ playSound('click');
         showFocusModePanel();
         return;
       }
+      const now = Date.now();
       state.focusMode.active = true;
+      state.focusMode.status = 'running';
+      state.focusMode.sessionId = createFocusSessionId(now);
+      state.focusMode.sessionStartAt = now;
+      state.focusMode.pausedAccumulatedMs = 0;
+      state.focusMode.rewardedIntervals = 0;
       isFocusPanelMinimized = false;
-      if (state.pomodoro.status !== 'running') togglePomodoroTimer();
-      else {
-        saveGame();
-        renderFocusModeUi();
+      requestFocusNotificationPermission('focus', now);
+      startPomodoroUiTicker();
+      saveGame();
+      renderFocusModeUi(now);
+    }
+
+    function toggleFocusTracking() {
+      ensureFocusState();
+      const now = Date.now();
+      if (!state.focusMode.active) return;
+      if (state.focusMode.status === 'running') {
+        settleFocusMilestones(now);
+        state.focusMode.pausedAccumulatedMs = focusElapsedMs(now);
+        state.focusMode.sessionStartAt = null;
+        state.focusMode.status = 'paused';
+        clearFocusSystemNotification();
+      } else {
+        state.focusMode.status = 'running';
+        state.focusMode.sessionStartAt = now;
+        requestFocusNotificationPermission('focus', now);
+        startPomodoroUiTicker();
       }
+      saveGame();
+      renderFocusModeUi(now);
     }
 
     function showFocusModePanel() {
@@ -30750,18 +30851,19 @@ playSound('click');
 
     function endFocusMode() {
       ensureFocusState();
-      if (state.pomodoro.status === 'running') {
-        const now = Date.now();
+      const now = Date.now();
+      if (state.focusMode.status === 'running') {
         settleFocusMilestones(now);
-        state.pomodoro = window.ToeicQuestFocusTimer.pause(state.pomodoro, now);
-        stopPomodoroUiTicker();
-        clearFocusSystemNotification();
+        state.focusMode.pausedAccumulatedMs = focusElapsedMs(now);
       }
       state.focusMode.active = false;
+      state.focusMode.status = 'idle';
+      state.focusMode.sessionStartAt = null;
       isFocusPanelMinimized = false;
+      clearFocusSystemNotification();
       saveGame();
       renderFocusModeUi();
-      showToast('專注模式已結束，未完成的計時進度已保留。', 'info');
+      showToast(`專注模式已結束，本次專注 ${formatTimerMs(state.focusMode.pausedAccumulatedMs)}。`, 'info');
     }
 
     function initializeFocusTimer() {

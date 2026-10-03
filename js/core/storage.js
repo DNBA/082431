@@ -17,11 +17,12 @@ const defaultState = {
       appliedStudyRecoveries: [],
       pomodoro: {
         sessionId: '', status: 'idle', sessionStartAt: null,
-        plannedDuration: 25 * 60 * 1000, pausedAccumulatedMs: 0, rewardedIntervals: 0, completedAt: null
+        plannedDuration: 25 * 60 * 1000, pausedAccumulatedMs: 0, completedAt: null
       },
       focusMode: {
         active: false, totalFocusedMs: 0, dailyDate: '', dailyFocusedMs: 0,
-        rewardsDate: '', rewardsClaimedToday: 0, rewardCountsByDate: {}, rewardedSessionIds: [], dailyRewardCap: 20
+        rewardsDate: '', rewardsClaimedToday: 0, rewardCountsByDate: {}, rewardedSessionIds: [], dailyRewardCap: 20,
+        sessionId: '', status: 'idle', sessionStartAt: null, pausedAccumulatedMs: 0, rewardedIntervals: 0, trackingVersion: 2
       },
       isAdmin: false,
       claimedTeamRewards: [],

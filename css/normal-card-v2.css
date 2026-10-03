@@ -17,6 +17,7 @@
 
 .normal-card-v2--detail {
   width: min(360px, 100%);
+  overflow: visible;
   cursor: pointer;
   perspective: 1200px;
 }
@@ -26,10 +27,16 @@
   inset: 0;
   transform-style: preserve-3d;
   -webkit-transform-style: preserve-3d;
+  transform: translate3d(0, 0, 0);
+  -webkit-transform: translate3d(0, 0, 0);
+  will-change: transform;
   transition: transform 520ms cubic-bezier(.2, .72, .24, 1);
 }
 
-.normal-card-v2--detail.is-flipped .normal-card-v2__inner { transform: rotateY(180deg); }
+.normal-card-v2--detail.is-flipped .normal-card-v2__inner {
+  transform: translate3d(0, 0, 0) rotateY(180deg);
+  -webkit-transform: translate3d(0, 0, 0) rotateY(180deg);
+}
 
 .normal-card-v2__face {
   position: absolute;
@@ -38,6 +45,7 @@
   border-radius: inherit;
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
+  will-change: transform, opacity;
 }
 
 .normal-card-v2__front {

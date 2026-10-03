@@ -48,6 +48,55 @@
     return id ? `https://cdn.nba.com/logos/nba/${id}/primary/L/logo.svg` : '';
   }
 
+  function resolveDossierPlayer(cardElement) {
+    if (!cardElement) return null;
+    const cardId = cardElement.dataset.cardId;
+    const playerName = cardElement.dataset.playerName;
+    const nbaId = cardElement.dataset.nbaId;
+    const inventory = (typeof state !== 'undefined' && Array.isArray(state?.inventory)) ? state.inventory : [];
+    let player = inventory.find(card => card && cardId && String(card.cardId) === String(cardId));
+    if (!player && playerName) player = inventory.find(card => card && card.name === playerName);
+    if (!player && typeof NBA_PLAYERS !== 'undefined') {
+      player = NBA_PLAYERS.find(card => card && (
+        (nbaId && String(card.nbaId || card.id) === String(nbaId)) || card.name === playerName
+      ));
+    }
+    return player || null;
+  }
+
+  global.ensurePlayerDossierMounted = function (cardElement) {
+    const mount = cardElement?.querySelector('[data-player-dossier-mount]');
+    if (!mount) return false;
+    if (mount.dataset.dossierMounted === 'true' && mount.querySelector('.player-dossier-v2')) return true;
+    if (typeof global.renderPlayerDossierBack !== 'function') {
+      const attempts = Number(mount.dataset.hydrateAttempts || 0);
+      if (mount.dataset.hydrateQueued !== 'true' && attempts < 20) {
+        mount.dataset.hydrateQueued = 'true';
+        mount.dataset.hydrateAttempts = String(attempts + 1);
+        setTimeout(() => {
+          mount.dataset.hydrateQueued = 'false';
+          global.ensurePlayerDossierMounted(cardElement);
+        }, 50);
+      }
+      return false;
+    }
+    const player = resolveDossierPlayer(cardElement);
+    if (!player) return false;
+    mount.innerHTML = global.renderPlayerDossierBack(player);
+    mount.dataset.dossierMounted = 'true';
+    return true;
+  };
+
+  global.performStableCardFlip = function (cardElement, durationMs) {
+    if (!cardElement || cardElement.classList.contains('is-flipping')) return false;
+    const flippingToBack = !cardElement.classList.contains('is-flipped');
+    if (flippingToBack) global.ensurePlayerDossierMounted(cardElement);
+    cardElement.classList.add('is-flipping');
+    cardElement.classList.toggle('is-flipped');
+    window.setTimeout(() => cardElement.classList.remove('is-flipping'), durationMs);
+    return true;
+  };
+
   function renderNormalCardV2(card, options = {}) {
     const theme = getTheme(card);
     const displayName = typeof getCardDisplayName === 'function' ? getCardDisplayName(card) : card?.name;
@@ -64,13 +113,13 @@
       ? 'normal-card-v2__nameplate--xlong'
       : (names.last.length > 12 ? 'normal-card-v2__nameplate--long' : '');
     const front = `
-        <img class="normal-card-v2__arena" src="${ARENA_BACKGROUND}" alt="" aria-hidden="true">
+        <img class="normal-card-v2__arena" src="${ARENA_BACKGROUND}" alt="" aria-hidden="true" onerror="this.hidden=true">
         <div class="normal-card-v2__portrait-window">
           <img class="normal-card-v2__portrait" src="${escapeHtml(playerImage(card))}" alt="${escapeHtml(displayName)}"
                onerror="this.onerror=null;this.src='${FALLBACK_PLAYER}'">
         </div>
         <div class="normal-card-v2__vignette" aria-hidden="true"></div>
-        <img class="normal-card-v2__frame" src="${escapeHtml(theme.frame)}" alt="" aria-hidden="true">
+        <img class="normal-card-v2__frame" src="${escapeHtml(theme.frame)}" alt="" aria-hidden="true" onerror="this.hidden=true">
         <div class="normal-card-v2__rating"><strong>${Number(card?.ovr || card?.baseOvr || 0)}</strong><span>${escapeHtml(positions)}</span></div>
         <div class="normal-card-v2__rarity"><strong>${escapeHtml(theme.label)}</strong><span>${escapeHtml(theme.name)}</span></div>
         <div class="normal-card-v2__nameplate ${nameLengthClass}"><span>${escapeHtml(names.first)}</span><strong>${escapeHtml(names.last)}</strong></div>
@@ -81,18 +130,17 @@
         ${cardId && size !== 'detail' && interactive ? `<button type="button" class="normal-card-v2__detail" aria-label="查看 ${escapeHtml(displayName)} 球員資訊" onclick="showPlayerDetails(event, '${escapeHtml(cardId)}')">i</button>` : ''}`;
 
     if (size === 'detail') {
-      const dossier = typeof global.renderPlayerDossierBack === 'function'
-        ? global.renderPlayerDossierBack(card)
-        : '<div class="player-dossier-v2"><strong>PLAYER INFO</strong><p>球員資料載入中</p></div>';
       return `
         <article class="normal-card-v2 normal-card-v2--detail normal-card-v2--${escapeHtml(theme.label.toLowerCase())}"
                  style="--normal-card-accent:${theme.accent}"
                  data-card-id="${escapeHtml(cardId)}"
+                 data-player-name="${escapeHtml(card?.name || '')}"
+                 data-nba-id="${escapeHtml(card?.nbaId || card?.id || '')}"
                  onclick="handleNormalCardV2Flip(event, this)"
                  aria-label="${escapeHtml(displayName)} 球員卡與球員資訊">
           <div class="normal-card-v2__inner">
             <section class="normal-card-v2__face normal-card-v2__front">${front}</section>
-            <section class="normal-card-v2__face normal-card-v2__back" aria-label="球員資訊背面">${dossier}</section>
+            <section class="normal-card-v2__face normal-card-v2__back" aria-label="球員資訊背面"><div class="player-dossier-v2-mount" data-player-dossier-mount data-dossier-mounted="false" aria-live="polite"></div></section>
           </div>
         </article>`;
     }
@@ -125,8 +173,9 @@
   global.renderNormalCardV2 = renderNormalCardV2;
   global.handleNormalCardV2Flip = function (event, cardElement) {
     if (!cardElement || event.target.closest('button')) return;
+    if (cardElement.classList.contains('is-flipping')) return;
     if (cardElement.classList.contains('is-flipped') && event.target.closest('.player-dossier-v2')) return;
-    cardElement.classList.toggle('is-flipped');
+    global.performStableCardFlip(cardElement, 520);
   };
   install();
   if (typeof global.renderInventory === 'function') global.renderInventory();

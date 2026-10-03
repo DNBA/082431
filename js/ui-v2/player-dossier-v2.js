@@ -284,7 +284,13 @@
   };
   global.flipPlayerDossierToFront = function (event, button) {
     event?.stopPropagation();
-    button?.closest('.card-v2, .normal-card-v2')?.classList.remove('is-flipped');
+    const cardElement = button?.closest('.card-v2, .normal-card-v2');
+    if (!cardElement || cardElement.classList.contains('is-flipping')) return;
+    if (typeof global.performStableCardFlip === 'function') {
+      global.performStableCardFlip(cardElement, cardElement.classList.contains('card-v2') ? 540 : 520);
+    } else {
+      cardElement.classList.remove('is-flipped');
+    }
   };
 
   // Season Journey and the special-card adapter finish their own wrappers on

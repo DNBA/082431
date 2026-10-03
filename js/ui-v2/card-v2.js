@@ -134,6 +134,8 @@
       <article class="card-v2 card-v2--${safeAttribute(size)} ${safeAttribute(theme.className || '')} card-v2--interactive"
                data-card-v2-context="${safeAttribute(context)}"
                data-card-id="${safeAttribute(cardId)}"
+               data-player-name="${safeAttribute(player?.name || '')}"
+               data-nba-id="${safeAttribute(player?.nbaId || player?.id || '')}"
                style="--secondary-opacity:${secondaryOpacity}"
                ${dragAttrs}
                onclick="handleCardV2Click(event, this)"
@@ -172,9 +174,7 @@
           </section>
 
           <section class="card-v2__face card-v2__back" aria-label="球員資訊背面">
-            ${typeof window.renderPlayerDossierBack === 'function'
-              ? window.renderPlayerDossierBack(player)
-              : '<div class="card-v2__back-content"><strong class="card-v2__back-title">PLAYER INFO</strong><span class="card-v2__back-meta">球員資料載入中</span></div>'}
+            <div class="player-dossier-v2-mount" data-player-dossier-mount data-dossier-mounted="false" aria-live="polite"></div>
           </section>
         </div>
       </article>`;
@@ -291,10 +291,11 @@
 
   window.handleCardV2Click = function (event, cardElement) {
     if (!cardElement || event.target.closest('button')) return;
+    if (cardElement.classList.contains('is-flipping')) return;
     const context = cardElement.dataset.cardV2Context;
     if (context === 'detail') {
       if (cardElement.classList.contains('is-flipped') && event.target.closest('.player-dossier-v2')) return;
-      cardElement.classList.toggle('is-flipped');
+      if (typeof window.performStableCardFlip === 'function') window.performStableCardFlip(cardElement, 540);
       return;
     }
     if (context === 'inventory') {

@@ -11,7 +11,10 @@
   function normalize(timer) {
     const source = timer && typeof timer === 'object' ? timer : {};
     const plannedDuration = Math.max(1000, finiteNumber(source.plannedDuration, DEFAULT_DURATION_MS));
-    const pausedAccumulatedMs = Math.max(0, finiteNumber(source.pausedAccumulatedMs, 0));
+    const pausedAccumulatedMs = Math.min(
+      plannedDuration,
+      Math.max(0, finiteNumber(source.pausedAccumulatedMs, 0))
+    );
     const validStatuses = new Set(['idle', 'running', 'paused', 'completed']);
     const status = validStatuses.has(source.status) ? source.status : 'idle';
 
@@ -21,10 +24,6 @@
       sessionStartAt: status === 'running' ? finiteNumber(source.sessionStartAt, null) : null,
       plannedDuration,
       pausedAccumulatedMs,
-      rewardedIntervals: Math.max(0, Math.floor(finiteNumber(
-        source.rewardedIntervals,
-        status === 'completed' ? 1 : 0
-      ))),
       completedAt: status === 'completed' ? finiteNumber(source.completedAt, null) : null
     };
   }
@@ -34,15 +33,12 @@
     const runningMs = normalized.status === 'running' && normalized.sessionStartAt !== null
       ? Math.max(0, finiteNumber(now, Date.now()) - normalized.sessionStartAt)
       : 0;
-    return normalized.pausedAccumulatedMs + runningMs;
+    return Math.min(normalized.plannedDuration, normalized.pausedAccumulatedMs + runningMs);
   }
 
   function remainingMs(timer, now = Date.now()) {
     const normalized = normalize(timer);
-    if (normalized.status === 'idle') return normalized.plannedDuration;
-    const elapsed = elapsedMs(normalized, now);
-    const remainder = elapsed % normalized.plannedDuration;
-    return remainder === 0 && elapsed > 0 ? normalized.plannedDuration : normalized.plannedDuration - remainder;
+    return Math.max(0, normalized.plannedDuration - elapsedMs(normalized, now));
   }
 
   function start(timer, now = Date.now(), sessionId = '') {
@@ -51,7 +47,6 @@
       normalized.pausedAccumulatedMs = 0;
       normalized.completedAt = null;
       normalized.sessionId = sessionId || normalized.sessionId;
-      normalized.rewardedIntervals = 0;
     }
     normalized.status = 'running';
     normalized.sessionStartAt = finiteNumber(now, Date.now());
@@ -63,7 +58,7 @@
     if (normalized.status !== 'running') return normalized;
     normalized.pausedAccumulatedMs = elapsedMs(normalized, now);
     normalized.sessionStartAt = null;
-    normalized.status = 'paused';
+    normalized.status = normalized.pausedAccumulatedMs >= normalized.plannedDuration ? 'completed' : 'paused';
     return normalized;
   }
 
@@ -78,11 +73,6 @@
 
   function reset(durationMs = DEFAULT_DURATION_MS) {
     return normalize({ plannedDuration: durationMs });
-  }
-
-  function completedIntervals(timer, now = Date.now()) {
-    const normalized = normalize(timer);
-    return Math.floor(elapsedMs(normalized, now) / normalized.plannedDuration);
   }
 
   function recordCompletion(focusState, { sessionId, durationMs, dateKey, dailyRewardCap = 20 }) {
@@ -127,7 +117,7 @@
     return { focus, firstCompletion: true, rewardGranted };
   }
 
-  const api = { DEFAULT_DURATION_MS, normalize, elapsedMs, remainingMs, completedIntervals, start, pause, complete, reset, recordCompletion };
+  const api = { DEFAULT_DURATION_MS, normalize, elapsedMs, remainingMs, start, pause, complete, reset, recordCompletion };
   global.ToeicQuestFocusTimer = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);
