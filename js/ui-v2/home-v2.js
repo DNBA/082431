@@ -177,8 +177,7 @@
 
   function installLegacyNavigationBridges() {
     const trainItems = [
-      { label: 'FOCUS', tab: 'planner', view: 'focus', anchor: 'plannerFocusCard' },
-      { label: 'CALENDAR', tab: 'planner', view: 'calendar', anchor: 'plannerMonthTitle' },
+      { label: 'FOCUS / CALENDAR', tab: 'planner', view: 'planner', anchor: 'plannerFocusCard' },
       { label: 'VOCAB', tab: 'vocab' }
     ];
     const vocab = byId('tab-vocab');
@@ -192,7 +191,9 @@
   function syncSectionSwitches(tabKey) {
     document.querySelectorAll('.v2-section-switch button').forEach(button => {
       const sameTab = button.dataset.tab === tabKey;
-      const active = tabKey === 'planner' ? sameTab && button.dataset.view === activeTrainView : sameTab;
+      const active = tabKey === 'planner'
+        ? sameTab && (button.dataset.view === 'planner' || button.dataset.view === activeTrainView)
+        : sameTab;
       button.classList.toggle('is-active', active);
     });
   }
