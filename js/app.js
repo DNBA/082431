@@ -26825,6 +26825,72 @@ function analyzeLineupBadges() {
 /* =====================================================
    📊 擬真 NBA Box Score 全局通用渲染器 (例行賽 & 季後賽格式完全統一)
 ===================================================== */
+function renderOpponentBoxScoreRows(players, benchPts = 0) {
+  const starters = (players || []).filter(p => p.role === 'starter');
+  const bench = (players || []).filter(p => p.role === 'bench');
+  const row = (p, isBench = false) => `
+    <tr class="${isBench ? 'bg-slate-950/40 hover:bg-indigo-950/30' : 'hover:bg-slate-800/40'}">
+      <td class="py-2.5 px-3 font-sans sticky left-0 bg-slate-950/95 z-10 border-r border-slate-800/60">
+        <div class="flex items-center gap-1.5">
+          <span class="text-[9px] font-black px-1.5 py-0.5 rounded ${isBench ? 'bg-slate-800 text-slate-400 border border-slate-700' : 'bg-rose-500/20 text-rose-300 border border-rose-500/40'}">${isBench ? (p.benchSlot || 'BENCH') : p.pos}</span>
+          <span class="truncate max-w-[110px] ${isBench ? 'text-slate-300 font-medium' : 'text-white font-bold'}">${p.name}</span>
+        </div>
+        ${p.defendedBy ? `<div class="mt-1 text-[8px] font-bold text-cyan-300">VS ${p.defendedBy} · DEF ${p.matchupDefense || '--'}</div>` : ''}
+      </td>
+      <td class="py-2 px-2 text-center text-slate-400 font-mono">${p.min}</td>
+      <td class="py-2 px-2 text-center font-bold font-mono ${p.pts >= 20 ? 'text-rose-300 text-sm' : 'text-slate-100'}">${p.pts}</td>
+      <td class="py-2 px-2 text-center text-slate-300 font-mono">${p.fgM}-${p.fgA}</td>
+      <td class="py-2 px-2 text-center text-slate-400 font-mono">${p.fgPct}%</td>
+      <td class="py-2 px-2 text-center text-amber-300 font-mono">${p.threeM}-${p.threeA}</td>
+      <td class="py-2 px-2 text-center text-slate-400 font-mono">${p.threePct}%</td>
+      <td class="py-2 px-2 text-center text-slate-300 font-mono">${p.ftM}-${p.ftA}</td>
+      <td class="py-2 px-2 text-center text-slate-400 font-mono">${p.ftPct}%</td>
+      <td class="py-2 px-2 text-center text-slate-400 font-mono">${p.oReb}</td>
+      <td class="py-2 px-2 text-center text-slate-400 font-mono">${p.dReb}</td>
+      <td class="py-2 px-2 text-center font-bold text-slate-200 font-mono">${p.reb}</td>
+      <td class="py-2 px-2 text-center font-bold text-indigo-300 font-mono">${p.ast}</td>
+      <td class="py-2 px-2 text-center text-slate-300 font-mono">${p.stl}</td>
+      <td class="py-2 px-2 text-center text-slate-300 font-mono">${p.blk}</td>
+      <td class="py-2 px-2 text-center text-rose-400 font-mono">${p.tov}</td>
+      <td class="py-2 px-2 text-center text-slate-400 font-mono">${p.pf}</td>
+      <td class="py-2 px-2.5 text-center font-mono font-bold ${p.plusMinus >= 0 ? 'text-emerald-400' : 'text-rose-400'}">${p.plusMinus >= 0 ? '+' + p.plusMinus : p.plusMinus}</td>
+    </tr>`;
+  return `
+    <tr class="bg-slate-900/90 text-rose-300 text-[10px] font-mono font-bold border-y border-rose-500/30">
+      <td colspan="18" class="py-1 px-3">🎯 對手先發與我方主防對位 (Opponent Starters)</td>
+    </tr>
+    ${starters.map(p => row(p, false)).join('')}
+    <tr class="bg-slate-900/90 text-indigo-300 text-[10px] font-mono font-bold border-y border-indigo-500/30">
+      <td colspan="18" class="py-1 px-3">🪑 對手板凳陣容 (Bench) ｜ 合計攻下 ${benchPts || 0} 分</td>
+    </tr>
+    ${bench.map(p => row(p, true)).join('')}`;
+}
+
+function switchGameBoxScoreSide(side = 'user') {
+  const userBody = document.getElementById('modalBoxScoreTbody');
+  const opponentBody = document.getElementById('modalOpponentBoxScoreTbody');
+  const userButton = document.getElementById('modalBoxScoreUserBtn');
+  const opponentButton = document.getElementById('modalBoxScoreOpponentBtn');
+  const showOpponent = side === 'opponent' && opponentBody && opponentBody.dataset.available === 'true';
+  userBody?.classList.toggle('hidden', showOpponent);
+  opponentBody?.classList.toggle('hidden', !showOpponent);
+  userButton?.setAttribute('aria-selected', String(!showOpponent));
+  opponentButton?.setAttribute('aria-selected', String(showOpponent));
+  userButton?.classList.toggle('border-amber-500/50', !showOpponent);
+  userButton?.classList.toggle('bg-amber-500/15', !showOpponent);
+  userButton?.classList.toggle('text-amber-300', !showOpponent);
+  userButton?.classList.toggle('border-slate-700', showOpponent);
+  userButton?.classList.toggle('bg-slate-950', showOpponent);
+  userButton?.classList.toggle('text-slate-400', showOpponent);
+  opponentButton?.classList.toggle('border-rose-500/50', showOpponent);
+  opponentButton?.classList.toggle('bg-rose-500/15', showOpponent);
+  opponentButton?.classList.toggle('text-rose-300', showOpponent);
+  opponentButton?.classList.toggle('border-slate-700', !showOpponent);
+  opponentButton?.classList.toggle('bg-slate-950', !showOpponent);
+  opponentButton?.classList.toggle('text-slate-400', !showOpponent);
+}
+window.switchGameBoxScoreSide = switchGameBoxScoreSide;
+
 function openGameBoxScoreModal(gameData, subTitle = '收官戰') {
   if (!gameData) return;
   const bestPlayer = gameData.bestPlayer || [...(gameData.boxScore || [])].sort((a, b) => (b.pts + (b.reb || 0) * 1.2 + (b.ast || 0) * 1.5) - (a.pts + (a.reb || 0) * 1.2 + (a.ast || 0) * 1.5))[0] || { name: '主力核心', pos: 'SG', pts: 25, reb: 5, ast: 5, trait: { badge: '🔥核心' }, plusMinus: 10 };
@@ -26834,6 +26900,9 @@ function openGameBoxScoreModal(gameData, subTitle = '收官戰') {
   const oppTeamEl = document.getElementById('modalOppTeamName');
   const highlightEl = document.getElementById('modalHighlight');
   const tbody = document.getElementById('modalBoxScoreTbody');
+  const opponentTbody = document.getElementById('modalOpponentBoxScoreTbody');
+  const tabs = document.getElementById('modalBoxScoreTabs');
+  const opponentButton = document.getElementById('modalBoxScoreOpponentBtn');
 
   if (myScoreEl) myScoreEl.innerText = gameData.myScore;
   if (oppScoreEl) oppScoreEl.innerText = gameData.oppScore;
@@ -26910,6 +26979,20 @@ function openGameBoxScoreModal(gameData, subTitle = '收官戰') {
       ${benchRows}
     `;
   }
+
+  const hasOpponentBoxScore = Array.isArray(gameData.opponentBoxScore) && gameData.opponentBoxScore.length > 0;
+  if (opponentTbody) {
+    opponentTbody.dataset.available = String(hasOpponentBoxScore);
+    opponentTbody.innerHTML = hasOpponentBoxScore
+      ? renderOpponentBoxScoreRows(gameData.opponentBoxScore, gameData.opponentBenchPts)
+      : '';
+  }
+  if (tabs) {
+    tabs.classList.toggle('hidden', !hasOpponentBoxScore);
+    tabs.style.display = hasOpponentBoxScore ? 'grid' : 'none';
+  }
+  if (opponentButton) opponentButton.innerText = hasOpponentBoxScore ? `OPPONENT · ${gameData.oppTeam || ''}` : 'OPPONENT';
+  switchGameBoxScoreSide('user');
 
   // 🏅 渲染徽章高光事件
   const badgeContainer = document.getElementById('modalBadgeMomentsContainer');

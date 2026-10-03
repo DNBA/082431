@@ -116,6 +116,7 @@
   let visualEventTimer = null;
   let activeComic = null;
   let shootingChallenge = null;
+  let defenseChallenge = null;
   let energyTimer = null;
   let autoMode = { running: false, remaining: 0, timer: null };
 
@@ -174,7 +175,7 @@
       if (foundAt < 0) foundAt = 0;
       const player = unused.splice(foundAt, 1)[0];
       return player
-        ? { position, name: player.name, ovr: playerOvr(player), nbaId: player.nbaId || 0 }
+        ? { position, name: player.name, ovr: playerOvr(player), nbaId: player.nbaId || 0, positions: normalizePositions(player), basic: player.basic || null }
         : { position, name: `${game.opponent} ${position}`, ovr: clamp(game.opponentOvr + (index === 2 ? 2 : randomInt(-3, 2)), 72, 98), nbaId: 0 };
     });
     game.opponentRoster = roster;
@@ -199,6 +200,50 @@
       weaknesses: [...ratings].sort((a, b) => a.value - b.value).slice(0, 2)
     };
     return game.scouting;
+  }
+
+  function statNumber(card, key) {
+    return Number.parseFloat(card?.basic?.[key] ?? card?.stats?.[key] ?? 0) || 0;
+  }
+
+  function defensiveProfile(card) {
+    const ovr = playerOvr(card);
+    const stl = statNumber(card, 'STL');
+    const blk = statNumber(card, 'BLK');
+    const reb = statNumber(card, 'REB');
+    const badges = typeof getPlayerBadges === 'function' ? getPlayerBadges(card) : [];
+    const names = new Set(badges.map(badge => badge.name));
+    const archetype = typeof getPlayerArchetype === 'function' ? getPlayerArchetype(card) : null;
+    const perimeter = clamp(Math.round(48 + (ovr - 70) * .9 + stl * 7
+      + (names.has('外線大鎖') ? 9 : 0) + (names.has('小偷') ? 5 : 0) + (archetype?.type === '3d' ? 5 : 0)), 52, 99);
+    const interior = clamp(Math.round(46 + (ovr - 70) * .82 + blk * 8 + reb * .35
+      + (names.has('木桶伯') ? 10 : 0) + (names.has('禁區大鎖') ? 8 : 0) + (archetype?.type === 'big_rebound' ? 4 : 0)), 50, 99);
+    return { perimeter, interior, steal: clamp(Math.round(perimeter * .72 + stl * 9), 45, 99), badges: names };
+  }
+
+  function positionGroups(position) {
+    if (position === 'PG') return ['guard'];
+    if (position === 'SG') return ['guard', 'wing'];
+    if (position === 'PF') return ['wing', 'big'];
+    if (position === 'C') return ['big'];
+    return ['wing'];
+  }
+
+  function matchupDefenseRating(defender, opponent) {
+    const profile = defensiveProfile(defender);
+    const targetPosition = opponent?.position || normalizePositions(opponent)[0] || 'SF';
+    const targetGroups = positionGroups(targetPosition);
+    const defenderPositions = normalizePositions(defender);
+    const defenderGroups = new Set(defenderPositions.flatMap(positionGroups));
+    const relevant = targetPosition === 'C'
+      ? profile.interior
+      : targetPosition === 'PF'
+        ? Math.round((profile.perimeter + profile.interior) / 2)
+        : profile.perimeter;
+    const exactFit = defenderPositions.includes(targetPosition);
+    const groupFit = targetGroups.some(group => defenderGroups.has(group));
+    const mismatch = exactFit ? 3 : (groupFit ? 0 : -7);
+    return clamp(relevant + mismatch, 45, 99);
   }
 
   function buildSchedule() {
@@ -788,6 +833,7 @@
               <div id="sjPlayFeed" class="sj-play-feed sj-visual-feed mt-4" aria-live="polite"></div>
               <section id="sjHalftimePanel" class="sj-strategy-panel sj-halftime-panel hidden mt-4" aria-label="中場調整"></section>
               <section id="sjShootingChallenge" class="sj-shooting-challenge hidden mt-4" aria-live="polite"></section>
+              <section id="sjDefenseChallenge" class="sj-defense-challenge hidden mt-4" aria-live="polite"></section>
               <section id="sjGameAnalysis" class="sj-game-analysis hidden mt-4"></section>
               <div id="sjGameActions" class="grid grid-cols-2 gap-2 mt-4">
                 <button id="sjContinueBtn" onclick="advanceJourneyQuarter()" class="bg-amber-500 hover:bg-amber-400 text-slate-950 font-black py-3.5 rounded-2xl">開始第一節</button>
@@ -865,15 +911,16 @@
     const rows = LINEUP_POSITIONS.map((position, index) => {
       const mine = activeGame.starters[index];
       const opponent = opponentRoster[index];
+      const defenseRating = matchupDefenseRating(mine, opponent);
       return `<div class="sj-matchup-row">
-        <div><span>${position}</span><b>${safeText(mine?.name || '—')}</b><em>OVR ${playerOvr(mine)}</em></div>
+        <div><span>${position}</span><b>${safeText(mine?.name || '—')}</b><em>DEF ${defenseRating}</em></div>
         <strong>VS</strong>
         <div class="is-opponent"><span>${opponent.position}</span><b>${safeText(opponent.name)}</b><em>OVR ${opponent.ovr}</em></div>
       </div>`;
     }).join('');
     const assignments = opponentRoster.map((opponent, index) => `
       <label><span>${safeText(opponent.name)}</span><select onchange="updateJourneyMatchup(${index}, this.value)">
-        ${activeGame.starters.map((card, starterIndex) => `<option value="${starterIndex}" ${Number(activeGame.matchups[index]) === starterIndex ? 'selected' : ''}>${LINEUP_POSITIONS[starterIndex]} · ${safeText(card.name)}</option>`).join('')}
+        ${activeGame.starters.map((card, starterIndex) => `<option value="${starterIndex}" ${Number(activeGame.matchups[index]) === starterIndex ? 'selected' : ''}>${LINEUP_POSITIONS[starterIndex]} · ${safeText(card.name)} · DEF ${matchupDefenseRating(card, opponent)}</option>`).join('')}
       </select></label>`).join('');
     panel.innerHTML = `
       <div class="sj-matchup-head"><div><span>OPPONENT SCOUTING</span><h3>${safeText(state.seasonJourney.teamName)} <i>VS</i> ${safeText(activeGame.scheduleGame.opponent)}</h3></div><div><small>TEAM OVR</small><b>${Math.round(activeGame.teamOvr)} — ${activeGame.scheduleGame.opponentOvr}</b></div></div>
@@ -893,15 +940,25 @@
 
   function confirmJourneyMatchup() {
     if (!activeGame || activeGame.matchupConfirmed) return;
-    const matchupEdges = activeGame.opponentRoster.map((opponent, index) => {
-      const defender = activeGame.starters[Number(activeGame.matchups[index]) || 0];
-      const badges = typeof getPlayerBadges === 'function' ? getPlayerBadges(defender) : [];
-      const defenseBoost = badges.some(badge => ['外線大鎖','小偷','木桶伯','禁區大鎖'].includes(badge.name)) ? 3 : 0;
-      return playerOvr(defender) + defenseBoost - Number(opponent.ovr || 0);
+    const assignmentCount = {};
+    activeGame.matchups.forEach(starterIndex => { assignmentCount[starterIndex] = (assignmentCount[starterIndex] || 0) + 1; });
+    const matchupResults = activeGame.opponentRoster.map((opponent, index) => {
+      const starterIndex = Number(activeGame.matchups[index]) || 0;
+      const defender = activeGame.starters[starterIndex];
+      const defense = matchupDefenseRating(defender, opponent);
+      const overloadPenalty = Math.max(0, Number(assignmentCount[starterIndex] || 1) - 1) * 5;
+      const edge = defense - Number(opponent.ovr || 0) - overloadPenalty;
+      return {
+        opponent: opponent.name, defender: defender.name, opponentPosition: opponent.position,
+        defense, opponentOvr: opponent.ovr, edge,
+        suppression: clamp(Math.round(edge / 6), -2, 4)
+      };
     });
-    activeGame.matchupBonus = clamp(Math.round(matchupEdges.reduce((sum, edge) => sum + edge, 0) / 12), -2, 2);
+    activeGame.matchupResults = matchupResults;
+    activeGame.matchupBonus = clamp(Math.round(matchupResults.reduce((sum, result) => sum + result.suppression, 0) / Math.max(1, matchupResults.length)), -2, 4);
     activeGame.matchupConfirmed = true;
-    activeGame.feed.push(`🧠 防守對位完成：本場防守修正 ${activeGame.matchupBonus >= 0 ? '+' : ''}${activeGame.matchupBonus}`);
+    const bestMatchup = [...matchupResults].sort((a, b) => b.edge - a.edge)[0];
+    activeGame.feed.push(`🧠 防守對位完成：${bestMatchup.defender} 主防效果最佳，本場每節壓制 ${activeGame.matchupBonus >= 0 ? activeGame.matchupBonus : 0} 分`);
     renderActiveGame();
   }
 
@@ -930,11 +987,12 @@
       quarter: 0, homeScore: 0, awayScore: 0, homeQuarters: [], awayQuarters: [],
       feed: [], moments: [], pendingMoments: [], finalized: false, boxScore: null,
       pregameStrategy: 'balanced', secondHalfStrategy: null, awaitingHalftime: false, halftimeReport: null,
-      opponentRoster, scouting: scoutOpponent(scheduleGame), matchups: [0, 1, 2, 3, 4], matchupBonus: 0, matchupConfirmed: !!autoMode.running,
-      manualShots: {}, manualShotCount: 0,
+      opponentRoster, scouting: scoutOpponent(scheduleGame), matchups: [0, 1, 2, 3, 4], matchupResults: [], matchupBonus: 0, matchupConfirmed: false,
+      manualShots: {}, manualShotCount: 0, defenseDecisions: {},
       featuredStar: [...starters].sort((a, b) => (Number(b.ovr || b.baseOvr || 0) + moraleValue(b)) - (Number(a.ovr || a.baseOvr || 0) + moraleValue(a)))[0] || null,
       visual: null
     };
+    if (autoMode.running) confirmJourneyMatchup();
     saveGame();
     visualGameState = window.VisualMatchSimulator?.createState({ homeScore: 0, awayScore: 0 }) || null;
     activeGame.visual = visualGameState;
@@ -1186,10 +1244,8 @@
   }
 
   function shootingRating(card) {
-    const threePct = parseFloat(card?.basic?.['3P%']);
-    if (Number.isFinite(threePct) && threePct > 0) return clamp(Math.round(threePct + 48), 60, 99);
-    const archetype = typeof getPlayerArchetype === 'function' ? getPlayerArchetype(card) : null;
-    return clamp(playerOvr(card) + (archetype?.type === 'shooter' ? 5 : -4), 55, 99);
+    const pct = typeof getShooter3PtPercent === 'function' ? getShooter3PtPercent(card) : parseFloat(card?.basic?.['3P%']);
+    return Number.isFinite(pct) ? pct : 0;
   }
 
   function shouldOpenShootingChallenge(q) {
@@ -1202,37 +1258,63 @@
     if (!panel || !activeGame) return;
     const shooters = [...activeGame.starters].sort((a, b) => shootingRating(b) - shootingRating(a));
     const shooter = q === 4 ? (activeGame.featuredStar || shooters[0]) : shooters[(activeGame.manualShotCount || 0) % Math.min(3, shooters.length)];
-    const rating = shootingRating(shooter);
-    const sharpTier = (typeof getPlayerBadges === 'function' ? getPlayerBadges(shooter) : []).some(badge => badge.name === '神射手')
-      ? badgeTierInfo(shooter, '神射手')
-      : BADGE_TIER_STEPS[0];
-    const greenWidth = clamp(12 + (rating - 70) * .28 + (sharpTier.multiplier - 1) * 8, 10, 24);
-    shootingChallenge = { q, shooter, rating, greenWidth, startedAt: now(), duration: 1400 };
+    const threePct = shootingRating(shooter);
+    const greenWidth = Math.max(3.5, Math.min(15, (threePct - 24) * .58));
+    const yellowSpread = Math.max(3.5, Math.min(10, (threePct - 25) * .35));
+    const greenCenter = 88;
+    const greenStart = greenCenter - greenWidth / 2;
+    const greenEnd = greenCenter + greenWidth / 2;
+    const yellowStart = Math.max(0, greenStart - yellowSpread);
+    const yellowEnd = Math.min(100, greenEnd + yellowSpread);
+    shootingChallenge = {
+      q, shooter, threePct, greenStart, greenEnd, yellowStart, yellowEnd,
+      yellowHitRate: Math.max(.18, Math.min(.66, (threePct - 20) / 36)),
+      meterSpeed: Math.max(1.8, 3.8 - (threePct / 20)), meterProgress: 0, meterDirection: 1, animFrameId: null
+    };
     panel.classList.remove('hidden');
     panel.innerHTML = `
       <div class="sj-shot-head"><div><span>KEY POSSESSION · ${quarterName(q)}</span><b>${safeText(shooter.name)} · OPEN THREE</b></div><strong>3 次操作中的第 ${activeGame.manualShotCount + 1} 次</strong></div>
-      <div class="sj-shot-meter" style="--green-start:${50 - greenWidth / 2}%;--green-end:${50 + greenWidth / 2}%"><div class="sj-shot-zone"></div><i></i></div>
-      <div class="sj-shot-help">能力 ${rating} · ${sharpTier.name === 'Bronze' ? '無額外神射手加成或銅級' : `${sharpTier.label}級神射手擴大綠區`}</div>
-      <button type="button" onclick="stopJourneyShot()">STOP</button>`;
+      <div class="sj-contest-meter-wrap">
+        <div class="sj-contest-meter-label"><span>投籃時機 (Shot Timing)</span><strong>${threePct >= 40 ? '🔥 頂級射手' : threePct >= 35 ? '🎯 穩定射手' : '⚠️ 外線弱'} (${threePct.toFixed(1)}%)</strong></div>
+        <div class="sj-contest-shot-meter"><div class="sj-meter-red"></div><div class="sj-meter-yellow" style="left:${yellowStart}%;width:${yellowEnd - yellowStart}%"></div><div class="sj-meter-green" style="left:${greenStart}%;width:${greenWidth}%"></div><i id="sjShotCursor"></i></div>
+        <div class="sj-contest-meter-legend"><span>🔴 打鐵</span><span>🟡 ${Math.round(shootingChallenge.yellowHitRate * 100)}%</span><span>🟢 必進</span></div>
+      </div>
+      <button type="button" onclick="stopJourneyShot()">🟢 出手 (SHOOT)!</button>`;
     const actions = document.getElementById('sjGameActions');
     if (actions) actions.classList.add('hidden');
+    startJourneyShotMeterLoop();
+  }
+
+  function startJourneyShotMeterLoop() {
+    if (!shootingChallenge) return;
+    const update = () => {
+      if (!shootingChallenge) return;
+      shootingChallenge.meterProgress += shootingChallenge.meterDirection * shootingChallenge.meterSpeed;
+      if (shootingChallenge.meterProgress >= 100) {
+        shootingChallenge.meterProgress = 100;
+        shootingChallenge.meterDirection = -1;
+      } else if (shootingChallenge.meterProgress <= 0) {
+        shootingChallenge.meterProgress = 0;
+        shootingChallenge.meterDirection = 1;
+      }
+      const cursor = document.getElementById('sjShotCursor');
+      if (cursor) cursor.style.left = `${shootingChallenge.meterProgress}%`;
+      shootingChallenge.animFrameId = requestAnimationFrame(update);
+    };
+    shootingChallenge.animFrameId = requestAnimationFrame(update);
   }
 
   function stopJourneyShot() {
     if (!shootingChallenge || !activeGame) return;
     const shot = shootingChallenge;
-    const elapsed = Math.max(0, now() - shot.startedAt);
-    const phase = (elapsed % shot.duration) / shot.duration;
-    const position = phase <= .5 ? phase * 200 : (1 - phase) * 200;
-    const distance = Math.abs(position - 50);
-    const greenEdge = shot.greenWidth / 2;
+    cancelAnimationFrame(shot.animFrameId);
+    const position = shot.meterProgress;
     let zone = 'RED';
-    if (distance <= greenEdge) zone = 'GREEN';
-    else if (distance <= greenEdge + 18) zone = 'YELLOW';
-    const makeChance = zone === 'GREEN' ? 1 : zone === 'YELLOW' ? .5 + (shot.rating - 75) * .008 : .13 + (shot.rating - 65) * .005;
-    const made = Math.random() < clamp(makeChance, .08, 1);
+    if (position >= shot.greenStart && position <= shot.greenEnd) zone = 'GREEN';
+    else if (position >= shot.yellowStart && position <= shot.yellowEnd) zone = 'YELLOW';
+    const made = zone === 'GREEN' || (zone === 'YELLOW' && Math.random() < shot.yellowHitRate);
     const points = made ? 3 : 0;
-    activeGame.manualShots[shot.q] = { player: shot.shooter.name, zone, made, points, position: Math.round(position) };
+    activeGame.manualShots[shot.q] = { player: shot.shooter.name, threePct: shot.threePct, zone, made, points, position: Math.round(position) };
     activeGame.manualShotCount += 1;
     activeGame.feed.push(`${made ? '🎯' : '❌'} 關鍵投籃：${shot.shooter.name} ${zone} ${made ? '三分命中' : '偏出'}`);
     const panel = document.getElementById('sjShootingChallenge');
@@ -1245,6 +1327,69 @@
       document.getElementById('sjGameActions')?.classList.remove('hidden');
       simulateOneQuarter(false);
     }, 650);
+  }
+
+  function shouldOpenDefenseChallenge(q) {
+    return activeGame && activeGame.matchupConfirmed && !autoMode.running && q === 2
+      && !activeGame.defenseDecisions[q] && !defenseChallenge;
+  }
+
+  function openDefenseChallenge(q) {
+    const panel = document.getElementById('sjDefenseChallenge');
+    if (!panel || !activeGame) return;
+    const targets = [...activeGame.opponentRoster].sort((a, b) => Number(b.ovr || 0) - Number(a.ovr || 0));
+    const target = targets[0] || activeGame.opponentRoster[0];
+    const matchup = activeGame.matchupResults.find(result => result.opponent === target.name) || activeGame.matchupResults[0];
+    const defender = activeGame.starters.find(card => card.name === matchup?.defender) || activeGame.starters[0];
+    const threePct = Number.parseFloat(target?.basic?.['3P%']) || 0;
+    let scenario;
+    if ((target.position === 'C' || threePct < 32) && Math.random() < .5) {
+      scenario = { key: 'non-shooter', title: `${target.name} 在弧頂持球`, detail: '他的外線威脅有限，但正在等待隊友空切。', correct: 'sag' };
+    } else if (Number(target.ovr || 0) >= 90 && Math.random() < .55) {
+      scenario = { key: 'star-iso', title: `${target.name} 拉開單打`, detail: '對方王牌已進入進攻節奏，弱側射手正在埋伏。', correct: 'double' };
+    } else {
+      scenario = { key: 'drive', title: `${target.name} 加速突破`, detail: '第一步已經啟動，你必須立刻決定防守站位。', correct: 'contain' };
+    }
+    defenseChallenge = { q, target, defender, matchup, scenario };
+    const profile = defensiveProfile(defender);
+    panel.classList.remove('hidden');
+    panel.innerHTML = `
+      <div class="sj-defense-head"><div><span>DEFENSIVE READ · ${quarterName(q)}</span><b>${safeText(scenario.title)}</b><p>${safeText(scenario.detail)}</p></div><div><small>ON BALL DEFENDER</small><strong>${safeText(defender.name)}</strong><em>外防 ${profile.perimeter} · 內防 ${profile.interior}</em></div></div>
+      <div class="sj-defense-options">
+        <button type="button" onclick="resolveJourneyDefense('contain')"><b>🛡️ 守切入</b><span>收住第一步，優先保護禁區</span></button>
+        <button type="button" onclick="resolveJourneyDefense('sag')"><b>↩️ 放投</b><span>退一步防突破，考驗對手投射</span></button>
+        <button type="button" onclick="resolveJourneyDefense('double')"><b>⚡ 包夾</b><span>逼迫王牌出球，但可能漏掉空檔</span></button>
+      </div>`;
+    document.getElementById('sjGameActions')?.classList.add('hidden');
+  }
+
+  function resolveJourneyDefense(choice) {
+    if (!defenseChallenge || !activeGame) return;
+    const challenge = defenseChallenge;
+    const rating = matchupDefenseRating(challenge.defender, challenge.target);
+    const readCorrect = choice === challenge.scenario.correct;
+    const successChance = readCorrect
+      ? clamp(.62 + (rating - 75) * .009, .48, .94)
+      : clamp(.10 + (rating - 75) * .006, .08, .34);
+    const success = Math.random() < successChance;
+    let outcome;
+    if (readCorrect && success) outcome = { homeDelta: 2, awayDelta: -4, turnover: true, label: 'PERFECT READ', detail: `${challenge.defender.name} 判斷正確並製造失誤，直接形成反擊！` };
+    else if (readCorrect) outcome = { homeDelta: 0, awayDelta: -1, turnover: false, label: 'GOOD CONTEST', detail: '站位正確，但對手仍用高難度出手得到分數。' };
+    else if (success) outcome = { homeDelta: 0, awayDelta: 0, turnover: false, label: 'RECOVERED', detail: `${challenge.defender.name} 靠防守能力補回失位，沒有付出代價。` };
+    else outcome = { homeDelta: 0, awayDelta: 3, turnover: false, label: 'DEFENSE BROKEN', detail: choice === 'double' ? '包夾被看穿，對手傳到底角命中三分。' : choice === 'sag' ? '退得太深，對手直接拔起命中。' : '過度收縮禁區，弱側空切完成得分。' };
+    activeGame.defenseDecisions[challenge.q] = {
+      defender: challenge.defender.name, opponent: challenge.target.name, scenario: challenge.scenario.key,
+      choice, correct: readCorrect, success, rating, ...outcome
+    };
+    activeGame.feed.push(`${success ? '🛡️' : '⚠️'} 防守決策：${outcome.label} — ${outcome.detail}`);
+    const panel = document.getElementById('sjDefenseChallenge');
+    if (panel) panel.innerHTML = `<div class="sj-defense-result ${success ? 'is-success' : 'is-failure'}"><strong>${outcome.label}</strong><b>${readCorrect ? '戰術判斷正確' : '戰術判斷錯誤'}</b><span>${safeText(outcome.detail)}</span><em>防守能力 ${rating} · 成功率 ${Math.round(successChance * 100)}%</em></div>`;
+    defenseChallenge = null;
+    setTimeout(() => {
+      document.getElementById('sjDefenseChallenge')?.classList.add('hidden');
+      document.getElementById('sjGameActions')?.classList.remove('hidden');
+      simulateOneQuarter(false);
+    }, 850);
   }
 
   function selectBadgeMoment(q) {
@@ -1296,7 +1441,7 @@
   }
 
   function simulateOneQuarter(silent) {
-    if (!activeGame || !activeGame.matchupConfirmed || activeGame.finalized || activeGame.awaitingHalftime || activeGame.visual?.busy || activeGame.visual?.awaitingBadge || shootingChallenge) return;
+    if (!activeGame || !activeGame.matchupConfirmed || activeGame.finalized || activeGame.awaitingHalftime || activeGame.visual?.busy || activeGame.visual?.awaitingBadge || shootingChallenge || defenseChallenge) return;
     const q = activeGame.quarter + 1;
     const diff = activeGame.teamOvr - activeGame.scheduleGame.opponentOvr;
     let home = clamp(randomInt(20, 32) + Math.round(diff * .12), 15, 40);
@@ -1307,8 +1452,9 @@
     away = adjusted.away;
     const badgeImpact = badgeQuarterImpact(q);
     const shotBonus = Number(activeGame.manualShots[q]?.points || 0);
-    home = clamp(home + badgeImpact.home + shotBonus, q > 4 ? 5 : 15, q > 4 ? 18 : 45);
-    away = clamp(away + badgeImpact.away - Number(activeGame.matchupBonus || 0), q > 4 ? 5 : 15, q > 4 ? 18 : 45);
+    const defenseDecision = activeGame.defenseDecisions[q] || null;
+    home = clamp(home + badgeImpact.home + shotBonus + Number(defenseDecision?.homeDelta || 0), q > 4 ? 5 : 15, q > 4 ? 18 : 45);
+    away = clamp(away + badgeImpact.away - Number(activeGame.matchupBonus || 0) + Number(defenseDecision?.awayDelta || 0), q > 4 ? 5 : 15, q > 4 ? 18 : 45);
     const visualEvents = window.VisualMatchSimulator?.buildQuarterEvents({
       quarter: q,
       homePoints: home,
@@ -1347,6 +1493,10 @@
   function advanceJourneyQuarter() {
     if (!activeGame || !activeGame.matchupConfirmed) return;
     const nextQuarter = activeGame.quarter + 1;
+    if (shouldOpenDefenseChallenge(nextQuarter)) {
+      openDefenseChallenge(nextQuarter);
+      return;
+    }
     if (shouldOpenShootingChallenge(nextQuarter)) {
       openShootingChallenge(nextQuarter);
       return;
@@ -1586,12 +1736,14 @@
   function buildGameAnalysis(gameData, game) {
     const rows = gameData?.boxScore || [];
     const total = key => rows.reduce((sum, row) => sum + Number(row[key] || 0), 0);
+    const opponentRows = gameData?.opponentBoxScore || [];
+    const opponentTotal = key => opponentRows.reduce((sum, row) => sum + Number(row[key] || 0), 0);
     const topScorer = [...rows].sort((a, b) => Number(b.pts || 0) - Number(a.pts || 0))[0];
     const myRebounds = total('reb');
     const myTurnovers = total('tov');
-    const opponentRebounds = clamp(Math.round(36 + (game.scheduleGame.opponentOvr - 80) * .55 + randomInt(-4, 5)), 31, 58);
-    const opponentThrees = clamp(Math.round(game.awayScore * .115 + game.scouting.ratings[0].value * .045 + randomInt(-2, 2)), 7, 20);
-    const opponentTurnovers = clamp(Math.round(15 - (game.scheduleGame.opponentOvr - 80) * .18 + randomInt(-2, 2)), 7, 18);
+    const opponentRebounds = opponentRows.length ? opponentTotal('reb') : clamp(Math.round(36 + (game.scheduleGame.opponentOvr - 80) * .55 + randomInt(-4, 5)), 31, 58);
+    const opponentThrees = opponentRows.length ? opponentTotal('threeM') : clamp(Math.round(game.awayScore * .115 + game.scouting.ratings[0].value * .045 + randomInt(-2, 2)), 7, 20);
+    const opponentTurnovers = opponentRows.length ? opponentTotal('tov') : clamp(Math.round(15 - (game.scheduleGame.opponentOvr - 80) * .18 + randomInt(-2, 2)), 7, 18);
     const candidates = [
       { score: opponentThrees - 12, title: '外線防守', detail: `對手命中 ${opponentThrees} 記三分。`, need: '外線大鎖' },
       { score: opponentRebounds - myRebounds, title: '籃板保護', detail: `籃板 ${myRebounds}-${opponentRebounds}，禁區對抗影響二次進攻。`, need: '籃板／護框型內線' },
@@ -1655,6 +1807,34 @@
     ];
   }
 
+  function generateOpponentGameData(scheduleGame, homeScore, awayScore, matchupResults = []) {
+    const opponentRoster = getOpponentRoster(scheduleGame).map(player => ({
+      ...player, positions: Array.isArray(player.positions) && player.positions.length ? player.positions : [player.position || 'G'],
+      baseOvr: Number(player.ovr || scheduleGame.opponentOvr || 78), realOvr: Number(player.ovr || scheduleGame.opponentOvr || 78)
+    }));
+    const bench = Array.from({ length: 6 }, (_, index) => ({
+      name: `${scheduleGame.opponent} 替補 ${index + 1}`,
+      positions: [index < 2 ? 'G' : index < 4 ? 'F' : 'C'],
+      ovr: clamp(Number(scheduleGame.opponentOvr || 80) - 5 - index, 68, 88),
+      baseOvr: clamp(Number(scheduleGame.opponentOvr || 80) - 5 - index, 68, 88)
+    }));
+    const emptyBadges = { starters: [], bench: [], mambaPlayers: [], sharpshooters: [], floorGenerals: [], rimProtectors: [], perimeterLocks: [], pickpockets: [], sixthMans: [], hasMamba: false, hasFloorGeneral: false };
+    const opponentData = generateGameBoxScoreData({
+      starters: opponentRoster, bench, myScore: awayScore, oppScore: homeScore,
+      win: awayScore > homeScore, oppTeam: state.seasonJourney.teamName,
+      badgeEffects: emptyBadges, gameNum: scheduleGame.game
+    });
+    opponentData.boxScore.forEach(row => {
+      const matchup = matchupResults.find(result => result.opponent === row.name);
+      if (matchup) {
+        row.defendedBy = matchup.defender;
+        row.matchupDefense = matchup.defense;
+        row.matchupEdge = matchup.edge;
+      }
+    });
+    return opponentData;
+  }
+
   function finishJourneyGame() {
     if (!activeGame || activeGame.finalized) return;
     activeGame.finalized = true;
@@ -1665,11 +1845,19 @@
       myScore: activeGame.homeScore, oppScore: activeGame.awayScore, win,
       oppTeam: activeGame.scheduleGame.opponent, badgeEffects, gameNum: activeGame.scheduleGame.game
     });
+    const opponentGameData = generateOpponentGameData(activeGame.scheduleGame, activeGame.homeScore, activeGame.awayScore, activeGame.matchupResults);
+    gameData.opponentBoxScore = opponentGameData.boxScore;
+    gameData.opponentBenchPts = opponentGameData.benchPts;
     gameData.badgeMoments = activeGame.moments.map(m => ({ badge: m.badge, icon: m.icon, player: m.player, color: 'text-amber-300 bg-amber-950/50 border-amber-500/40', desc: `${m.title} 漫畫時刻已收錄。` }));
     gameData.analysis = buildGameAnalysis(gameData, activeGame);
     activeGame.boxScore = gameData;
     const item = activeGame.scheduleGame;
-    Object.assign(item, { played: true, win, myScore: activeGame.homeScore, oppScore: activeGame.awayScore, boxScore: gameData.boxScore, moments: gameData.badgeMoments, analysis: gameData.analysis, manualShots: activeGame.manualShots });
+    Object.assign(item, {
+      played: true, win, myScore: activeGame.homeScore, oppScore: activeGame.awayScore,
+      boxScore: gameData.boxScore, opponentBoxScore: gameData.opponentBoxScore, opponentBenchPts: gameData.opponentBenchPts,
+      moments: gameData.badgeMoments, analysis: gameData.analysis, manualShots: activeGame.manualShots,
+      defensiveMatchups: activeGame.matchupResults, defenseDecisions: activeGame.defenseDecisions
+    });
     const j = state.seasonJourney;
     j.gameIndex += 1; j.wins += win ? 1 : 0; j.losses += win ? 0 : 1;
     j.streak = win ? j.streak + 1 : 0; j.bestStreak = Math.max(j.bestStreak, j.streak);
@@ -1752,7 +1940,12 @@
       if (win && mine <= theirs) mine = theirs + randomInt(1, 10);
       if (!win && mine >= theirs) theirs = mine + randomInt(1, 10);
       const gameData = generateGameBoxScoreData({ starters: starters.map(moraleAdjustedCard), bench: bench.map(moraleAdjustedCard), myScore: mine, oppScore: theirs, win, oppTeam: item.opponent, badgeEffects: analyzeLineupBadges(), gameNum: item.game });
-      Object.assign(item, { played: true, win, myScore: mine, oppScore: theirs, boxScore: gameData.boxScore, moments: gameData.badgeMoments || [] });
+      const opponentGameData = generateOpponentGameData(item, mine, theirs, []);
+      Object.assign(item, {
+        played: true, win, myScore: mine, oppScore: theirs, boxScore: gameData.boxScore,
+        opponentBoxScore: opponentGameData.boxScore, opponentBenchPts: opponentGameData.benchPts,
+        moments: gameData.badgeMoments || []
+      });
       j.gameIndex += 1; j.wins += win ? 1 : 0; j.losses += win ? 0 : 1;
       j.streak = win ? j.streak + 1 : 0; j.bestStreak = Math.max(j.bestStreak, j.streak);
       j.recent.push({ game: item.game, win, opponent: item.opponent }); j.recent = j.recent.slice(-10);
@@ -1934,7 +2127,9 @@
     modal.classList.add('hidden');
     if (activeGame && !activeGame.finalized) {
       clearVisualEventTimer();
+      if (shootingChallenge?.animFrameId) cancelAnimationFrame(shootingChallenge.animFrameId);
       shootingChallenge = null;
+      defenseChallenge = null;
       activeGame = null;
       visualGameState = null;
     }
@@ -2052,6 +2247,7 @@
   window.updateJourneyMatchup = updateJourneyMatchup;
   window.confirmJourneyMatchup = confirmJourneyMatchup;
   window.stopJourneyShot = stopJourneyShot;
+  window.resolveJourneyDefense = resolveJourneyDefense;
   window.selectJourneyPregameStrategy = selectJourneyPregameStrategy;
   window.selectJourneyHalftimeStrategy = selectJourneyHalftimeStrategy;
   window.nextComicPage = nextComicPage;

@@ -31,7 +31,7 @@
     <link rel="stylesheet" href="./css/card-v2.css">
     <link rel="stylesheet" href="./css/player-dossier-v2.css">
     <link rel="stylesheet" href="./css/gacha-v2.css">
-    <link rel="stylesheet" href="./css/season-v2.css?v=20261003-season-experience">
+    <link rel="stylesheet" href="./css/season-v2.css?v=20261003-season-defense">
 </head>
 <body data-v2-active="home" class="bg-slate-950 text-slate-100 min-h-screen pb-24 font-sans selection:bg-amber-500 selection:text-black">
 
@@ -1231,7 +1231,7 @@
 
   <script src="./js/ui-v2/position-utils.js"></script>
   <script src="./js/focus-timer.js?v=20261002-1"></script>
-  <script src="./js/app.js?v=20261002-2"></script>
+  <script src="./js/app.js?v=20261003-season-defense"></script>
 <!-- 🏀 季後賽逐場動態播報彈窗 -->
 <div id="playoffSeriesModal" onclick="if(event.target === this && !document.getElementById('posNextRoundBtn').disabled) closeSeriesAndShowBoxScore()" class="fixed inset-0 bg-slate-950/90 backdrop-blur-md z-50 hidden flex items-end sm:items-center justify-center p-3 sm:p-4 ios-safe-modal">
   <div class="bg-slate-900 border border-amber-500/50 rounded-3xl w-full max-w-lg p-6 shadow-2xl space-y-4 relative animate-modal-in">
@@ -1292,6 +1292,14 @@
           </div>
           <div id="modalBadgeMomentsList" class="grid grid-cols-1 sm:grid-cols-2 gap-2"></div>
         </div>
+        <div id="modalBoxScoreTabs" class="grid grid-cols-2 gap-2" role="tablist" aria-label="切換球隊數據">
+          <button id="modalBoxScoreUserBtn" type="button" role="tab" aria-selected="true" onclick="switchGameBoxScoreSide('user')" class="rounded-xl border border-amber-500/50 bg-amber-500/15 px-3 py-2 text-[11px] font-black text-amber-300 transition">
+            MY TEAM
+          </button>
+          <button id="modalBoxScoreOpponentBtn" type="button" role="tab" aria-selected="false" onclick="switchGameBoxScoreSide('opponent')" class="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-[11px] font-black text-slate-400 transition">
+            OPPONENT
+          </button>
+        </div>
 <!-- 🟢 官方 NBA App 規格 17 欄完整戰報表格（直接貼在這裡） 🟢 -->
         <div class="overflow-x-auto rounded-2xl border border-slate-800 bg-slate-950/80 shadow-inner">
           <table class="w-full text-left text-xs whitespace-nowrap">
@@ -1340,6 +1348,7 @@
             </thead>
             <!-- 數據行將由 JavaScript 動態填入先發 5 人與替補 6 人 -->
             <tbody id="modalBoxScoreTbody" class="divide-y divide-slate-800/60 font-mono text-slate-200 text-xs"></tbody>
+            <tbody id="modalOpponentBoxScoreTbody" class="hidden divide-y divide-slate-800/60 font-mono text-slate-200 text-xs"></tbody>
           </table>
         </div>
         <div class="pt-2">
@@ -1903,7 +1912,7 @@
 </div>
 <script src="./js/bootstrap.js"></script>
 <script src="./js/ui-v2/visual-match-simulator.js?v=20261003-season-experience"></script>
-<script src="./js/season-journey.js?v=20261003-season-experience"></script>
+<script src="./js/season-journey.js?v=20261003-season-defense"></script>
 <script src="./js/ui-v2/ui-v2-adapter.js?v=20261001-4"></script>
 <script src="./js/ui-v2/home-v2.js?v=20261001-4"></script>
 <script src="./js/ui-v2/team-v2.js"></script>
