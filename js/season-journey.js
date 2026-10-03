@@ -20,6 +20,22 @@
     'Hawks','Hornets','Heat','Magic','Wizards','Nuggets','Timberwolves','Thunder','Trail Blazers','Jazz',
     'Warriors','Clippers','Lakers','Suns','Kings','Mavericks','Rockets','Grizzlies','Pelicans','Spurs'
   ];
+  const TEAM_CODES = Object.freeze({
+    Celtics: 'BOS', Knicks: 'NYK', Nets: 'BKN', '76ers': 'PHI', Raptors: 'TOR',
+    Bulls: 'CHI', Cavaliers: 'CLE', Pistons: 'DET', Pacers: 'IND', Bucks: 'MIL',
+    Hawks: 'ATL', Hornets: 'CHA', Heat: 'MIA', Magic: 'ORL', Wizards: 'WAS',
+    Nuggets: 'DEN', Timberwolves: 'MIN', Thunder: 'OKC', 'Trail Blazers': 'POR', Jazz: 'UTA',
+    Warriors: 'GSW', Clippers: 'LAC', Lakers: 'LAL', Suns: 'PHX', Kings: 'SAC',
+    Mavericks: 'DAL', Rockets: 'HOU', Grizzlies: 'MEM', Pelicans: 'NOP', Spurs: 'SAS'
+  });
+  const LINEUP_POSITIONS = ['PG', 'SG', 'SF', 'PF', 'C'];
+  const BADGE_TIER_STEPS = Object.freeze([
+    { name: 'Bronze', min: 0, next: 5, multiplier: 1, label: '銅' },
+    { name: 'Silver', min: 5, next: 15, multiplier: 1.3, label: '銀' },
+    { name: 'Gold', min: 15, next: 30, multiplier: 1.65, label: '金' },
+    { name: 'Hall of Fame', min: 30, next: null, multiplier: 2, label: '名人堂' }
+  ]);
+  const MANUAL_SHOT_QUARTERS = [1, 3, 4];
   const CARD_BACKS = [
     { id: 'champion', icon: '💍', name: 'CHAMPION', tone: 'text-amber-300', hint: '成為冠軍隊成員' },
     { id: 'fmvp', icon: '🏆', name: 'FINALS MVP', tone: 'text-yellow-200', hint: '獲得總決賽 MVP' },
@@ -99,6 +115,7 @@
   let visualGameState = null;
   let visualEventTimer = null;
   let activeComic = null;
+  let shootingChallenge = null;
   let energyTimer = null;
   let autoMode = { running: false, remaining: 0, timer: null };
 
@@ -111,6 +128,78 @@
   }
   function randomInt(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
   function randomOf(list) { return list[Math.floor(Math.random() * list.length)]; }
+
+  function badgeTierForTriggers(triggers) {
+    const count = Math.max(0, Number(triggers) || 0);
+    return [...BADGE_TIER_STEPS].reverse().find(tier => count >= tier.min) || BADGE_TIER_STEPS[0];
+  }
+
+  function ensureBadgeProgress(card, badgeName) {
+    ensureCardJourney(card);
+    if (!card.badgeJourney.badges[badgeName]) {
+      const legacySeed = Object.keys(card.badgeJourney.badges).length === 0 ? card.badgeJourney.triggers : 0;
+      card.badgeJourney.badges[badgeName] = { triggers: legacySeed, tier: badgeTierForTriggers(legacySeed).name };
+    }
+    const progress = card.badgeJourney.badges[badgeName];
+    progress.triggers = Math.max(0, Number(progress.triggers) || 0);
+    progress.tier = badgeTierForTriggers(progress.triggers).name;
+    return progress;
+  }
+
+  function badgeTierInfo(card, badgeName) {
+    const progress = ensureBadgeProgress(card, badgeName);
+    return badgeTierForTriggers(progress.triggers);
+  }
+
+  function normalizePositions(player) {
+    const raw = player?.positions ?? player?.pos ?? '';
+    if (Array.isArray(raw)) return raw.map(String);
+    return String(raw).split(/[,/\s-]+/).filter(Boolean);
+  }
+
+  function playerOvr(player) {
+    return Number(player?.realOvr || player?.baseOvr || player?.ovr || 75);
+  }
+
+  function getOpponentRoster(game) {
+    if (!game) return [];
+    if (Array.isArray(game.opponentRoster) && game.opponentRoster.length === 5) return game.opponentRoster;
+    const code = TEAM_CODES[game.opponent];
+    const pool = typeof NBA_PLAYERS !== 'undefined'
+      ? NBA_PLAYERS.filter(player => player.team === code && String(player.edition || '') === '26')
+      : [];
+    const unused = [...pool].sort((a, b) => playerOvr(b) - playerOvr(a));
+    const roster = LINEUP_POSITIONS.map((position, index) => {
+      let foundAt = unused.findIndex(player => normalizePositions(player).includes(position));
+      if (foundAt < 0) foundAt = 0;
+      const player = unused.splice(foundAt, 1)[0];
+      return player
+        ? { position, name: player.name, ovr: playerOvr(player), nbaId: player.nbaId || 0 }
+        : { position, name: `${game.opponent} ${position}`, ovr: clamp(game.opponentOvr + (index === 2 ? 2 : randomInt(-3, 2)), 72, 98), nbaId: 0 };
+    });
+    game.opponentRoster = roster;
+    return roster;
+  }
+
+  function scoutOpponent(game) {
+    if (game?.scouting && Array.isArray(game.scouting.ratings) && game.scouting.ratings.length) return game.scouting;
+    const roster = getOpponentRoster(game);
+    const byPos = Object.fromEntries(roster.map(player => [player.position, player]));
+    const avg = values => Math.round(values.reduce((sum, value) => sum + value, 0) / Math.max(1, values.length));
+    const ratings = [
+      { key: '外線防守', icon: '🔥', value: clamp(avg(['PG','SG','SF'].map(pos => byPos[pos]?.ovr || game.opponentOvr)) + randomInt(-3, 2), 70, 98) },
+      { key: '側翼得分', icon: '🔥', value: clamp(avg(['SF','PF'].map(pos => byPos[pos]?.ovr || game.opponentOvr)) + randomInt(-2, 3), 70, 98) },
+      { key: '禁區護框', icon: '🛡️', value: clamp(avg(['PF','C'].map(pos => byPos[pos]?.ovr || game.opponentOvr)) + randomInt(-3, 2), 70, 98) },
+      { key: '防守籃板', icon: '🏀', value: clamp(avg(['PF','C'].map(pos => byPos[pos]?.ovr || game.opponentOvr)) + randomInt(-4, 2), 68, 98) },
+      { key: '替補火力', icon: '⚡', value: clamp(game.opponentOvr + randomInt(-8, 2), 68, 96) }
+    ];
+    game.scouting = {
+      ratings,
+      strengths: [...ratings].sort((a, b) => b.value - a.value).slice(0, 3),
+      weaknesses: [...ratings].sort((a, b) => a.value - b.value).slice(0, 2)
+    };
+    return game.scouting;
+  }
 
   function buildSchedule() {
     const rivalryAt = randomInt(10, 15);
@@ -140,8 +229,12 @@
     if (!Array.isArray(card.achievementBacks)) card.achievementBacks = [];
     if (!Array.isArray(card.legacy.traits)) card.legacy.traits = [];
     if (!card.badgeJourney || typeof card.badgeJourney !== 'object') {
-      card.badgeJourney = { triggers: 0, mastery: 'Bronze', moments: [] };
+      card.badgeJourney = { triggers: 0, mastery: 'Bronze', moments: [], badges: {} };
     }
+    if (!Array.isArray(card.badgeJourney.moments)) card.badgeJourney.moments = [];
+    if (!card.badgeJourney.badges || typeof card.badgeJourney.badges !== 'object') card.badgeJourney.badges = {};
+    card.badgeJourney.triggers = Math.max(0, Number(card.badgeJourney.triggers) || 0);
+    card.badgeJourney.mastery = badgeTierForTriggers(card.badgeJourney.triggers).name;
     syncHistoricalBacks(card);
   }
 
@@ -302,18 +395,24 @@
   function ensureJourneyState() {
     if (!state.seasonJourney || typeof state.seasonJourney !== 'object') {
       state.seasonJourney = {
-        version: 1, seasonNo: 1, teamName: PLAYER_TEAM_FALLBACK,
+        version: 2, seasonNo: 1, teamName: PLAYER_TEAM_FALLBACK,
         gameIndex: 0, wins: 0, losses: 0, streak: 0, bestStreak: 0,
         schedule: buildSchedule(), recent: [], history: [], completed: false,
         seasonStartedAt: new Date().toISOString()
       };
     }
     const journey = state.seasonJourney;
+    journey.version = 2;
     if (!Array.isArray(journey.schedule) || journey.schedule.length !== SEASON_LENGTH) journey.schedule = buildSchedule();
     if (!Array.isArray(journey.recent)) journey.recent = [];
     if (!Array.isArray(journey.history)) journey.history = [];
+    if (!Array.isArray(journey.awards)) journey.awards = [];
     journey.teamName = String(journey.teamName || PLAYER_TEAM_FALLBACK).slice(0, 24);
     journey.gameIndex = clamp(Number(journey.gameIndex) || 0, 0, SEASON_LENGTH);
+    journey.schedule.forEach(game => {
+      if (!Array.isArray(game.moments)) game.moments = [];
+      if (game.played && !game.analysis) game.analysis = null;
+    });
 
     if (!state.seasonEnergy || typeof state.seasonEnergy !== 'object') {
       state.seasonEnergy = { current: ENERGY_MAX, lastRegenAt: now() };
@@ -541,6 +640,10 @@
             <div id="sjMomentList" class="space-y-2"></div>
           </div>
         </section>
+        <section id="sjAwardsSection" class="hidden bg-gradient-to-br from-amber-950/35 to-slate-900 border border-amber-500/30 rounded-3xl p-4 sm:p-5">
+          <div class="flex justify-between items-center mb-3"><div><div class="text-[10px] text-amber-400 font-black sj-kicker">Season Honors</div><h3 class="text-sm font-black text-white mt-1">年度獎項</h3></div><span class="text-2xl">🏆</span></div>
+          <div id="sjAwardsList" class="grid sm:grid-cols-2 lg:grid-cols-4 gap-2"></div>
+        </section>
         <section id="sjAdminPanel" class="hidden bg-indigo-950/30 border border-indigo-500/40 rounded-3xl p-4 sm:p-5">
           <div class="flex justify-between items-center"><div><div class="text-[10px] text-indigo-300 font-black sj-kicker">Administrator Simulator</div><h3 class="text-sm font-black text-white mt-1">管理員快速測試</h3></div><span class="text-xs text-amber-300 font-black">🏀 ∞</span></div>
           <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-2 mt-4">
@@ -623,6 +726,20 @@
     set('sjMomentCount', `${allMoments.length} unlocked`);
     const momentList = document.getElementById('sjMomentList');
     if (momentList) momentList.innerHTML = allMoments.length ? allMoments.slice(-5).reverse().map(item => `<div class="rounded-xl bg-slate-950 border border-slate-800 px-3 py-2"><b class="text-xs text-amber-300">${safeText(item.moment.split(':').pop())}</b><span class="block text-[10px] text-slate-500 mt-0.5">${safeText(item.player)}</span></div>`).join('') : '<p class="text-xs text-slate-500 py-5 text-center">重要回合中觸發徽章，即可收藏漫畫 Moment。</p>';
+    const awardsSection = document.getElementById('sjAwardsSection');
+    const awardsList = document.getElementById('sjAwardsList');
+    const historicalAwards = [...(j.history || [])].reverse().find(entry => Array.isArray(entry.awards) && entry.awards.length)?.awards || [];
+    const legacyAwards = Array.isArray(state.season?.lastBoxScores) ? state.season.lastBoxScores.map(item => {
+      const title = String(item.title || '年度獎項');
+      const iconMatch = title.match(/^\s*([^\w\u4e00-\u9fff]+)\s*/);
+      return { icon: iconMatch?.[1]?.trim() || '🏆', label: title.replace(/^\s*[^\w\u4e00-\u9fff]+\s*/, ''), player: item.player, stat: String(item.stat || '').replace(/<[^>]+>/g, ' ') };
+    }) : [];
+    const awards = Array.isArray(j.awards) && j.awards.length ? j.awards : (historicalAwards.length ? historicalAwards : legacyAwards);
+    if (awardsSection) awardsSection.classList.toggle('hidden', !awards.length);
+    if (awardsList) awardsList.innerHTML = awards.map(award => `
+      <div class="sj-award-card">
+        <span>${award.icon || '🏆'}</span><div><small>${safeText(award.label)}</small><b>${safeText(award.player)}</b><em>${safeText(award.stat || '')}</em></div>
+      </div>`).join('');
     const adminPanel = document.getElementById('sjAdminPanel');
     if (adminPanel) adminPanel.classList.toggle('hidden', !state.isAdmin);
     const autoStatus = document.getElementById('sjAutoStatus');
@@ -643,6 +760,8 @@
               <div class="flex items-center gap-1"><button id="sjModalAutoStop" onclick="stopJourneyAutoMode('已停止掛機，這場可改為手動操作')" class="hidden text-[10px] text-rose-300 bg-rose-950/60 border border-rose-700/50 px-2.5 py-1.5 rounded-lg">停止掛機</button><button onclick="closeJourneyGame()" class="text-slate-400 hover:text-white p-2">✕</button></div>
             </header>
             <div class="p-4 sm:p-6">
+              <section id="sjMatchupPanel" class="sj-matchup-panel"></section>
+              <div id="sjGamePresentation" class="hidden">
               <div id="sjQuarterStrip" class="grid grid-cols-5 gap-1.5 mb-4"></div>
               <div id="sjVisualStage" class="sj-visual-stage">
                 <div id="sjQuarterTransition" class="sj-quarter-transition" aria-live="polite"></div>
@@ -668,6 +787,8 @@
               <section id="sjPregameStrategy" class="sj-strategy-panel mt-4" aria-label="賽前戰術"></section>
               <div id="sjPlayFeed" class="sj-play-feed sj-visual-feed mt-4" aria-live="polite"></div>
               <section id="sjHalftimePanel" class="sj-strategy-panel sj-halftime-panel hidden mt-4" aria-label="中場調整"></section>
+              <section id="sjShootingChallenge" class="sj-shooting-challenge hidden mt-4" aria-live="polite"></section>
+              <section id="sjGameAnalysis" class="sj-game-analysis hidden mt-4"></section>
               <div id="sjGameActions" class="grid grid-cols-2 gap-2 mt-4">
                 <button id="sjContinueBtn" onclick="advanceJourneyQuarter()" class="bg-amber-500 hover:bg-amber-400 text-slate-950 font-black py-3.5 rounded-2xl">開始第一節</button>
                 <button id="sjQuickBtn" onclick="quickSimJourneyGame()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold py-3.5 rounded-2xl border border-slate-700">快速模擬</button>
@@ -675,6 +796,7 @@
               <div id="sjFinalActions" class="hidden grid-cols-2 gap-2 mt-4">
                 <button onclick="showJourneyBoxScore()" class="bg-slate-800 hover:bg-slate-700 text-white font-bold py-3.5 rounded-2xl">查看 Box Score</button>
                 <button onclick="closeJourneyGame()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-black py-3.5 rounded-2xl">返回賽季首頁</button>
+              </div>
               </div>
             </div>
           </div>
@@ -731,6 +853,58 @@
     if (modal) modal.classList.add('hidden');
   }
 
+  function renderMatchupPanel() {
+    const panel = document.getElementById('sjMatchupPanel');
+    if (!panel || !activeGame) return;
+    panel.classList.toggle('hidden', !!activeGame.matchupConfirmed);
+    const presentation = document.getElementById('sjGamePresentation');
+    if (presentation) presentation.classList.toggle('hidden', !activeGame.matchupConfirmed);
+    if (activeGame.matchupConfirmed) return;
+    const opponentRoster = activeGame.opponentRoster;
+    const scout = activeGame.scouting;
+    const rows = LINEUP_POSITIONS.map((position, index) => {
+      const mine = activeGame.starters[index];
+      const opponent = opponentRoster[index];
+      return `<div class="sj-matchup-row">
+        <div><span>${position}</span><b>${safeText(mine?.name || '—')}</b><em>OVR ${playerOvr(mine)}</em></div>
+        <strong>VS</strong>
+        <div class="is-opponent"><span>${opponent.position}</span><b>${safeText(opponent.name)}</b><em>OVR ${opponent.ovr}</em></div>
+      </div>`;
+    }).join('');
+    const assignments = opponentRoster.map((opponent, index) => `
+      <label><span>${safeText(opponent.name)}</span><select onchange="updateJourneyMatchup(${index}, this.value)">
+        ${activeGame.starters.map((card, starterIndex) => `<option value="${starterIndex}" ${Number(activeGame.matchups[index]) === starterIndex ? 'selected' : ''}>${LINEUP_POSITIONS[starterIndex]} · ${safeText(card.name)}</option>`).join('')}
+      </select></label>`).join('');
+    panel.innerHTML = `
+      <div class="sj-matchup-head"><div><span>OPPONENT SCOUTING</span><h3>${safeText(state.seasonJourney.teamName)} <i>VS</i> ${safeText(activeGame.scheduleGame.opponent)}</h3></div><div><small>TEAM OVR</small><b>${Math.round(activeGame.teamOvr)} — ${activeGame.scheduleGame.opponentOvr}</b></div></div>
+      <div class="sj-matchup-rosters">${rows}</div>
+      <div class="sj-scout-grid">
+        <div><b>對手優勢</b>${scout.strengths.map(item => `<p>${item.icon} ${safeText(item.key)} <strong>${item.value}</strong></p>`).join('')}</div>
+        <div><b>可能弱點</b>${scout.weaknesses.map(item => `<p>• ${safeText(item.key)} <strong>${item.value}</strong></p>`).join('')}</div>
+      </div>
+      <div class="sj-defensive-matchups"><div><b>DEFENSIVE MATCHUP</b><span>指定誰負責主防每位對手</span></div><div class="sj-matchup-selects">${assignments}</div></div>
+      <button type="button" onclick="confirmJourneyMatchup()" class="sj-confirm-matchup">確認對位並設定戰術</button>`;
+  }
+
+  function updateJourneyMatchup(opponentIndex, starterIndex) {
+    if (!activeGame || activeGame.matchupConfirmed) return;
+    activeGame.matchups[Number(opponentIndex)] = clamp(Number(starterIndex) || 0, 0, 4);
+  }
+
+  function confirmJourneyMatchup() {
+    if (!activeGame || activeGame.matchupConfirmed) return;
+    const matchupEdges = activeGame.opponentRoster.map((opponent, index) => {
+      const defender = activeGame.starters[Number(activeGame.matchups[index]) || 0];
+      const badges = typeof getPlayerBadges === 'function' ? getPlayerBadges(defender) : [];
+      const defenseBoost = badges.some(badge => ['外線大鎖','小偷','木桶伯','禁區大鎖'].includes(badge.name)) ? 3 : 0;
+      return playerOvr(defender) + defenseBoost - Number(opponent.ovr || 0);
+    });
+    activeGame.matchupBonus = clamp(Math.round(matchupEdges.reduce((sum, edge) => sum + edge, 0) / 12), -2, 2);
+    activeGame.matchupConfirmed = true;
+    activeGame.feed.push(`🧠 防守對位完成：本場防守修正 ${activeGame.matchupBonus >= 0 ? '+' : ''}${activeGame.matchupBonus}`);
+    renderActiveGame();
+  }
+
   function openJourneyGame() {
     ensureJourneyState();
     const starters = ['PG','SG','SF','PF','C'].map(pos => state.startingLineup[pos]).filter(Boolean);
@@ -750,14 +924,18 @@
     const baseTeamOvr = Number(calculateTeamOverall().overall || 80);
     const averageMorale = starters.reduce((sum, card) => sum + moraleValue(card), 0) / Math.max(1, starters.length);
     const teamOvr = baseTeamOvr + averageMorale;
+    const opponentRoster = getOpponentRoster(scheduleGame);
     activeGame = {
       scheduleGame, starters, bench: (state.benchLineup || []).filter(Boolean), teamOvr,
       quarter: 0, homeScore: 0, awayScore: 0, homeQuarters: [], awayQuarters: [],
       feed: [], moments: [], pendingMoments: [], finalized: false, boxScore: null,
       pregameStrategy: 'balanced', secondHalfStrategy: null, awaitingHalftime: false, halftimeReport: null,
+      opponentRoster, scouting: scoutOpponent(scheduleGame), matchups: [0, 1, 2, 3, 4], matchupBonus: 0, matchupConfirmed: !!autoMode.running,
+      manualShots: {}, manualShotCount: 0,
       featuredStar: [...starters].sort((a, b) => (Number(b.ovr || b.baseOvr || 0) + moraleValue(b)) - (Number(a.ovr || a.baseOvr || 0) + moraleValue(a)))[0] || null,
       visual: null
     };
+    saveGame();
     visualGameState = window.VisualMatchSimulator?.createState({ homeScore: 0, awayScore: 0 }) || null;
     activeGame.visual = visualGameState;
     injectGameModal();
@@ -979,6 +1157,96 @@
     return plays;
   }
 
+  function badgeQuarterImpact(q) {
+    const roster = activeGame.starters.concat(activeGame.bench).filter(Boolean);
+    let offense = 0;
+    let defense = 0;
+    roster.forEach(card => {
+      const badges = typeof getPlayerBadges === 'function' ? getPlayerBadges(card) : [];
+      badges.forEach(badge => {
+        const tier = badgeTierInfo(card, badge.name);
+        const weight = tier.multiplier * (activeGame.starters.includes(card) ? 1 : .55);
+        if (['曼巴精神','神射手','組織大師','無私','助人為樂','第六人','總決賽MVP'].includes(badge.name)) offense += weight;
+        if (['木桶伯','禁區大鎖','小偷','外線大鎖','總決賽MVP'].includes(badge.name)) defense += weight;
+      });
+    });
+    const strategy = activeStrategyForQuarter(q);
+    if (['feature-star','shoot-threes','attack-paint'].includes(strategy)) offense *= 1.15;
+    if (['defense','lock-down'].includes(strategy)) defense *= 1.2;
+    return {
+      home: clamp(Math.floor(offense / 5.5), 0, 3),
+      away: -clamp(Math.floor(defense / 4.5), 0, 3)
+    };
+  }
+
+  function badgeMomentPoints(moment) {
+    const tier = badgeTierInfo(moment.card, moment.badge);
+    const base = moment.badge === '神射手' ? 3 : 2;
+    return clamp(Math.round(base * tier.multiplier), base, 6);
+  }
+
+  function shootingRating(card) {
+    const threePct = parseFloat(card?.basic?.['3P%']);
+    if (Number.isFinite(threePct) && threePct > 0) return clamp(Math.round(threePct + 48), 60, 99);
+    const archetype = typeof getPlayerArchetype === 'function' ? getPlayerArchetype(card) : null;
+    return clamp(playerOvr(card) + (archetype?.type === 'shooter' ? 5 : -4), 55, 99);
+  }
+
+  function shouldOpenShootingChallenge(q) {
+    return activeGame && activeGame.matchupConfirmed && !autoMode.running && MANUAL_SHOT_QUARTERS.includes(q)
+      && !activeGame.manualShots[q] && !shootingChallenge;
+  }
+
+  function openShootingChallenge(q) {
+    const panel = document.getElementById('sjShootingChallenge');
+    if (!panel || !activeGame) return;
+    const shooters = [...activeGame.starters].sort((a, b) => shootingRating(b) - shootingRating(a));
+    const shooter = q === 4 ? (activeGame.featuredStar || shooters[0]) : shooters[(activeGame.manualShotCount || 0) % Math.min(3, shooters.length)];
+    const rating = shootingRating(shooter);
+    const sharpTier = (typeof getPlayerBadges === 'function' ? getPlayerBadges(shooter) : []).some(badge => badge.name === '神射手')
+      ? badgeTierInfo(shooter, '神射手')
+      : BADGE_TIER_STEPS[0];
+    const greenWidth = clamp(12 + (rating - 70) * .28 + (sharpTier.multiplier - 1) * 8, 10, 24);
+    shootingChallenge = { q, shooter, rating, greenWidth, startedAt: now(), duration: 1400 };
+    panel.classList.remove('hidden');
+    panel.innerHTML = `
+      <div class="sj-shot-head"><div><span>KEY POSSESSION · ${quarterName(q)}</span><b>${safeText(shooter.name)} · OPEN THREE</b></div><strong>3 次操作中的第 ${activeGame.manualShotCount + 1} 次</strong></div>
+      <div class="sj-shot-meter" style="--green-start:${50 - greenWidth / 2}%;--green-end:${50 + greenWidth / 2}%"><div class="sj-shot-zone"></div><i></i></div>
+      <div class="sj-shot-help">能力 ${rating} · ${sharpTier.name === 'Bronze' ? '無額外神射手加成或銅級' : `${sharpTier.label}級神射手擴大綠區`}</div>
+      <button type="button" onclick="stopJourneyShot()">STOP</button>`;
+    const actions = document.getElementById('sjGameActions');
+    if (actions) actions.classList.add('hidden');
+  }
+
+  function stopJourneyShot() {
+    if (!shootingChallenge || !activeGame) return;
+    const shot = shootingChallenge;
+    const elapsed = Math.max(0, now() - shot.startedAt);
+    const phase = (elapsed % shot.duration) / shot.duration;
+    const position = phase <= .5 ? phase * 200 : (1 - phase) * 200;
+    const distance = Math.abs(position - 50);
+    const greenEdge = shot.greenWidth / 2;
+    let zone = 'RED';
+    if (distance <= greenEdge) zone = 'GREEN';
+    else if (distance <= greenEdge + 18) zone = 'YELLOW';
+    const makeChance = zone === 'GREEN' ? 1 : zone === 'YELLOW' ? .5 + (shot.rating - 75) * .008 : .13 + (shot.rating - 65) * .005;
+    const made = Math.random() < clamp(makeChance, .08, 1);
+    const points = made ? 3 : 0;
+    activeGame.manualShots[shot.q] = { player: shot.shooter.name, zone, made, points, position: Math.round(position) };
+    activeGame.manualShotCount += 1;
+    activeGame.feed.push(`${made ? '🎯' : '❌'} 關鍵投籃：${shot.shooter.name} ${zone} ${made ? '三分命中' : '偏出'}`);
+    const panel = document.getElementById('sjShootingChallenge');
+    if (panel) {
+      panel.innerHTML = `<div class="sj-shot-result ${made ? 'is-made' : 'is-missed'}"><strong>${zone}</strong><b>${made ? 'SWISH! +3' : 'MISSED'}</b><span>${safeText(shot.shooter.name)} 的操作結果會計入本節比分</span></div>`;
+    }
+    shootingChallenge = null;
+    setTimeout(() => {
+      document.getElementById('sjShootingChallenge')?.classList.add('hidden');
+      document.getElementById('sjGameActions')?.classList.remove('hidden');
+      simulateOneQuarter(false);
+    }, 650);
+  }
+
   function selectBadgeMoment(q) {
     const special = dynamicSpecial(activeGame.scheduleGame);
     const strategyId = activeStrategyForQuarter(q);
@@ -1012,18 +1280,23 @@
     if (!candidates.length) return null;
     const moment = randomOf(candidates);
     ensureCardJourney(moment.card);
+    const progress = ensureBadgeProgress(moment.card, moment.badge);
+    progress.triggers += 1;
+    progress.tier = badgeTierForTriggers(progress.triggers).name;
     moment.card.badgeJourney.triggers += 1;
     const triggers = moment.card.badgeJourney.triggers;
-    moment.card.badgeJourney.mastery = triggers >= 30 ? 'Hall of Fame' : triggers >= 15 ? 'Gold' : triggers >= 5 ? 'Silver' : 'Bronze';
+    moment.card.badgeJourney.mastery = badgeTierForTriggers(triggers).name;
     const momentId = `${moment.badge}:${moment.title}`;
     if (!moment.card.badgeJourney.moments.includes(momentId)) moment.card.badgeJourney.moments.push(momentId);
     moment.cardId = moment.card.cardId;
     moment.player = moment.card.name;
+    moment.tier = progress.tier;
+    moment.points = badgeMomentPoints(moment);
     return moment;
   }
 
   function simulateOneQuarter(silent) {
-    if (!activeGame || activeGame.finalized || activeGame.awaitingHalftime || activeGame.visual?.busy || activeGame.visual?.awaitingBadge) return;
+    if (!activeGame || !activeGame.matchupConfirmed || activeGame.finalized || activeGame.awaitingHalftime || activeGame.visual?.busy || activeGame.visual?.awaitingBadge || shootingChallenge) return;
     const q = activeGame.quarter + 1;
     const diff = activeGame.teamOvr - activeGame.scheduleGame.opponentOvr;
     let home = clamp(randomInt(20, 32) + Math.round(diff * .12), 15, 40);
@@ -1032,6 +1305,10 @@
     const adjusted = applyQuarterStrategy(activeStrategyForQuarter(q), q, home, away);
     home = adjusted.home;
     away = adjusted.away;
+    const badgeImpact = badgeQuarterImpact(q);
+    const shotBonus = Number(activeGame.manualShots[q]?.points || 0);
+    home = clamp(home + badgeImpact.home + shotBonus, q > 4 ? 5 : 15, q > 4 ? 18 : 45);
+    away = clamp(away + badgeImpact.away - Number(activeGame.matchupBonus || 0), q > 4 ? 5 : 15, q > 4 ? 18 : 45);
     const visualEvents = window.VisualMatchSimulator?.buildQuarterEvents({
       quarter: q,
       homePoints: home,
@@ -1044,14 +1321,15 @@
     activeGame.awayScore += away;
     activeGame.homeQuarters.push(home); activeGame.awayQuarters.push(away);
     if (q === 1) activeGame.feed.push(`🎯 GAME PLAN：${GAME_STRATEGIES[activeGame.pregameStrategy].short}`);
+    if (q === 1 && (badgeImpact.home || badgeImpact.away)) activeGame.feed.push(`✨ 徽章陣容加成：進攻 +${badgeImpact.home}／防守 ${badgeImpact.away}`);
     activeGame.feed.push(`${quarterName(q)}：本節比分 ${home}-${away}`);
     const moment = selectBadgeMoment(q);
     let badgeVisualEvent = null;
     if (moment) {
       activeGame.moments.push(moment);
-      activeGame.homeScore += 2;
-      activeGame.homeQuarters[q - 1] = Number(activeGame.homeQuarters[q - 1] || 0) + 2;
-      activeGame.feed.push(`🏅 ${moment.player} 觸發【${moment.badge}】Badge Moment`);
+      activeGame.homeScore += moment.points;
+      activeGame.homeQuarters[q - 1] = Number(activeGame.homeQuarters[q - 1] || 0) + moment.points;
+      activeGame.feed.push(`🏅 ${moment.player} 觸發【${moment.badge} · ${moment.tier}】+${moment.points}`);
       badgeVisualEvent = window.VisualMatchSimulator?.buildBadgeEvent(moment, q, 12) || null;
     }
     if (silent || !activeGame.visual || !window.VisualMatchSimulator) {
@@ -1066,7 +1344,15 @@
     startVisualQuarter(visualEvents, q, badgeVisualEvent, moment);
   }
 
-  function advanceJourneyQuarter() { simulateOneQuarter(false); }
+  function advanceJourneyQuarter() {
+    if (!activeGame || !activeGame.matchupConfirmed) return;
+    const nextQuarter = activeGame.quarter + 1;
+    if (shouldOpenShootingChallenge(nextQuarter)) {
+      openShootingChallenge(nextQuarter);
+      return;
+    }
+    simulateOneQuarter(false);
+  }
 
   function quickSimJourneyGame() {
     if (!activeGame || activeGame.finalized) return;
@@ -1152,6 +1438,7 @@
 
   function renderActiveGame() {
     if (!activeGame) return;
+    renderMatchupPanel();
     const set = (id, value) => { const el = document.getElementById(id); if (el) el.textContent = value; };
     const visual = activeGame.visual;
     set('sjHomeScore', visual ? visual.displayHomeScore : activeGame.homeScore);
@@ -1242,6 +1529,17 @@
     }
     const quick = document.getElementById('sjQuickBtn');
     if (quick) quick.disabled = !!(visual?.busy || visual?.awaitingBadge);
+    const analysisHost = document.getElementById('sjGameAnalysis');
+    const analysis = activeGame.boxScore?.analysis;
+    if (analysisHost) {
+      analysisHost.classList.toggle('hidden', !activeGame.finalized || !analysis);
+      if (activeGame.finalized && analysis) {
+        analysisHost.innerHTML = `
+          <div class="sj-analysis-head"><span>GAME ANALYSIS</span><b>${safeText(analysis.title)}</b></div>
+          <div class="sj-analysis-reasons">${analysis.reasons.map(reason => `<div class="${reason.good ? 'is-good' : 'is-warning'}"><strong>${reason.good ? '✅' : '❌'} ${safeText(reason.title)}</strong><p>${safeText(reason.detail)}</p></div>`).join('')}</div>
+          <div class="sj-roster-needs"><b>ROSTER NEEDS</b>${analysis.needs.map(need => `<p><span>${safeText(need.label)}</span><strong>${'★'.repeat(need.stars)}${'☆'.repeat(5 - need.stars)}</strong></p>`).join('')}</div>`;
+      }
+    }
     const autoStop = document.getElementById('sjModalAutoStop');
     if (autoStop) autoStop.classList.toggle('hidden', !autoMode.running);
   }
@@ -1285,6 +1583,78 @@
     if (activeGame && activeGame.pendingMoments.length) openComic(activeGame.pendingMoments.shift());
   }
 
+  function buildGameAnalysis(gameData, game) {
+    const rows = gameData?.boxScore || [];
+    const total = key => rows.reduce((sum, row) => sum + Number(row[key] || 0), 0);
+    const topScorer = [...rows].sort((a, b) => Number(b.pts || 0) - Number(a.pts || 0))[0];
+    const myRebounds = total('reb');
+    const myTurnovers = total('tov');
+    const opponentRebounds = clamp(Math.round(36 + (game.scheduleGame.opponentOvr - 80) * .55 + randomInt(-4, 5)), 31, 58);
+    const opponentThrees = clamp(Math.round(game.awayScore * .115 + game.scouting.ratings[0].value * .045 + randomInt(-2, 2)), 7, 20);
+    const opponentTurnovers = clamp(Math.round(15 - (game.scheduleGame.opponentOvr - 80) * .18 + randomInt(-2, 2)), 7, 18);
+    const candidates = [
+      { score: opponentThrees - 12, title: '外線防守', detail: `對手命中 ${opponentThrees} 記三分。`, need: '外線大鎖' },
+      { score: opponentRebounds - myRebounds, title: '籃板保護', detail: `籃板 ${myRebounds}-${opponentRebounds}，禁區對抗影響二次進攻。`, need: '籃板／護框型內線' },
+      { score: myTurnovers - opponentTurnovers, title: '失誤控制', detail: `我方 ${myTurnovers} 次失誤，對手 ${opponentTurnovers} 次。`, need: '穩定組織者' },
+      { score: Number(topScorer?.pts || 0) - 24, good: true, title: '球星得分', detail: `${topScorer?.name || '球隊核心'} 攻下 ${topScorer?.pts || 0} 分。`, need: '第二得分點' }
+    ];
+    candidates.slice(0, 3).forEach(item => { item.good = item.score <= 0; });
+    const won = game.homeScore > game.awayScore;
+    const negatives = candidates.filter(item => !item.good).sort((a, b) => b.score - a.score);
+    const positives = candidates.filter(item => item.good).sort((a, b) => b.score - a.score);
+    const reasons = won
+      ? positives.concat(negatives.filter(item => item.score < 1)).slice(0, 3)
+      : negatives.filter(item => item.score > -2).slice(0, 3);
+    if (!reasons.length) reasons.push(won ? positives[0] : negatives[0]);
+    const needs = candidates.filter(item => item.need !== '第二得分點').sort((a, b) => b.score - a.score).slice(0, 3).map((item, index) => ({
+      label: item.need, stars: clamp(5 - index, 2, 5)
+    }));
+    return {
+      title: won ? 'WHY YOU WON' : 'WHY YOU LOST',
+      reasons,
+      needs,
+      opponent: { threes: opponentThrees, rebounds: opponentRebounds, turnovers: opponentTurnovers }
+    };
+  }
+
+  function calculateSeasonAwards(journey) {
+    const trackers = {};
+    journey.schedule.forEach((game, gameIndex) => (game.boxScore || []).forEach(row => {
+      const key = row.name;
+      if (!trackers[key]) trackers[key] = { name: key, games: 0, pts: 0, reb: 0, ast: 0, stl: 0, blk: 0, plusMinus: 0, role: row.role || 'starter', ovr: playerOvr(findActiveCardByName(key)), firstHalf: 0, secondHalf: 0 };
+      const item = trackers[key];
+      item.games += 1;
+      ['pts','reb','ast','stl','blk'].forEach(stat => { item[stat] += Number(row[stat] || 0); });
+      item.plusMinus += Number(row.plusMinus || 0);
+      if (gameIndex < 41) item.firstHalf += Number(row.pts || 0) + Number(row.reb || 0) + Number(row.ast || 0);
+      else item.secondHalf += Number(row.pts || 0) + Number(row.reb || 0) + Number(row.ast || 0);
+      if (row.role === 'bench') item.role = 'bench';
+    }));
+    const players = Object.values(trackers);
+    if (!players.length) return [];
+    const avg = (player, stat) => player[stat] / Math.max(1, player.games);
+    const best = score => [...players].sort((a, b) => score(b) - score(a))[0];
+    const mvp = best(p => p.pts + p.reb * 1.1 + p.ast * 1.4 + (p.stl + p.blk) * 2);
+    const dpoy = best(p => p.blk * 2.2 + p.stl * 2 + p.reb * .6);
+    const bench = players.filter(p => p.role === 'bench');
+    const sixth = (bench.length ? bench : players).sort((a, b) => b.pts - a.pts)[0];
+    const mip = best(p => ((p.secondHalf - p.firstHalf) / Math.max(1, p.games)) + (p.pts + p.reb + p.ast) / Math.max(70, p.ovr));
+    const scorer = best(p => avg(p, 'pts'));
+    const passer = best(p => avg(p, 'ast'));
+    const rebounder = best(p => avg(p, 'reb'));
+    const clutch = best(p => p.plusMinus);
+    return [
+      { icon: '🏆', label: '年度 MVP', player: mvp.name, stat: `${avg(mvp,'pts').toFixed(1)}分 ${avg(mvp,'reb').toFixed(1)}板 ${avg(mvp,'ast').toFixed(1)}助` },
+      { icon: '🛡️', label: '最佳防守 DPOY', player: dpoy.name, stat: `${avg(dpoy,'blk').toFixed(1)}鍋 ${avg(dpoy,'stl').toFixed(1)}抄` },
+      { icon: '⚡', label: '最佳第六人 6MOY', player: sixth.name, stat: `場均 ${avg(sixth,'pts').toFixed(1)} 分` },
+      { icon: '🔥', label: '最佳進步獎 MIP', player: mip.name, stat: `下半季成長核心` },
+      { icon: '🏹', label: '聯盟得分王', player: scorer.name, stat: `場均 ${avg(scorer,'pts').toFixed(1)} 分` },
+      { icon: '🎯', label: '聯盟助攻王', player: passer.name, stat: `場均 ${avg(passer,'ast').toFixed(1)} 助` },
+      { icon: '🌊', label: '聯盟籃板王', player: rebounder.name, stat: `場均 ${avg(rebounder,'reb').toFixed(1)} 板` },
+      { icon: '👑', label: '最佳關鍵先生', player: clutch.name, stat: `正負值 ${clutch.plusMinus >= 0 ? '+' : ''}${clutch.plusMinus}` }
+    ];
+  }
+
   function finishJourneyGame() {
     if (!activeGame || activeGame.finalized) return;
     activeGame.finalized = true;
@@ -1296,9 +1666,10 @@
       oppTeam: activeGame.scheduleGame.opponent, badgeEffects, gameNum: activeGame.scheduleGame.game
     });
     gameData.badgeMoments = activeGame.moments.map(m => ({ badge: m.badge, icon: m.icon, player: m.player, color: 'text-amber-300 bg-amber-950/50 border-amber-500/40', desc: `${m.title} 漫畫時刻已收錄。` }));
+    gameData.analysis = buildGameAnalysis(gameData, activeGame);
     activeGame.boxScore = gameData;
     const item = activeGame.scheduleGame;
-    Object.assign(item, { played: true, win, myScore: activeGame.homeScore, oppScore: activeGame.awayScore, boxScore: gameData.boxScore, moments: gameData.badgeMoments });
+    Object.assign(item, { played: true, win, myScore: activeGame.homeScore, oppScore: activeGame.awayScore, boxScore: gameData.boxScore, moments: gameData.badgeMoments, analysis: gameData.analysis, manualShots: activeGame.manualShots });
     const j = state.seasonJourney;
     j.gameIndex += 1; j.wins += win ? 1 : 0; j.losses += win ? 0 : 1;
     j.streak = win ? j.streak + 1 : 0; j.bestStreak = Math.max(j.bestStreak, j.streak);
@@ -1327,7 +1698,7 @@
   function completeRegularSeason() {
     const j = state.seasonJourney;
     j.completed = true;
-    const cards = ['PG','SG','SF','PF','C'].map(pos => state.startingLineup[pos]).filter(Boolean);
+    const cards = LINEUP_POSITIONS.map(pos => state.startingLineup[pos]).filter(Boolean).concat((state.benchLineup || []).filter(Boolean));
     cards.forEach(card => { ensureCardJourney(card); card.legacy.seasons = (card.legacy.seasons || 0) + 1; });
     const totals = cards.map(card => {
       const rows = j.schedule.flatMap(g => g.boxScore || []).filter(s => s.name === card.name);
@@ -1339,11 +1710,13 @@
       mvp.legacy.mvps = (mvp.legacy.mvps || 0) + 1; unlockBack(mvp, 'mvp', `Season ${j.seasonNo} MVP`);
       dpoy.legacy.dpoys = (dpoy.legacy.dpoys || 0) + 1; unlockBack(dpoy, 'dpoy', `Season ${j.seasonNo} DPOY`);
     }
-    j.history.push({ season: j.seasonNo, record: `${j.wins}-${j.losses}`, completedAt: new Date().toISOString() });
+    j.awards = calculateSeasonAwards(j);
+    j.history.push({ season: j.seasonNo, record: `${j.wins}-${j.losses}`, awards: j.awards, completedAt: new Date().toISOString() });
     state.season.lastSimRecord = `${j.wins} 勝 ${j.losses} 敗`;
     state.season.lastSimWins = j.wins;
     state.season.lastSimStreak = j.bestStreak;
     state.season.lastSimGames = j.schedule;
+    state.season.lastBoxScores = j.awards.map(award => ({ title: `${award.icon} ${award.label}`, player: award.player, stat: award.stat }));
     if (typeof addNotification === 'function') addNotification({ title: '🏁 例行賽完成', message: `Season ${j.seasonNo} 以 ${j.wins}-${j.losses} 完成，MVP 與 DPOY 卡背已結算。`, icon: '🏆', type: 'achievement' });
   }
 
@@ -1441,7 +1814,7 @@
     state.season.hasPlayedPlayoffs = true;
     state.playoffStats = { wins: 16, losses: 4, finalsPlayerStats: {} };
     state.seasonJourney.playoffs = {
-      version: 1,
+      version: 2,
       seasonNo: Number(state.seasonJourney.seasonNo || 1),
       round: 4,
       status: 'complete',
@@ -1478,7 +1851,7 @@
       gameIndex: 0, wins: 0, losses: 0, streak: 0, bestStreak: 0,
       schedule: buildSchedule(), recent: [],
       history: Array.isArray(old.history) ? old.history : [],
-      completed: false, seasonStartedAt: new Date().toISOString()
+      awards: [], completed: false, seasonStartedAt: new Date().toISOString()
     };
     state.season.hasPlayedPlayoffs = false;
     state.season.threePtContestPlayed = false;
@@ -1561,6 +1934,7 @@
     modal.classList.add('hidden');
     if (activeGame && !activeGame.finalized) {
       clearVisualEventTimer();
+      shootingChallenge = null;
       activeGame = null;
       visualGameState = null;
     }
@@ -1600,7 +1974,7 @@
     if (!anchor || document.getElementById('sjAchievementBacks')) return;
     const section = document.createElement('section');
     section.className = 'mt-3 pt-3 border-t border-slate-800';
-    section.innerHTML = '<div class="flex justify-between items-center mb-2"><h4 class="text-[10px] text-amber-400 font-black sj-kicker">Badge Journey</h4><span id="sjBadgeMastery" class="text-[9px] text-slate-400"></span></div><div id="sjMomentSummary" class="text-[10px] text-slate-500 mb-3"></div><div class="player-detail-backs-heading"><div><span class="player-detail-backs-kicker">ACHIEVEMENT COLLECTION</span><h4>BACKS</h4></div><span>點選已解鎖卡背展示</span></div><div id="sjAchievementBacks" class="grid grid-cols-2 sm:grid-cols-3 gap-2"></div>';
+    section.innerHTML = '<div class="flex justify-between items-center mb-2"><h4 class="text-[10px] text-amber-400 font-black sj-kicker">Badge Journey</h4><span id="sjBadgeMastery" class="text-[9px] text-slate-400"></span></div><div id="sjBadgeProgressList" class="sj-badge-progress-list"></div><div id="sjMomentSummary" class="text-[10px] text-slate-500 mb-3"></div><div class="player-detail-backs-heading"><div><span class="player-detail-backs-kicker">ACHIEVEMENT COLLECTION</span><h4>BACKS</h4></div><span>點選已解鎖卡背展示</span></div><div id="sjAchievementBacks" class="grid grid-cols-2 sm:grid-cols-3 gap-2"></div>';
     anchor.parentElement.appendChild(section);
   }
 
@@ -1619,8 +1993,18 @@
       if (card) {
         ensureCardJourney(card);
         const mastery = document.getElementById('sjBadgeMastery');
+        const progressList = document.getElementById('sjBadgeProgressList');
         const moments = document.getElementById('sjMomentSummary');
-        if (mastery) mastery.textContent = `${card.badgeJourney.mastery} · 觸發 ${card.badgeJourney.triggers} 次`;
+        if (mastery) mastery.textContent = `總觸發 ${card.badgeJourney.triggers} 次`;
+        if (progressList) {
+          const badges = typeof getPlayerBadges === 'function' ? getPlayerBadges(card) : [];
+          progressList.innerHTML = badges.length ? badges.map(badge => {
+            const progress = ensureBadgeProgress(card, badge.name);
+            const tier = badgeTierForTriggers(progress.triggers);
+            const pct = tier.next ? clamp(((progress.triggers - tier.min) / (tier.next - tier.min)) * 100, 0, 100) : 100;
+            return `<div class="sj-badge-progress tier-${tier.name.toLowerCase().replace(/\s+/g, '-')}"><div><span>${badge.icon || '🏅'}</span><b>${safeText(badge.name)}</b><strong>${tier.label}級</strong></div><i><em style="width:${pct}%"></em></i><small>${tier.next ? `${progress.triggers}/${tier.next} 次觸發升級` : `${progress.triggers} 次 · 已達最高級`}</small></div>`;
+          }).join('') : '<p class="text-[10px] text-slate-500 mb-3">這名球員目前沒有可培養徽章。</p>';
+        }
         if (moments) moments.textContent = card.badgeJourney.moments.length
           ? `已收藏 ${card.badgeJourney.moments.length} 個 Moment：${card.badgeJourney.moments.map(x => x.split(':').pop()).join('、')}`
           : '尚未解鎖 Badge Moment，於比賽的重要回合中探索。';
@@ -1665,6 +2049,9 @@
   window.closeJourneyGame = closeJourneyGame;
   window.advanceJourneyQuarter = advanceJourneyQuarter;
   window.quickSimJourneyGame = quickSimJourneyGame;
+  window.updateJourneyMatchup = updateJourneyMatchup;
+  window.confirmJourneyMatchup = confirmJourneyMatchup;
+  window.stopJourneyShot = stopJourneyShot;
   window.selectJourneyPregameStrategy = selectJourneyPregameStrategy;
   window.selectJourneyHalftimeStrategy = selectJourneyHalftimeStrategy;
   window.nextComicPage = nextComicPage;

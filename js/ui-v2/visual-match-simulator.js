@@ -128,10 +128,10 @@
       team: 'user',
       playerId: moment?.cardId || null,
       playerName: moment?.player || 'MY TEAM',
-      points: 2,
+      points: Math.max(2, Number(moment?.points || 2)),
       quarter,
       clock,
-      text: `${moment?.player || 'MY TEAM'} 觸發【${moment?.badge || 'Badge'}】並完成得分！`,
+      text: `${moment?.player || 'MY TEAM'} 觸發【${moment?.badge || 'Badge'} · ${moment?.tier || 'Bronze'}】並完成得分！`,
       badgeMoment: true
     };
   }
