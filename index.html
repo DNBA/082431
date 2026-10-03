@@ -683,6 +683,16 @@
 </button>
         </div>
 
+        <div class="flex items-center justify-end gap-2">
+          <label for="vocabListSort" class="text-[10px] font-bold text-slate-500">顯示順序</label>
+          <select id="vocabListSort" onchange="changeVocabListSort(this.value)" class="bg-slate-950 border border-slate-700 text-slate-200 px-2.5 py-2 rounded-xl text-xs font-bold focus:outline-none focus:border-indigo-500">
+            <option value="recent">最近新增</option>
+            <option value="az">A–Z</option>
+            <option value="random">隨機</option>
+          </select>
+          <button id="reshuffleVocabListBtn" onclick="reshuffleVocabList()" type="button" class="hidden bg-indigo-950/80 hover:bg-indigo-900 border border-indigo-700/60 text-indigo-200 px-3 py-2 rounded-xl text-xs font-bold">再打亂</button>
+        </div>
+
         <div id="wrongAnswerPanel" class="bg-gradient-to-r from-rose-950/45 to-slate-950 border border-rose-800/40 rounded-2xl p-3.5">
           <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
@@ -1231,7 +1241,7 @@
 
   <script src="./js/ui-v2/position-utils.js"></script>
   <script src="./js/focus-timer.js?v=20261003-split-focus-2"></script>
-  <script src="./js/app.js?v=20261003-split-focus-2"></script>
+  <script src="./js/app.js?v=20261003-vocab-pool-1"></script>
 <!-- 🏀 季後賽逐場動態播報彈窗 -->
 <div id="playoffSeriesModal" onclick="if(event.target === this && !document.getElementById('posNextRoundBtn').disabled) closeSeriesAndShowBoxScore()" class="fixed inset-0 bg-slate-950/90 backdrop-blur-md z-50 hidden flex items-end sm:items-center justify-center p-3 sm:p-4 ios-safe-modal">
   <div class="bg-slate-900 border border-amber-500/50 rounded-3xl w-full max-w-lg p-6 shadow-2xl space-y-4 relative animate-modal-in">

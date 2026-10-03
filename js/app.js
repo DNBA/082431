@@ -29925,6 +29925,54 @@ function updateVocabProgressBar() {
   if (b2El) b2El.innerText = b2;
   if (b3El) b3El.innerText = b3;
 }
+    let vocabListSortMode = 'recent';
+    let vocabRandomOrder = [];
+
+    function vocabDisplayKey(item) {
+      return item?.id != null ? `id:${item.id}` : `word:${String(item?.word || '').trim().toLowerCase()}`;
+    }
+
+    function shuffleVocabItems(items) {
+      const shuffled = [...items];
+      for (let index = shuffled.length - 1; index > 0; index -= 1) {
+        const swapIndex = Math.floor(Math.random() * (index + 1));
+        [shuffled[index], shuffled[swapIndex]] = [shuffled[swapIndex], shuffled[index]];
+      }
+      return shuffled;
+    }
+
+    function getVocabListForDisplay() {
+      const source = [...(state.toeic.vocabList || [])];
+      if (vocabListSortMode === 'az') {
+        return source.sort((a, b) => String(a?.word || '').localeCompare(String(b?.word || ''), 'en', { sensitivity: 'base' }));
+      }
+      if (vocabListSortMode !== 'random') return source;
+
+      const currentKeys = source.map(vocabDisplayKey);
+      const currentKeySet = new Set(currentKeys);
+      const orderIsCurrent = vocabRandomOrder.length === currentKeys.length
+        && vocabRandomOrder.every(key => currentKeySet.has(key));
+      if (!orderIsCurrent) vocabRandomOrder = shuffleVocabItems(source).map(vocabDisplayKey);
+      const order = new Map(vocabRandomOrder.map((key, index) => [key, index]));
+      return source.sort((a, b) => (order.get(vocabDisplayKey(a)) ?? source.length) - (order.get(vocabDisplayKey(b)) ?? source.length));
+    }
+
+    function changeVocabListSort(mode) {
+      vocabListSortMode = ['recent', 'az', 'random'].includes(mode) ? mode : 'recent';
+      if (vocabListSortMode === 'random') vocabRandomOrder = shuffleVocabItems(state.toeic.vocabList || []).map(vocabDisplayKey);
+      const reshuffleButton = document.getElementById('reshuffleVocabListBtn');
+      if (reshuffleButton) reshuffleButton.classList.toggle('hidden', vocabListSortMode !== 'random');
+      renderVocabList();
+      if (typeof lucide !== 'undefined') lucide.createIcons();
+    }
+
+    function reshuffleVocabList() {
+      if (vocabListSortMode !== 'random') return;
+      vocabRandomOrder = shuffleVocabItems(state.toeic.vocabList || []).map(vocabDisplayKey);
+      renderVocabList();
+      if (typeof lucide !== 'undefined') lucide.createIcons();
+    }
+
     function renderVocabList() {
       const container = document.getElementById('vocabListContainer');
       document.getElementById('vocabTotalBadge').innerText = `${state.toeic.vocabList.length}`;
@@ -29932,7 +29980,7 @@ function updateVocabProgressBar() {
         container.innerHTML = `<p class="text-xs text-slate-500 py-4 text-center">單字庫為空</p>`;
         return;
       }
-      container.innerHTML = state.toeic.vocabList.map(v => `
+      container.innerHTML = getVocabListForDisplay().map(v => `
         <div class="bg-slate-950 border border-slate-800 rounded-xl p-2.5 flex justify-between items-center text-xs">
           <div>
             <span class="font-bold text-amber-400">${v.word}</span>
@@ -31334,14 +31382,32 @@ function checkSpellingAnswer() {
 
     function normalizeQuizItem(item) {
       if (Array.isArray(item)) {
-        return { word: item[0], pos: item[1], meaning: item[2], example: item[3] };
+        return {
+          word: String(item[0] || '').trim(),
+          pos: String(item[1] || 'n.').trim(),
+          meaning: String(item[2] || '').trim(),
+          example: String(item[3] || '').trim()
+        };
       }
       return {
-        word: item?.word || '',
-        pos: item?.pos || 'n.',
-        meaning: item?.meaning || '',
-        example: item?.example || ''
+        word: String(item?.word || '').trim(),
+        pos: String(item?.pos || 'n.').trim(),
+        meaning: String(item?.meaning || '').trim(),
+        example: String(item?.example || '').trim()
       };
+    }
+
+    function buildCombinedVocabQuizPool(officialSource = null, playerSource = null) {
+      const official = officialSource || ((typeof TOEIC_1000_RAW !== 'undefined' && Array.isArray(TOEIC_1000_RAW)) ? TOEIC_1000_RAW : []);
+      const playerWords = playerSource || (state.toeic.vocabList || []);
+      const deduplicated = new Map();
+      [...official, ...playerWords].forEach(rawItem => {
+        const item = normalizeQuizItem(rawItem);
+        const key = item.word.toLocaleLowerCase('en-US');
+        if (!key || !item.meaning || deduplicated.has(key)) return;
+        deduplicated.set(key, item);
+      });
+      return [...deduplicated.values()];
     }
 
     function ensureWrongAnswerStore() {
@@ -31408,9 +31474,7 @@ function checkSpellingAnswer() {
     // 啟動 10 題小考
     function startVocabQuizModal(mode = 'all') {
       quizSessionMode = mode;
-      const fullDb = (typeof TOEIC_1000_RAW !== 'undefined' && TOEIC_1000_RAW.length > 0)
-        ? TOEIC_1000_RAW
-        : (state.toeic.vocabList || []);
+      const fullDb = buildCombinedVocabQuizPool();
       const db = mode === 'wrong' ? ensureWrongAnswerStore() : fullDb;
 
       if (mode === 'all' && db.length < 10) {
@@ -31423,7 +31487,7 @@ function checkSpellingAnswer() {
       }
 
       // 一般測驗抽 10 題；錯題模式最多抽 10 題
-      const shuffledDb = [...db].sort(() => Math.random() - 0.5);
+      const shuffledDb = shuffleVocabItems(db);
       activeQuizList = shuffledDb.slice(0, Math.min(10, shuffledDb.length)).map(normalizeQuizItem);
 
       currentQuizStep = 0;
@@ -31471,12 +31535,10 @@ function renderQuizStep() {
   }
 
   // 產生 3 個干擾中文選項
-  const allDb = (typeof TOEIC_1000_RAW !== 'undefined' && TOEIC_1000_RAW.length > 0)
-    ? TOEIC_1000_RAW
-    : (state.toeic.vocabList || []);
+  const allDb = buildCombinedVocabQuizPool();
 
   const otherMeanings = allDb
-    .map(x => Array.isArray(x) ? x[2] : x.meaning)
+    .map(x => x.meaning)
     .filter(m => m && m !== current.meaning);
 
   // 隨機抽 3 個不同干擾項
