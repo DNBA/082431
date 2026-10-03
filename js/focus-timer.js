@@ -11,10 +11,7 @@
   function normalize(timer) {
     const source = timer && typeof timer === 'object' ? timer : {};
     const plannedDuration = Math.max(1000, finiteNumber(source.plannedDuration, DEFAULT_DURATION_MS));
-    const pausedAccumulatedMs = Math.min(
-      plannedDuration,
-      Math.max(0, finiteNumber(source.pausedAccumulatedMs, 0))
-    );
+    const pausedAccumulatedMs = Math.max(0, finiteNumber(source.pausedAccumulatedMs, 0));
     const validStatuses = new Set(['idle', 'running', 'paused', 'completed']);
     const status = validStatuses.has(source.status) ? source.status : 'idle';
 
@@ -24,6 +21,10 @@
       sessionStartAt: status === 'running' ? finiteNumber(source.sessionStartAt, null) : null,
       plannedDuration,
       pausedAccumulatedMs,
+      rewardedIntervals: Math.max(0, Math.floor(finiteNumber(
+        source.rewardedIntervals,
+        status === 'completed' ? 1 : 0
+      ))),
       completedAt: status === 'completed' ? finiteNumber(source.completedAt, null) : null
     };
   }
@@ -33,12 +34,15 @@
     const runningMs = normalized.status === 'running' && normalized.sessionStartAt !== null
       ? Math.max(0, finiteNumber(now, Date.now()) - normalized.sessionStartAt)
       : 0;
-    return Math.min(normalized.plannedDuration, normalized.pausedAccumulatedMs + runningMs);
+    return normalized.pausedAccumulatedMs + runningMs;
   }
 
   function remainingMs(timer, now = Date.now()) {
     const normalized = normalize(timer);
-    return Math.max(0, normalized.plannedDuration - elapsedMs(normalized, now));
+    if (normalized.status === 'idle') return normalized.plannedDuration;
+    const elapsed = elapsedMs(normalized, now);
+    const remainder = elapsed % normalized.plannedDuration;
+    return remainder === 0 && elapsed > 0 ? normalized.plannedDuration : normalized.plannedDuration - remainder;
   }
 
   function start(timer, now = Date.now(), sessionId = '') {
@@ -47,6 +51,7 @@
       normalized.pausedAccumulatedMs = 0;
       normalized.completedAt = null;
       normalized.sessionId = sessionId || normalized.sessionId;
+      normalized.rewardedIntervals = 0;
     }
     normalized.status = 'running';
     normalized.sessionStartAt = finiteNumber(now, Date.now());
@@ -58,7 +63,7 @@
     if (normalized.status !== 'running') return normalized;
     normalized.pausedAccumulatedMs = elapsedMs(normalized, now);
     normalized.sessionStartAt = null;
-    normalized.status = normalized.pausedAccumulatedMs >= normalized.plannedDuration ? 'completed' : 'paused';
+    normalized.status = 'paused';
     return normalized;
   }
 
@@ -75,13 +80,25 @@
     return normalize({ plannedDuration: durationMs });
   }
 
+  function completedIntervals(timer, now = Date.now()) {
+    const normalized = normalize(timer);
+    return Math.floor(elapsedMs(normalized, now) / normalized.plannedDuration);
+  }
+
   function recordCompletion(focusState, { sessionId, durationMs, dateKey, dailyRewardCap = 20 }) {
     const focus = focusState && typeof focusState === 'object' ? { ...focusState } : {};
     focus.totalFocusedMs = Math.max(0, finiteNumber(focus.totalFocusedMs, 0));
     focus.dailyFocusedMs = Math.max(0, finiteNumber(focus.dailyFocusedMs, 0));
     focus.rewardsClaimedToday = Math.max(0, finiteNumber(focus.rewardsClaimedToday, 0));
     focus.rewardedSessionIds = Array.isArray(focus.rewardedSessionIds) ? [...focus.rewardedSessionIds] : [];
+    focus.rewardCountsByDate = focus.rewardCountsByDate && typeof focus.rewardCountsByDate === 'object'
+      ? { ...focus.rewardCountsByDate }
+      : {};
     focus.dailyRewardCap = Math.max(1, finiteNumber(dailyRewardCap, 20));
+
+    if (focus.rewardsDate && !Number.isFinite(Number(focus.rewardCountsByDate[focus.rewardsDate]))) {
+      focus.rewardCountsByDate[focus.rewardsDate] = focus.rewardsClaimedToday;
+    }
 
     if (focus.dailyDate !== dateKey) {
       focus.dailyDate = dateKey;
@@ -101,12 +118,16 @@
     focus.rewardedSessionIds = focus.rewardedSessionIds.slice(-100);
     focus.totalFocusedMs += duration;
     focus.dailyFocusedMs += duration;
-    const rewardGranted = focus.rewardsClaimedToday < focus.dailyRewardCap;
-    if (rewardGranted) focus.rewardsClaimedToday += 1;
+    const dateRewardCount = Math.max(0, finiteNumber(focus.rewardCountsByDate[dateKey], 0));
+    const rewardGranted = dateRewardCount < focus.dailyRewardCap;
+    focus.rewardCountsByDate[dateKey] = dateRewardCount + (rewardGranted ? 1 : 0);
+    focus.rewardsClaimedToday = focus.rewardCountsByDate[dateKey];
+    const retainedDates = Object.keys(focus.rewardCountsByDate).sort().slice(-31);
+    focus.rewardCountsByDate = Object.fromEntries(retainedDates.map(key => [key, focus.rewardCountsByDate[key]]));
     return { focus, firstCompletion: true, rewardGranted };
   }
 
-  const api = { DEFAULT_DURATION_MS, normalize, elapsedMs, remainingMs, start, pause, complete, reset, recordCompletion };
+  const api = { DEFAULT_DURATION_MS, normalize, elapsedMs, remainingMs, completedIntervals, start, pause, complete, reset, recordCompletion };
   global.ToeicQuestFocusTimer = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);

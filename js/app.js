@@ -28531,6 +28531,7 @@ const defaultState = {
         sessionStartAt: null,
         plannedDuration: 25 * 60 * 1000,
         pausedAccumulatedMs: 0,
+        rewardedIntervals: 0,
         completedAt: null
       },
       focusMode: {
@@ -28540,6 +28541,7 @@ const defaultState = {
         dailyFocusedMs: 0,
         rewardsDate: '',
         rewardsClaimedToday: 0,
+        rewardCountsByDate: {},
         rewardedSessionIds: [],
         dailyRewardCap: 20
       },
@@ -30474,6 +30476,10 @@ playSound('click');
       focus.dailyFocusedMs = Math.max(0, Number(focus.dailyFocusedMs) || 0);
       focus.rewardsDate = typeof focus.rewardsDate === 'string' ? focus.rewardsDate : '';
       focus.rewardsClaimedToday = Math.max(0, Number(focus.rewardsClaimedToday) || 0);
+      focus.rewardCountsByDate = focus.rewardCountsByDate && typeof focus.rewardCountsByDate === 'object' ? focus.rewardCountsByDate : {};
+      if (focus.rewardsDate && focus.rewardCountsByDate[focus.rewardsDate] == null) {
+        focus.rewardCountsByDate[focus.rewardsDate] = focus.rewardsClaimedToday;
+      }
       focus.rewardedSessionIds = Array.isArray(focus.rewardedSessionIds) ? focus.rewardedSessionIds.slice(-100) : [];
       focus.dailyRewardCap = 20;
       resetDailyFocusCounters();
@@ -30488,7 +30494,7 @@ playSound('click');
       }
       if (focus.rewardsDate !== today) {
         focus.rewardsDate = today;
-        focus.rewardsClaimedToday = 0;
+        focus.rewardsClaimedToday = Math.max(0, Number(focus.rewardCountsByDate?.[today]) || 0);
       }
     }
 
@@ -30497,10 +30503,18 @@ playSound('click');
     }
 
     function formatTimerMs(milliseconds) {
-      const totalSeconds = Math.max(0, Math.ceil(milliseconds / 1000));
+      const totalSeconds = Math.max(0, Math.floor(milliseconds / 1000));
       const mins = Math.floor(totalSeconds / 60).toString().padStart(2, '0');
       const secs = (totalSeconds % 60).toString().padStart(2, '0');
       return `${mins}:${secs}`;
+    }
+
+    function getDateStringAt(timestamp) {
+      const d = new Date(timestamp);
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
     }
 
     function startPomodoroUiTicker() {
@@ -30565,74 +30579,75 @@ playSound('click');
         const expectedAt = new Date(now + remaining).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' });
         await showFocusSystemNotification(
           'ToeicQuest 專注進行中',
-          `預計 ${expectedAt} 完成。鎖屏後仍會依保存的時間戳正確結算。`
+          `下一張抽獎券預計 ${expectedAt} 達成；之後每 25 分鐘會繼續累積。`
         );
       } catch (error) {
         console.warn('Focus notification permission unavailable:', error);
       }
     }
 
-    function showFocusCompletionNotification() {
-      return showFocusSystemNotification('ToeicQuest 專注完成', '25 分鐘專注已完成，回到 ToeicQuest 查看本次進度。');
+    function showFocusCompletionNotification(count) {
+      return showFocusSystemNotification('ToeicQuest 專注獎勵', `已完成 ${count} 個 25 分鐘區段，計時會繼續累積。`);
     }
 
-    function completePomodoro(now = Date.now()) {
+    function settleFocusMilestones(now = Date.now()) {
       ensureFocusState();
       const timerApi = window.ToeicQuestFocusTimer;
-      if (state.pomodoro.status === 'completed') return false;
       const sessionId = state.pomodoro.sessionId || createFocusSessionId(now);
       state.pomodoro.sessionId = sessionId;
-      state.pomodoro = timerApi.complete(state.pomodoro, now);
+      const completedIntervals = timerApi.completedIntervals(state.pomodoro, now);
+      const alreadySettled = Math.max(0, Number(state.pomodoro.rewardedIntervals) || 0);
+      if (completedIntervals <= alreadySettled) return { completed: 0, rewarded: 0 };
 
-      const completion = timerApi.recordCompletion(state.focusMode, {
-        sessionId,
-        durationMs: state.pomodoro.plannedDuration,
-        dateKey: getTodayString(),
-        dailyRewardCap: 20
-      });
-      state.focusMode = completion.focus;
-      const rewardGranted = completion.rewardGranted;
-      if (completion.firstCompletion) {
-        checkAndResetDailyQuests();
-        state.dailyQuests.pomodoroDoneToday = (state.dailyQuests.pomodoroDoneToday || 0) + 1;
-        state.toeic.totalListening = (Number(state.toeic.totalListening) || 0) + Math.round(state.pomodoro.plannedDuration / 60000);
-
-        if (rewardGranted) {
+      let completed = 0;
+      let rewarded = 0;
+      let completedToday = 0;
+      for (let interval = alreadySettled + 1; interval <= completedIntervals; interval += 1) {
+        const msNeededInCurrentSegment = Math.max(0, interval * state.pomodoro.plannedDuration - state.pomodoro.pausedAccumulatedMs);
+        const achievedAt = state.pomodoro.status === 'running' && state.pomodoro.sessionStartAt
+          ? Math.min(now, state.pomodoro.sessionStartAt + msNeededInCurrentSegment)
+          : now;
+        const completion = timerApi.recordCompletion(state.focusMode, {
+          sessionId: `${sessionId}:interval:${interval}`,
+          durationMs: state.pomodoro.plannedDuration,
+          dateKey: getDateStringAt(achievedAt),
+          dailyRewardCap: 20
+        });
+        state.focusMode = completion.focus;
+        if (!completion.firstCompletion) continue;
+        completed += 1;
+        if (getDateStringAt(achievedAt) === getTodayString()) completedToday += 1;
+        if (completion.rewardGranted) {
+          rewarded += 1;
           state.tickets = (Number(state.tickets) || 0) + 1;
         }
       }
+      state.pomodoro.rewardedIntervals = completedIntervals;
+      resetDailyFocusCounters();
 
-      stopPomodoroUiTicker();
+      if (completed > 0) {
+        checkAndResetDailyQuests();
+        state.dailyQuests.pomodoroDoneToday = (state.dailyQuests.pomodoroDoneToday || 0) + completedToday;
+        state.toeic.totalListening = (Number(state.toeic.totalListening) || 0) + completed * 25;
+      }
       saveGame();
       updateTimerDisplay(now);
       renderAll();
       addNotification({
-        title: '⏱️ 專注學習達標！',
-        message: rewardGranted ? '完成 25 分鐘專注，獲得 1 張抽卡券。' : '完成 25 分鐘專注；今日專注獎勵已達上限。',
+        title: '⏱️ 專注時間已自動結算！',
+        message: rewarded > 0 ? `完成 ${completed * 25} 分鐘，獲得 ${rewarded} 張抽獎券；計時持續中。` : `完成 ${completed * 25} 分鐘；今日獎勵已達上限。`,
         icon: '🎯',
         type: 'system'
       });
-      showFocusCompletionNotification();
-      showRewardModal({
-        title: '🎉 專注學習達標！',
-        subtitle: '本次 25 分鐘已依實際經過時間完成。',
-        rewards: [
-          { icon: '⏱️', name: '有效專注時長', amount: '+25 分鐘' },
-          rewardGranted
-            ? { icon: '🎟️', name: '自律學習獎勵', amount: '+1 張抽卡券' }
-            : { icon: '🛡️', name: '每日獎勵上限', amount: `${state.focusMode.dailyRewardCap} / ${state.focusMode.dailyRewardCap}` }
-        ]
-      });
-      return true;
+      showToast(rewarded > 0 ? `🎟️ 專注獎勵 +${rewarded} 張抽獎券，計時持續中` : '今日專注獎勵已達 20 張上限', rewarded > 0 ? 'success' : 'info');
+      showFocusCompletionNotification(completed);
+      return { completed, rewarded };
     }
 
     function syncPomodoroFromClock(now = Date.now()) {
       ensureFocusState();
       const timerApi = window.ToeicQuestFocusTimer;
-      if (state.pomodoro.status === 'running' && timerApi.remainingMs(state.pomodoro, now) <= 0) {
-        completePomodoro(now);
-        return;
-      }
+      if (state.pomodoro.status === 'running') settleFocusMilestones(now);
       updateTimerDisplay(now);
       if (state.pomodoro.status === 'running') startPomodoroUiTicker();
       else stopPomodoroUiTicker();
@@ -30643,10 +30658,7 @@ playSound('click');
       const timerApi = window.ToeicQuestFocusTimer;
       const now = Date.now();
       if (state.pomodoro.status === 'running') {
-        if (timerApi.remainingMs(state.pomodoro, now) <= 0) {
-          completePomodoro(now);
-          return;
-        }
+        settleFocusMilestones(now);
         state.pomodoro = timerApi.pause(state.pomodoro, now);
         stopPomodoroUiTicker();
         clearFocusSystemNotification();
@@ -30665,10 +30677,7 @@ playSound('click');
     }
 
     function resetPomodoroTimer() {
-      if (state.pomodoro?.status === 'running' && window.ToeicQuestFocusTimer.remainingMs(state.pomodoro, Date.now()) <= 0) {
-        completePomodoro(Date.now());
-        return;
-      }
+      if (state.pomodoro?.status === 'running') settleFocusMilestones(Date.now());
       stopPomodoroUiTicker();
       clearFocusSystemNotification();
       state.pomodoro = window.ToeicQuestFocusTimer.reset();
@@ -30678,15 +30687,14 @@ playSound('click');
 
     function updateTimerDisplay(now = Date.now()) {
       if (!state.pomodoro) return;
-      const remaining = window.ToeicQuestFocusTimer.remainingMs(state.pomodoro, now);
-      const display = formatTimerMs(remaining);
+      const elapsed = window.ToeicQuestFocusTimer.elapsedMs(state.pomodoro, now);
+      const display = formatTimerMs(elapsed);
       ['timerDisplay', 'focusModeTimerDisplay', 'focusDockTimerDisplay'].forEach(id => {
         const element = document.getElementById(id);
         if (element) element.innerText = display;
       });
       const running = state.pomodoro.status === 'running';
-      const completed = state.pomodoro.status === 'completed';
-      const buttonLabel = running ? '暫停倒數' : (completed ? '再來一輪' : (state.pomodoro.status === 'paused' ? '繼續專注' : '開始專注'));
+      const buttonLabel = running ? '暫停計時' : (state.pomodoro.status === 'paused' ? '繼續專注' : '開始專注');
       const timerButton = document.getElementById('timerToggleBtn');
       const overlayButton = document.getElementById('focusOverlayTimerBtn');
       if (timerButton) timerButton.innerText = buttonLabel;
@@ -30744,13 +30752,10 @@ playSound('click');
       ensureFocusState();
       if (state.pomodoro.status === 'running') {
         const now = Date.now();
-        if (window.ToeicQuestFocusTimer.remainingMs(state.pomodoro, now) <= 0) {
-          completePomodoro(now);
-        } else {
-          state.pomodoro = window.ToeicQuestFocusTimer.pause(state.pomodoro, now);
-          stopPomodoroUiTicker();
-          clearFocusSystemNotification();
-        }
+        settleFocusMilestones(now);
+        state.pomodoro = window.ToeicQuestFocusTimer.pause(state.pomodoro, now);
+        stopPomodoroUiTicker();
+        clearFocusSystemNotification();
       }
       state.focusMode.active = false;
       isFocusPanelMinimized = false;
