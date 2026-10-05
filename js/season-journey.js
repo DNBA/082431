@@ -115,6 +115,7 @@
   let visualGameState = null;
   let visualEventTimer = null;
   let activeComic = null;
+  const badgeArtworkCache = new Map();
   let shootingChallenge = null;
   let defenseChallenge = null;
   let offenseChallenge = null;
@@ -822,10 +823,10 @@
       const seasons = [...j.history].reverse().slice(0, 5);
       legacyList.innerHTML = seasons.length ? seasons.map(h => `<div class="flex justify-between items-center rounded-xl bg-slate-950 border border-slate-800 px-3 py-2 text-xs"><span class="text-slate-400">Season ${h.season}</span><b class="text-white font-mono">${safeText(h.record)}</b></div>`).join('') : '<p class="text-xs text-slate-500 py-5 text-center">完成第一個賽季後，歷史會永久留在這裡。</p>';
     }
-    const allMoments = (state.inventory || []).flatMap(card => (card.badgeJourney?.moments || []).map(moment => ({ player: card.name, moment })));
+    const allMoments = (state.inventory || []).flatMap(card => (card.badgeJourney?.moments || []).map((moment, momentIndex) => ({ card, player: card.name, moment, momentIndex })));
     set('sjMomentCount', `${allMoments.length} unlocked`);
     const momentList = document.getElementById('sjMomentList');
-    if (momentList) momentList.innerHTML = allMoments.length ? allMoments.slice(-5).reverse().map(item => `<div class="rounded-xl bg-slate-950 border border-slate-800 px-3 py-2"><b class="text-xs text-amber-300">${safeText(item.moment.split(':').pop())}</b><span class="block text-[10px] text-slate-500 mt-0.5">${safeText(item.player)}</span></div>`).join('') : '<p class="text-xs text-slate-500 py-5 text-center">重要回合中觸發徽章，即可收藏漫畫 Moment。</p>';
+    if (momentList) momentList.innerHTML = allMoments.length ? allMoments.slice(-5).reverse().map(item => `<button type="button" class="sj-moment-replay" data-card-id="${safeText(item.card.cardId)}" data-moment-index="${item.momentIndex}" onclick="replayJourneyMoment(this.dataset.cardId, Number(this.dataset.momentIndex))"><span><b>${safeText(item.moment.split(':').pop())}</b><small>${safeText(item.player)}</small></span><em>▶ REPLAY</em></button>`).join('') : '<p class="text-xs text-slate-500 py-5 text-center">重要回合中觸發徽章，即可收藏 Badge Moment。</p>';
     const awardsSection = document.getElementById('sjAwardsSection');
     const awardsList = document.getElementById('sjAwardsList');
     const historicalAwards = [...(j.history || [])].reverse().find(entry => Array.isArray(entry.awards) && entry.awards.length)?.awards || [];
@@ -904,11 +905,11 @@
           </div>
         </div>
       </div>
-      <div id="sjComicModal" class="fixed inset-0 z-[150] hidden bg-black/95 p-3 sm:p-6 ios-safe-modal">
+      <div id="sjComicModal" class="fixed inset-0 z-[150] hidden p-3 sm:p-6 ios-safe-modal">
         <div class="max-w-2xl mx-auto h-full flex items-center justify-center">
-          <div class="w-full overflow-hidden rounded-3xl border border-amber-500/40 bg-slate-950 shadow-2xl">
-            <div id="sjComicPanel" class="sj-comic-panel p-5 sm:p-8 flex flex-col justify-between text-center"></div>
-            <button id="sjComicNext" onclick="nextComicPage()" class="w-full bg-amber-500 hover:bg-amber-400 text-slate-950 font-black py-4">下一頁</button>
+          <div class="sj-comic-shell">
+            <div id="sjComicPanel" class="sj-comic-panel"></div>
+            <button id="sjComicNext" onclick="nextComicPage()" class="sj-comic-next">下一幕</button>
           </div>
         </div>
       </div>
@@ -1936,38 +1937,181 @@
     if (autoStop) autoStop.classList.toggle('hidden', !autoMode.running);
   }
 
-  function openComic(moment) {
-    activeComic = { moment, page: 0 };
-    document.getElementById('sjComicModal').classList.remove('hidden');
-    renderComicPage();
+  function badgeCinemaTone(badgeName) {
+    if (badgeName === '曼巴精神') return 'mamba';
+    if (badgeName === '神射手') return 'shooting';
+    if (['木桶伯', '禁區大鎖', '小偷', '外線大鎖'].includes(badgeName)) return 'defense';
+    if (['組織大師', '無私', '助人為樂'].includes(badgeName)) return 'playmaking';
+    if (badgeName === '總決賽MVP') return 'champion';
+    return 'energy';
+  }
+
+  function buildBadgeCinemaSlides(moment) {
+    const pages = Array.isArray(moment.pages) ? moment.pages.filter(Boolean) : [];
+    return [
+      { label: 'TRIGGER', headline: pages[0] || `${moment.player} 觸發徽章`, detail: pages[1] || '關鍵回合開始。' },
+      { label: 'ACTION', headline: pages[2] || moment.title, detail: pages[3] || pages[1] || `${moment.player} 接管這個回合。` },
+      { label: 'IMPACT', headline: moment.impact || 'IMPACT!', detail: `${moment.player} 完成 ${moment.title}。` }
+    ];
+  }
+
+  function badgeArtworkCandidates(moment) {
+    const card = moment.card || {};
+    const nbaId = Number(card.nbaId || card.id || 0);
+    const sources = [];
+    if (nbaId === 977 || /Kobe Bryant/i.test(String(moment.player || card.name || ''))) {
+      sources.push('./assets/cards/player-art/kobe-mamba-v1.png');
+    }
+    if (nbaId && typeof getPlayerImgUrl === 'function') sources.push(getPlayerImgUrl(nbaId));
+    sources.push('./assets/players/featured-placeholder.svg');
+    return [...new Set(sources.filter(Boolean))];
+  }
+
+  function loadBadgeArtworkSource(src) {
+    return new Promise(resolve => {
+      const image = new Image();
+      let settled = false;
+      const finish = result => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        image.onload = null;
+        image.onerror = null;
+        resolve(result);
+      };
+      const timeout = setTimeout(() => finish(''), 6000);
+      image.onload = () => finish(image.naturalWidth > 0 ? src : '');
+      image.onerror = () => finish('');
+      image.src = src;
+    });
+  }
+
+  async function preloadBadgeArtwork(moment) {
+    const cacheKey = `${moment.card?.nbaId || moment.card?.id || moment.player || 'unknown'}`;
+    if (badgeArtworkCache.has(cacheKey)) return badgeArtworkCache.get(cacheKey);
+    for (const source of badgeArtworkCandidates(moment)) {
+      const loaded = await loadBadgeArtworkSource(source);
+      if (loaded) {
+        badgeArtworkCache.set(cacheKey, loaded);
+        return loaded;
+      }
+    }
+    badgeArtworkCache.set(cacheKey, '');
+    return '';
+  }
+
+  function badgeEffectCopy(moment) {
+    const points = Math.max(2, Number(moment.points || 2));
+    if (['木桶伯', '禁區大鎖', '小偷', '外線大鎖'].includes(moment.badge)) return `防守成功轉成反擊，本回合即時增加 ${points} 分。`;
+    if (moment.badge === '神射手') return `外線徽章發威，本回合即時增加 ${points} 分。`;
+    if (moment.badge === '曼巴精神') return `關鍵球接管比賽，本回合即時增加 ${points} 分。`;
+    return `徽章效果生效，本回合即時增加 ${points} 分。`;
   }
 
   function renderComicPage() {
     if (!activeComic) return;
-    const { moment, page } = activeComic;
-    const last = page === moment.pages.length - 1;
-    const nbaId = moment.card?.nbaId || 0;
-    const photoUrl = typeof getPlayerImgUrl === 'function' ? getPlayerImgUrl(nbaId) : '';
-    const photoTransform = page % 3 === 0 ? 'scale(1.08) translateX(-3%)' : (page % 3 === 1 ? 'scale(1.18) translateX(5%)' : 'scale(1.28) translateY(-2%)');
-    document.getElementById('sjComicPanel').innerHTML = `
-      <div class="flex justify-between text-[10px] font-black sj-kicker text-amber-400"><span>${safeText(moment.badge)}</span><span>${page + 1} / ${moment.pages.length}</span></div>
-      <div class="relative py-5 min-h-[330px] flex flex-col justify-end overflow-hidden">
-        <div class="absolute inset-0 flex items-center justify-center opacity-75 pointer-events-none">
-          ${photoUrl ? `<img src="${photoUrl}" alt="${safeText(moment.player)}" class="h-[310px] sm:h-[360px] max-w-none object-contain object-top drop-shadow-[0_18px_24px_rgba(0,0,0,.8)] transition-transform duration-500" style="transform:${photoTransform}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">` : ''}
-          <div class="${photoUrl ? 'hidden' : 'flex'} w-40 h-40 rounded-full bg-slate-900/80 border border-slate-700 items-center justify-center text-7xl">${moment.icon}</div>
+    const { moment, page, slides, imageSrc, imageStatus, replay } = activeComic;
+    const slide = slides[page];
+    const last = page === slides.length - 1;
+    const tone = badgeCinemaTone(moment.badge);
+    const progress = moment.card ? ensureBadgeProgress(moment.card, moment.badge) : { triggers: 0 };
+    const tier = badgeTierForTriggers(progress.triggers);
+    const progressPct = tier.next ? clamp(((progress.triggers - tier.min) / (tier.next - tier.min)) * 100, 0, 100) : 100;
+    const points = Math.max(2, Number(moment.points || 2));
+    const scoreBefore = Number(activeGame?.visual?.displayHomeScore);
+    const scorePreview = !replay && Number.isFinite(scoreBefore) ? `${scoreBefore} → ${scoreBefore + points}` : `+${points} PTS`;
+    const initials = String(moment.player || 'NBA').split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]).join('').toUpperCase();
+    const artClass = imageSrc ? '' : ' is-visible';
+    const loadingClass = imageStatus === 'loading' ? ' is-loading' : '';
+    const panel = document.getElementById('sjComicPanel');
+    if (!panel) return;
+    panel.innerHTML = `
+      <article class="sj-badge-cinema sj-badge-cinema--${tone} sj-badge-cinema--act-${page + 1}">
+        <header class="sj-badge-cinema__header">
+          <div><span>${safeText(moment.icon || '🏅')}</span><p>BADGE MOMENT</p><b>${safeText(moment.badge)}</b></div>
+          <div><strong>${safeText(tier.label)}級</strong><small>${page + 1} / ${slides.length}</small></div>
+        </header>
+        <div class="sj-badge-cinema__stage${loadingClass}">
+          <div class="sj-badge-cinema__fallback${artClass}" aria-hidden="true"><span>${safeText(moment.icon || '🏅')}</span><b>${safeText(initials || 'NBA')}</b></div>
+          ${imageSrc ? `<img class="sj-badge-cinema__player" src="${safeText(imageSrc)}" alt="${safeText(moment.player)}" onerror="handleJourneyBadgeArtError(this)">` : ''}
+          <div class="sj-badge-cinema__light" aria-hidden="true"></div>
+          <div class="sj-badge-cinema__copy">
+            <span>${safeText(slide.label)}</span>
+            <h3>${safeText(slide.headline)}</h3>
+            <p>${safeText(slide.detail)}</p>
+          </div>
+          ${last ? `<div class="sj-badge-cinema__impact"><div><span>IMPACT</span><strong>${safeText(scorePreview)}</strong></div><p>${safeText(badgeEffectCopy(moment))}</p></div>` : ''}
         </div>
-        <div class="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/25 to-transparent pointer-events-none"></div>
-        <div class="relative z-10"><p class="text-lg sm:text-2xl font-black text-white drop-shadow-lg">${safeText(moment.pages[page])}</p>${last ? `<div class="sj-impact mt-6 font-black italic text-amber-400 drop-shadow-[0_4px_0_rgba(0,0,0,.8)]">${safeText(moment.impact)}</div><div class="mt-3 text-xs tracking-[.22em] text-white font-black">${safeText(moment.title)}</div>` : ''}</div>
-      </div>
-      <div class="text-[10px] text-slate-500">${safeText(moment.player)} · Badge Moment</div>`;
-    document.getElementById('sjComicNext').textContent = last ? '回到比賽' : '下一頁';
+        <footer class="sj-badge-cinema__footer">
+          <div><span>${safeText(moment.player)}</span><b>${safeText(moment.title)}</b></div>
+          <div class="sj-badge-cinema__progress"><i><em style="width:${progressPct}%"></em></i><small>${tier.next ? `${progress.triggers} / ${tier.next} 次升級` : `${progress.triggers} 次 · 最高級`}</small></div>
+        </footer>
+      </article>`;
+    const nextButton = document.getElementById('sjComicNext');
+    if (nextButton) nextButton.textContent = last ? (replay ? '結束重播' : '套用效果並回到比賽') : '下一幕';
+  }
+
+  function openComic(moment, options = {}) {
+    const token = `${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    activeComic = {
+      moment,
+      page: 0,
+      slides: buildBadgeCinemaSlides(moment),
+      imageSrc: '',
+      imageStatus: 'loading',
+      replay: !!options.replay,
+      token
+    };
+    document.getElementById('sjComicModal')?.classList.remove('hidden');
+    renderComicPage();
+    preloadBadgeArtwork(moment).then(imageSrc => {
+      if (!activeComic || activeComic.token !== token) return;
+      activeComic.imageSrc = imageSrc;
+      activeComic.imageStatus = imageSrc ? 'ready' : 'fallback';
+      renderComicPage();
+    });
+  }
+
+  function handleJourneyBadgeArtError(image) {
+    image.style.display = 'none';
+    image.parentElement?.querySelector('.sj-badge-cinema__fallback')?.classList.add('is-visible');
+  }
+
+  function replayJourneyMoment(cardId, momentIndex) {
+    const card = (state.inventory || []).find(item => String(item.cardId) === String(cardId));
+    const savedMoment = card?.badgeJourney?.moments?.[Number(momentIndex)];
+    if (!card || !savedMoment) return;
+    const separator = savedMoment.indexOf(':');
+    const badgeName = separator >= 0 ? savedMoment.slice(0, separator) : '';
+    const title = separator >= 0 ? savedMoment.slice(separator + 1) : savedMoment;
+    const story = (BADGE_STORIES[badgeName] || []).find(item => item[0] === title) || (BADGE_STORIES[badgeName] || [])[0];
+    if (!story) {
+      if (typeof showToast === 'function') showToast('這個舊 Moment 暫時無法重播。', 'warning');
+      return;
+    }
+    const badge = (typeof getPlayerBadges === 'function' ? getPlayerBadges(card) : []).find(item => item.name === badgeName);
+    const moment = {
+      card,
+      cardId: card.cardId,
+      player: card.name,
+      badge: badgeName,
+      icon: badge?.icon || '🏅',
+      title: story[0],
+      impact: story[1],
+      pages: story.slice(2).map(line => line.replace(/\{player\}/g, card.name))
+    };
+    moment.tier = badgeTierInfo(card, badgeName).name;
+    moment.points = badgeMomentPoints(moment);
+    openComic(moment, { replay: true });
   }
 
   function nextComicPage() {
     if (!activeComic) return;
-    if (activeComic.page < activeComic.moment.pages.length - 1) { activeComic.page += 1; renderComicPage(); return; }
-    document.getElementById('sjComicModal').classList.add('hidden');
+    if (activeComic.page < activeComic.slides.length - 1) { activeComic.page += 1; renderComicPage(); return; }
+    const wasReplay = activeComic.replay;
+    document.getElementById('sjComicModal')?.classList.add('hidden');
     activeComic = null;
+    if (wasReplay) return;
     if (activeGame?.visual?.awaitingBadge) {
       resumeVisualAfterComic();
       return;
@@ -2502,6 +2646,8 @@
   window.selectJourneyPregameStrategy = selectJourneyPregameStrategy;
   window.selectJourneyHalftimeStrategy = selectJourneyHalftimeStrategy;
   window.nextComicPage = nextComicPage;
+  window.replayJourneyMoment = replayJourneyMoment;
+  window.handleJourneyBadgeArtError = handleJourneyBadgeArtError;
   window.showJourneyBoxScore = showJourneyBoxScore;
   window.selectAchievementBack = selectAchievementBack;
   window.grantSeasonEnergy = grantEnergy;
