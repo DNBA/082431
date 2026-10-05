@@ -4,6 +4,12 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 const root = path.resolve(__dirname, '..');
+const fixedNow = new Date('2026-10-03T12:00:00+08:00').getTime();
+
+class FixedDate extends Date {
+  constructor(...args) { super(...(args.length ? args : [fixedNow])); }
+  static now() { return fixedNow; }
+}
 
 function makeElement() {
   const classes = new Set();
@@ -44,7 +50,7 @@ function loadPlanner() {
   let id = 0;
   const context = {
     console,
-    Date,
+    Date: FixedDate,
     Math,
     Set,
     Map,

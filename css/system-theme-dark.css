@@ -1,0 +1,190 @@
+/* ToeicQuest system appearance
+   Follows iOS/macOS light and dark mode without changing card artwork or rarity colors. */
+:root {
+  color-scheme: light dark;
+  --tq-page: #f2f2f7;
+  --tq-surface: #ffffff;
+  --tq-surface-raised: #ffffff;
+  --tq-surface-muted: #f7f7fa;
+  --tq-control: #e9e9ee;
+  --tq-text: #111113;
+  --tq-text-soft: #3a3a3c;
+  --tq-muted: #6e6e73;
+  --tq-faint: #8e8e93;
+  --tq-line: #d9d9df;
+  --tq-overlay: rgba(0, 0, 0, .38);
+  --tq-shadow: 0 14px 38px rgba(18, 18, 23, .1);
+}
+
+html { background: var(--tq-page); }
+body {
+  background: var(--tq-page) !important;
+  color: var(--tq-text) !important;
+  transition: background-color 180ms ease, color 180ms ease;
+}
+
+:root {
+    --tq-page: #000000;
+    --tq-surface: #0a0a0a;
+    --tq-surface-raised: #111111;
+    --tq-surface-muted: #171717;
+    --tq-control: #1c1c1e;
+    --tq-text: #f5f5f7;
+    --tq-text-soft: #d1d1d6;
+    --tq-muted: #a1a1a6;
+    --tq-faint: #77777d;
+    --tq-line: #2c2c2e;
+    --tq-overlay: rgba(0, 0, 0, .76);
+    --tq-shadow: 0 16px 46px rgba(0,0,0,.5);
+    --v2-bg-deep: #000000;
+    --v2-bg-surface: #0a0a0a;
+    --v2-bg-elevated: #151515;
+    --v2-text-main: #f5f5f7;
+    --v2-text-muted: #a1a1a6;
+  }
+
+  /* Normalize legacy navy panels to iPhone-like black surfaces. */
+  :where(
+    [class~="bg-slate-950"], [class*="bg-slate-950/"],
+    [class~="bg-indigo-950"], [class*="bg-indigo-950/"]
+  ):not(
+    .normal-card-v2, .normal-card-v2 *,
+    .card-v2, .card-v2 *,
+    .player-dossier-v2, .player-dossier-v2 *,
+    .gacha-v2-opening-scene, .gacha-v2-opening-scene *,
+    .gacha-v2-result-scene, .gacha-v2-result-scene *
+  ) { background-color: #000 !important; }
+
+  :where(
+    [class~="bg-slate-900"], [class*="bg-slate-900/"],
+    [class~="bg-indigo-900"], [class*="bg-indigo-900/"]
+  ):not(
+    .normal-card-v2, .normal-card-v2 *,
+    .card-v2, .card-v2 *,
+    .player-dossier-v2, .player-dossier-v2 *,
+    .gacha-v2-opening-scene, .gacha-v2-opening-scene *,
+    .gacha-v2-result-scene, .gacha-v2-result-scene *
+  ) { background-color: var(--tq-surface) !important; }
+
+  :where([class~="bg-slate-800"], [class*="bg-slate-800/"]):not(
+    .normal-card-v2, .normal-card-v2 *, .card-v2, .card-v2 *, .player-dossier-v2, .player-dossier-v2 *
+  ) { background-color: var(--tq-control) !important; }
+
+  :where([class*="from-slate-"], [class*="via-slate-"], [class*="to-slate-"]):not(
+    .normal-card-v2, .normal-card-v2 *,
+    .card-v2, .card-v2 *,
+    .player-dossier-v2, .player-dossier-v2 *,
+    .gacha-v2-opening-scene, .gacha-v2-opening-scene *,
+    .gacha-v2-result-scene, .gacha-v2-result-scene *
+  ) {
+    background-image: none !important;
+    background-color: var(--tq-surface) !important;
+  }
+
+  :where([class~="border-slate-800"], [class*="border-slate-800/"], [class~="border-slate-700"], [class*="border-slate-700/"]):not(
+    .normal-card-v2, .normal-card-v2 *, .card-v2, .card-v2 *, .player-dossier-v2, .player-dossier-v2 *
+  ) { border-color: var(--tq-line) !important; }
+
+  input:not(.normal-card-v2 *):not(.card-v2 *),
+  select:not(.normal-card-v2 *):not(.card-v2 *),
+  textarea:not(.normal-card-v2 *):not(.card-v2 *) {
+    border-color: var(--tq-line) !important;
+    color: var(--tq-text) !important;
+    background-color: var(--tq-surface-muted) !important;
+  }
+
+  html,
+  body,
+  body[data-v2-active="home"],
+  .v2-home,
+  .v2-home-stage { background-color: #000 !important; }
+  #legacyHeader,
+  .v2-bottom-nav { background: rgba(0,0,0,.92) !important; border-color: #2c2c2e !important; }
+
+  /* Calendar was originally light-only; make every layer follow iOS dark mode. */
+  .study-planner {
+    --planner-ink: #f5f5f7;
+    --planner-muted: #a1a1a6;
+    --planner-line: #2c2c2e;
+    --planner-accent: #8d96ff;
+    color: var(--planner-ink) !important;
+    background: #050505 !important;
+    box-shadow: var(--tq-shadow) !important;
+  }
+  #plannerFocusCard,
+  .planner-trend-disclosure,
+  .planner-sheet {
+    border-color: var(--tq-line) !important;
+    color: var(--tq-text) !important;
+    background: var(--tq-surface) !important;
+    box-shadow: var(--tq-shadow) !important;
+  }
+  #plannerFocusCard h3,
+  .planner-detail-title,
+  .planner-task-row,
+  .planner-log-row,
+  .planner-quest-row,
+  .planner-toeic-record { color: var(--tq-text) !important; }
+  #plannerFocusCard p,
+  #plannerFocusCard #focusRewardStatus,
+  .planner-month-header p,
+  .planner-day-heading p,
+  .planner-day-section h3,
+  .planner-section-title > span,
+  .planner-task-row time,
+  .planner-task-row small,
+  .planner-toeic-record span,
+  .planner-detail-when,
+  .planner-detail-minutes,
+  .planner-detail-note,
+  .planner-empty { color: var(--tq-muted) !important; }
+  .planner-date { color: #d1d1d6 !important; }
+  .planner-date:hover,
+  .planner-date.is-selected { background: #1c1c1e !important; }
+  .planner-date.is-outside { color: #505054 !important; }
+  .planner-date.is-today .planner-date-number { color: #000 !important; background: #f5f5f7 !important; }
+  .planner-date.is-all-complete { background: #102619 !important; }
+  .planner-quest-row,
+  .planner-log-row,
+  .planner-task-row,
+  .planner-toeic-record { border-color: #232326 !important; }
+  .planner-today-complete { color: #95e1ad !important; background: #102619 !important; }
+  .planner-today-complete span { color: #78ad88 !important; }
+  .planner-checkin-button,
+  .planner-detail-actions button,
+  .planner-review-options button,
+  .planner-sheet-head button {
+    border-color: var(--tq-line) !important;
+    color: var(--tq-text-soft) !important;
+    background: var(--tq-control) !important;
+  }
+  .planner-sheet-backdrop { background: var(--tq-overlay) !important; }
+  .planner-sheet-handle { background: #3a3a3c !important; }
+  .planner-field input,
+  .planner-field select,
+  .planner-field textarea,
+  .planner-review-options input,
+  #plannerCheckinSheet #legacyStudyEntry [class*="bg-slate-950"],
+  #plannerCheckinSheet #legacyStudyEntry input[class*="bg-slate-900"] {
+    border-color: var(--tq-line) !important;
+    color: var(--tq-text) !important;
+    background: var(--tq-surface-muted) !important;
+  }
+  .planner-fab { color: #000 !important; background: #f5f5f7 !important; box-shadow: 0 12px 28px rgba(0,0,0,.5) !important; }
+  .planner-trend-disclosure[open] summary { border-color: var(--tq-line) !important; }
+  #legacyScoreTrend { border-color: var(--tq-line) !important; background: var(--tq-surface) !important; }
+
+/* Badge Moment is a cinematic surface: themes must never cover its player artwork. */
+#sjComicModal { background-color: rgba(0, 0, 0, .95) !important; }
+#sjComicModal > div > div { background-color: #020617 !important; }
+#sjComicPanel { color: #fff !important; background-color: #020617 !important; }
+#sjComicPanel [class*="bg-gradient-to-t"] {
+  background-color: transparent !important;
+  background-image: linear-gradient(to top, #020617, rgba(2, 6, 23, .25), transparent) !important;
+}
+#sjComicPanel .text-white { color: #fff !important; }
+#sjComicPanel img { visibility: visible; opacity: 1; }
+
+@media (prefers-reduced-motion: reduce) {
+  body { transition: none; }
+}

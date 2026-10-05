@@ -18,9 +18,7 @@
 
   <!-- 🤖 3. Android Chrome 偽 App 設定（隱藏網址列、主題顏色） -->
   <meta name="mobile-web-app-capable" content="yes">
-  <meta name="theme-color" content="#f2f2f7" media="(prefers-color-scheme: light)">
-  <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
-  <script src="./js/system-theme.js?v=20261003-system-theme-1"></script>
+  <meta id="tqThemeColor" name="theme-color" content="#000000">
 <script src="./data/toeic1000.js"></script>
 <script src="./data/player-stats-2025-26.js?v=20261001-1"></script>
   <script src="https://cdn.tailwindcss.com"></script>
@@ -36,7 +34,11 @@
     <link rel="stylesheet" href="./css/gacha-v2.css?v=20261003-mobile-flip-1">
     <link rel="stylesheet" href="./css/season-v2.css?v=20261003-season-interactions-2">
     <link rel="stylesheet" href="./css/study-planner.css?v=20261003-planner-3">
-    <link rel="stylesheet" href="./css/system-theme.css?v=20261003-system-theme-1">
+    <link rel="stylesheet" href="./css/theme-controls.css?v=20261005-theme-2">
+    <link id="tqThemeAuto" rel="stylesheet" href="./css/system-theme.css?v=20261005-theme-2">
+    <link id="tqThemeLight" rel="stylesheet" href="./css/system-theme-light.css?v=20261005-theme-2" media="not all" disabled>
+    <link id="tqThemeDark" rel="stylesheet" href="./css/system-theme-dark.css?v=20261005-theme-2" media="not all" disabled>
+    <script src="./js/system-theme.js?v=20261005-theme-2"></script>
 </head>
 <body data-v2-active="home" class="bg-slate-950 text-slate-100 min-h-screen pb-24 font-sans selection:bg-amber-500 selection:text-black">
 
@@ -53,9 +55,12 @@
             🔥 ON FIRE
           </span>
         </div>
-        <button id="adminBadge" onclick="adminUnlockAllPlayers()" class="hidden text-[9px] bg-red-600/30 border border-red-500 text-red-300 px-2 py-0.5 rounded-full font-bold font-mono">
-          ADMIN
-        </button>
+        <div class="flex items-center gap-1">
+          <button type="button" class="tq-theme-trigger tq-theme-trigger--legacy" onclick="openThemeMenu()"><span class="tq-theme-icon" aria-hidden="true">◐</span><span class="tq-theme-label">自動</span></button>
+          <button id="adminBadge" onclick="adminUnlockAllPlayers()" class="hidden text-[9px] bg-red-600/30 border border-red-500 text-red-300 px-2 py-0.5 rounded-full font-bold font-mono">
+            ADMIN
+          </button>
+        </div>
       </div>
 
       <!-- 第二排：防跑版緊湊數據欄（緊湊排列，防文字折行換行） -->
@@ -165,6 +170,7 @@
                 <option value="">自動選擇</option>
               </select>
             </label>
+            <button type="button" class="tq-theme-trigger tq-theme-trigger--hero" onclick="openThemeMenu()"><span class="tq-theme-icon" aria-hidden="true">◐</span><span class="tq-theme-label">自動</span></button>
           </div>
 
           <div class="v2-hero-player-wrap" aria-hidden="true">
