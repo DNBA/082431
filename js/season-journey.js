@@ -124,6 +124,7 @@
   let arenaMusicMuted = false;
   let energyTimer = null;
   let autoMode = { running: false, remaining: 0, timer: null };
+  let standingsConference = 'west';
 
   function now() { return Date.now(); }
   function clamp(n, min, max) { return Math.max(min, Math.min(max, n)); }
@@ -514,6 +515,7 @@
       if (!Array.isArray(game.moments)) game.moments = [];
       if (game.played && !game.analysis) game.analysis = null;
     });
+    window.SeasonStandings?.ensure(journey, typeof NBA_PLAYERS !== 'undefined' ? NBA_PLAYERS : []);
 
     if (!state.seasonEnergy || typeof state.seasonEnergy !== 'object') {
       state.seasonEnergy = { current: ENERGY_MAX, lastRegenAt: now() };
@@ -603,14 +605,44 @@
   }
 
   function rankLabel() {
-    const j = state.seasonJourney;
-    if (!j.gameIndex) return '尚未排名';
-    const pct = j.wins / j.gameIndex;
-    if (pct >= .72) return '西區第 1 名';
-    if (pct >= .64) return '西區第 2–3 名';
-    if (pct >= .56) return '西區第 4–6 名';
-    if (pct >= .46) return '西區第 7–10 名';
-    return '西區第 11–15 名';
+    return getJourneyStandings()?.rankLabel || '尚未排名';
+  }
+
+  function getJourneyStandings() {
+    return window.SeasonStandings?.view(state.seasonJourney, typeof NBA_PLAYERS !== 'undefined' ? NBA_PLAYERS : []) || null;
+  }
+
+  function selectJourneyConference(conference) {
+    if (!['west', 'east'].includes(conference)) return;
+    standingsConference = conference;
+    renderJourneyStandings();
+  }
+
+  function renderJourneyStandings() {
+    const view = getJourneyStandings();
+    if (!view) return;
+    const progress = document.getElementById('sjStandingsProgress');
+    if (progress) progress.textContent = `例行賽 ${view.round} / 82 場 · 每場結束後更新`;
+    document.querySelectorAll('[data-sj-conference-tab]').forEach(button => {
+      const active = button.dataset.sjConferenceTab === standingsConference;
+      button.setAttribute('aria-selected', String(active));
+      button.classList.toggle('is-active', active);
+    });
+    for (const conference of ['west', 'east']) {
+      const panel = document.getElementById(`sjStandings${conference === 'west' ? 'West' : 'East'}`);
+      const body = document.getElementById(`sjStandings${conference === 'west' ? 'West' : 'East'}Rows`);
+      if (panel) panel.dataset.active = String(standingsConference === conference);
+      if (!body) continue;
+      body.innerHTML = view.conferences[conference].map(team => {
+        const percentage = team.games ? team.percentage.toFixed(3).replace(/^0/, '') : '—';
+        const behind = team.rank === 1 || !view.round ? '—' : Number.isInteger(team.gamesBack) ? String(team.gamesBack) : team.gamesBack.toFixed(1);
+        return `<tr class="${team.isPlayer ? 'is-player' : ''}">
+          <td>${team.rank || '—'}</td>
+          <th scope="row"><span class="sj-standings-code">${team.isPlayer ? 'YOU' : team.code}</span><span class="sj-standings-team" title="${safeText(team.name)}">${safeText(team.name)}</span></th>
+          <td>${team.wins}</td><td>${team.losses}</td><td>${percentage}</td><td>${behind}</td>
+        </tr>`;
+      }).join('');
+    }
   }
 
   function getSeasonRoadSteps() {
@@ -727,6 +759,25 @@
           </div>
         </section>
 
+        <section class="sj-standings" aria-labelledby="sjStandingsTitle">
+          <div class="sj-standings-heading"><div><h3 id="sjStandingsTitle">分區動態排名</h3><p id="sjStandingsProgress"></p></div><span>STANDINGS</span></div>
+          <div class="sj-standings-tabs" role="tablist" aria-label="選擇分區">
+            <button type="button" role="tab" data-sj-conference-tab="west" onclick="selectJourneyConference('west')" aria-controls="sjStandingsWest" aria-selected="true">西區</button>
+            <button type="button" role="tab" data-sj-conference-tab="east" onclick="selectJourneyConference('east')" aria-controls="sjStandingsEast" aria-selected="false">東區</button>
+          </div>
+          <div class="sj-standings-grid">
+            <section id="sjStandingsWest" class="sj-standings-conference" data-active="true" aria-labelledby="sjStandingsWestTitle">
+              <h4 id="sjStandingsWestTitle">WEST · 西區 <small>NBA 15 隊＋你的球隊</small></h4>
+              <table aria-label="西區完整排名"><thead><tr><th scope="col">#</th><th scope="col">球隊</th><th scope="col">勝</th><th scope="col">敗</th><th scope="col">勝率</th><th scope="col" title="與榜首的勝差">勝差</th></tr></thead><tbody id="sjStandingsWestRows"></tbody></table>
+            </section>
+            <section id="sjStandingsEast" class="sj-standings-conference" data-active="false" aria-labelledby="sjStandingsEastTitle">
+              <h4 id="sjStandingsEastTitle">EAST · 東區 <small>NBA 15 隊</small></h4>
+              <table aria-label="東區完整排名"><thead><tr><th scope="col">#</th><th scope="col">球隊</th><th scope="col">勝</th><th scope="col">敗</th><th scope="col">勝率</th><th scope="col" title="與榜首的勝差">勝差</th></tr></thead><tbody id="sjStandingsEastRows"></tbody></table>
+            </section>
+          </div>
+          <p class="sj-standings-note">本遊戲賽季模擬排名。同勝率依勝場、場均淨勝分與球隊代碼排序。</p>
+        </section>
+
         <section class="bg-slate-900/80 border border-slate-800 rounded-3xl p-4 sm:p-5">
           <div class="flex justify-between items-center mb-3"><h3 class="text-xs font-black text-white sj-kicker">82-Game Tracker</h3><span id="sjRecord" class="text-sm font-mono font-black text-amber-400">0-0</span></div>
           <div id="gameGrid" class="grid grid-cols-8 sm:grid-cols-12 md:grid-cols-[repeat(21,minmax(0,1fr))] gap-1"></div>
@@ -772,7 +823,8 @@
     set('sjHomeName', j.teamName);
     set('sjHomeRecord', `${j.wins}-${j.losses}`);
     set('sjAwayName', game ? game.opponent : '—');
-    set('sjAwayRecord', game ? `${game.opponentWins}-${Math.max(0, game.game - 1 - game.opponentWins)}` : '—');
+    const opponentStanding = game ? getJourneyStandings()?.byOpponent(game.opponent) : null;
+    set('sjAwayRecord', opponentStanding ? `${opponentStanding.wins}-${opponentStanding.losses}` : '—');
     set('sjRank', rankLabel());
     set('sjRecent', j.recent.length ? j.recent.slice(-5).map(x => x.win ? 'W' : 'L').join(' ') : '—');
     set('sjMatchup', top.length >= 2 ? `${top[0].card.name} × ${game.opponent}` : '補齊先發');
@@ -848,6 +900,7 @@
     if (autoStatus) autoStatus.textContent = autoMode.running ? `剩餘 ${autoMode.remaining} 場` : '尚未啟動';
     if (autoBtn) autoBtn.textContent = autoMode.running ? '停止掛機' : '開始掛機';
     renderEnergy();
+    renderJourneyStandings();
   }
 
   function injectGameModal() {
@@ -2266,6 +2319,7 @@
     });
     triggerSpecialGameEvent(item, gameData, autoMode.running);
     if (j.gameIndex >= SEASON_LENGTH) completeRegularSeason();
+    window.SeasonStandings?.ensure(j, typeof NBA_PLAYERS !== 'undefined' ? NBA_PLAYERS : []);
     saveGame();
     const actions = document.getElementById('sjGameActions'); if (actions) actions.classList.add('hidden');
     const finals = document.getElementById('sjFinalActions'); if (finals) { finals.classList.remove('hidden'); finals.classList.add('grid'); }
@@ -2356,6 +2410,7 @@
       triggerSpecialGameEvent(item, gameData, true);
     }
     if (j.gameIndex >= SEASON_LENGTH && !j.completed) completeRegularSeason();
+    window.SeasonStandings?.ensure(j, typeof NBA_PLAYERS !== 'undefined' ? NBA_PLAYERS : []);
     saveGame(); renderAll();
     if (typeof showToast === 'function') showToast(`⚡ 管理員已模擬至 Game ${finalTarget}`, 'success');
   }
@@ -2440,6 +2495,7 @@
     state.season.threePtContestPlayed = false;
     state.season.threePtContestShooter = null;
     state.season.threePtContestScore = null;
+    window.SeasonStandings?.ensure(state.seasonJourney, typeof NBA_PLAYERS !== 'undefined' ? NBA_PLAYERS : []);
     saveGame();
     renderJourneySeasonTab();
     if (typeof showToast === 'function') showToast(`🏟️ Season ${state.seasonJourney.seasonNo} 正式開幕！`, 'success');
@@ -2631,6 +2687,8 @@
   }
 
   window.editJourneyTeamName = editJourneyTeamName;
+  window.getJourneyStandings = getJourneyStandings;
+  window.selectJourneyConference = selectJourneyConference;
   window.saveJourneyTeamName = saveJourneyTeamName;
   window.closeJourneyTeamName = closeJourneyTeamName;
   window.closeJourneyGame = closeJourneyGame;

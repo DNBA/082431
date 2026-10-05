@@ -116,6 +116,8 @@
   }
 
   function rankLabel(journey) {
+    const standing = typeof global.getJourneyStandings === 'function' ? global.getJourneyStandings() : null;
+    if (standing) return standing.rankLabel;
     const games = numberValue(journey?.gameIndex);
     if (!games) return '尚未排名';
     const pct = numberValue(journey.wins) / games;
@@ -168,6 +170,7 @@
     const game = journey?.schedule?.[Math.min(gameIndex, 81)] || null;
     const special = resolveSpecial(journey, game);
     const opponentWins = numberValue(game?.opponentWins);
+    const opponentStanding = typeof global.getJourneyStandings === 'function' ? global.getJourneyStandings()?.byOpponent(game?.opponent) : null;
     const opponentLosses = Math.max(0, numberValue(game?.game, 1) - 1 - opponentWins);
     const starters = getStarterEntries(gameState);
     const recentForm = Array.isArray(journey?.recent) && journey.recent.length
@@ -205,7 +208,7 @@
         homeRecord: `${numberValue(journey?.wins)}–${numberValue(journey?.losses)}`,
         awayName: game?.opponent || 'NEXT OPPONENT',
         awayCode: shortTeamCode(game?.opponent, 'NBA'),
-        awayRecord: game ? `${opponentWins}–${opponentLosses}` : '0–0',
+        awayRecord: opponentStanding ? `${opponentStanding.wins}–${opponentStanding.losses}` : (game ? `${opponentWins}–${opponentLosses}` : '0–0'),
         special: special ? `${special.icon} ${special.label}` : '',
         rank: rankLabel(journey),
         recent: recentForm,
