@@ -34,6 +34,7 @@
     <link rel="stylesheet" href="./css/gacha-v2.css?v=20261003-mobile-flip-1">
     <link rel="stylesheet" href="./css/season-v2.css?v=20261005-badge-cinema-1">
     <link rel="stylesheet" href="./css/study-planner.css?v=20261003-planner-3">
+    <link rel="stylesheet" href="./css/vocab-endless.css?v=20261005-endless-1">
     <link rel="stylesheet" href="./css/theme-controls.css?v=20261005-theme-2">
     <link id="tqThemeAuto" rel="stylesheet" href="./css/system-theme.css?v=20261005-theme-2">
     <link id="tqThemeLight" rel="stylesheet" href="./css/system-theme-light.css?v=20261005-theme-2" media="not all" disabled>
@@ -692,6 +693,9 @@
 <button onclick="startVocabQuizModal()" type="button" class="flex items-center gap-1.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 text-slate-950 text-xs font-black px-3.5 py-1.5 rounded-xl shadow transition cursor-pointer">
   <i data-lucide="award" class="w-3.5 h-3.5"></i> 單字測驗
 </button>
+<button onclick="startEndlessVocabChallenge()" type="button" class="endless-quiz-launch flex items-center gap-1.5 text-xs font-black px-3.5 py-1.5 rounded-xl shadow transition cursor-pointer">
+  <span aria-hidden="true">⚡</span> 無盡挑戰
+</button>
         </div>
 
         <div class="flex items-center justify-end gap-2">
@@ -1308,6 +1312,12 @@
       <div id="quizProgressBar" class="bg-gradient-to-r from-amber-500 to-orange-500 h-1.5 transition-all duration-300" style="width: 10%;"></div>
     </div>
 
+    <div id="endlessQuizHud" class="endless-quiz-hud hidden" aria-live="polite">
+      <div><span>剩餘</span><strong id="endlessTimerText">5.0</strong><small>秒</small></div>
+      <div><span>本局</span><strong id="endlessRewardText">0 💎 · 0 🎟️</strong></div>
+      <div><span>最高</span><strong id="endlessBestText">0 關</strong></div>
+    </div>
+
     <!-- 單字題目區 -->
     <div class="my-4">
       <span id="quizWordPos" class="text-[10px] font-mono font-bold text-emerald-400 bg-emerald-950/80 border border-emerald-700/50 px-2 py-0.5 rounded-full">n.</span>
@@ -1324,6 +1334,16 @@
     </div>
 
     <div id="quizAnswerFeedback" class="hidden mt-3 text-left bg-slate-950/80 border border-slate-800 rounded-2xl p-3 text-xs leading-relaxed"></div>
+
+    <div id="endlessResultOverlay" class="endless-result hidden" role="status">
+      <div class="endless-result__icon">🏁</div>
+      <p class="endless-result__eyebrow">CHALLENGE OVER</p>
+      <h3 id="endlessResultTitle">通過 0 關</h3>
+      <p id="endlessResultReason"></p>
+      <div id="endlessResultRewards" class="endless-result__rewards"></div>
+      <button onclick="startEndlessVocabChallenge()" type="button" class="endless-result__restart">再挑戰一次</button>
+      <button onclick="closeVocabQuizModal()" type="button" class="endless-result__quit">返回單字庫</button>
+    </div>
 
     <!-- 📱 底部退出按鈕 -->
     <button onclick="closeVocabQuizModal()" type="button" class="w-full mt-4 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold py-3.5 rounded-2xl text-xs transition cursor-pointer active:scale-98 border border-slate-700/60 flex items-center justify-center gap-1.5">
@@ -1374,7 +1394,7 @@
 
   <script src="./js/ui-v2/position-utils.js"></script>
   <script src="./js/focus-timer.js?v=20261003-split-focus-2"></script>
-  <script src="./js/app.js?v=20261003-study-planner-3"></script>
+  <script src="./js/app.js?v=20261005-endless-1"></script>
 <!-- 🏀 季後賽逐場動態播報彈窗 -->
 <div id="playoffSeriesModal" onclick="if(event.target === this && !document.getElementById('posNextRoundBtn').disabled) closeSeriesAndShowBoxScore()" class="fixed inset-0 bg-slate-950/90 backdrop-blur-md z-50 hidden flex items-end sm:items-center justify-center p-3 sm:p-4 ios-safe-modal">
   <div class="bg-slate-900 border border-amber-500/50 rounded-3xl w-full max-w-lg p-6 shadow-2xl space-y-4 relative animate-modal-in">

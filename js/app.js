@@ -28595,6 +28595,8 @@ dailyQuests: {
         totalReading: 0,
         vocabList: [...TOEIC_WORDS],
         wrongAnswers: [],
+        endlessBest: 0,
+        endlessBestAt: '',
         currentQuizIndex: 0,
         quizStreak: 0,
         totalMastered: 0,
@@ -28675,6 +28677,9 @@ function saveGame() {
       if (!Array.isArray(s.studyActivityDates)) s.studyActivityDates = [];
       s.studyStreak = Math.max(0, Number(s.studyStreak) || 0);
       s.studyStreakLastDate = typeof s.studyStreakLastDate === 'string' ? s.studyStreakLastDate : '';
+      if (!s.toeic || typeof s.toeic !== 'object') s.toeic = { ...defaultState.toeic };
+      s.toeic.endlessBest = Math.max(0, Number(s.toeic.endlessBest) || 0);
+      s.toeic.endlessBestAt = typeof s.toeic.endlessBestAt === 'string' ? s.toeic.endlessBestAt : '';
 
       // One-time owner recovery after the legacy deep merge removed dated studyDetails.
       // Only applies to an admin save and never overwrites an existing record.
@@ -31494,6 +31499,61 @@ function checkSpellingAnswer() {
     let isQuizAnswering = false;
     let quizSessionMode = 'all';
     let sessionWrongAnswers = [];
+    const ENDLESS_QUESTION_MS = 5000;
+    let endlessTimerId = null;
+    let endlessDeadlineAt = 0;
+    let endlessTicketsEarned = 0;
+    let endlessRunEnded = false;
+    let quizAdvanceTimerId = null;
+
+    function clearEndlessQuizTimers() {
+      if (endlessTimerId) window.clearInterval(endlessTimerId);
+      if (quizAdvanceTimerId) window.clearTimeout(quizAdvanceTimerId);
+      endlessTimerId = null;
+      quizAdvanceTimerId = null;
+      endlessDeadlineAt = 0;
+    }
+
+    function setEndlessUiVisible(visible) {
+      document.getElementById('endlessQuizHud')?.classList.toggle('hidden', !visible);
+      document.getElementById('quizProgressBar')?.classList.remove('endless-timer-danger');
+      if (!visible) document.getElementById('endlessResultOverlay')?.classList.add('hidden');
+    }
+
+    function updateEndlessRewardHud() {
+      const rewardEl = document.getElementById('endlessRewardText');
+      const bestEl = document.getElementById('endlessBestText');
+      if (rewardEl) rewardEl.innerText = `${quizScore} 💎 · ${endlessTicketsEarned} 🎟️`;
+      if (bestEl) bestEl.innerText = `${Math.max(Number(state.toeic.endlessBest) || 0, quizScore)} 關`;
+    }
+
+    function startEndlessQuestionTimer() {
+      if (quizSessionMode !== 'endless' || endlessRunEnded) return;
+      if (endlessTimerId) window.clearInterval(endlessTimerId);
+      endlessDeadlineAt = Date.now() + ENDLESS_QUESTION_MS;
+      const timerText = document.getElementById('endlessTimerText');
+      const progress = document.getElementById('quizProgressBar');
+      const update = () => {
+        const remaining = Math.max(0, endlessDeadlineAt - Date.now());
+        if (timerText) timerText.innerText = (remaining / 1000).toFixed(1);
+        if (progress) {
+          progress.style.width = `${(remaining / ENDLESS_QUESTION_MS) * 100}%`;
+          progress.classList.toggle('endless-timer-danger', remaining <= 1800);
+        }
+        if (remaining <= 0) handleEndlessTimeout();
+      };
+      update();
+      endlessTimerId = window.setInterval(update, 50);
+    }
+
+    function refillEndlessQuizPool() {
+      const previousWord = activeQuizList[currentQuizStep - 1]?.word || '';
+      activeQuizList = shuffleVocabItems(buildCombinedVocabQuizPool()).map(normalizeQuizItem);
+      if (activeQuizList.length > 1 && activeQuizList[0].word === previousWord) {
+        [activeQuizList[0], activeQuizList[1]] = [activeQuizList[1], activeQuizList[0]];
+      }
+      currentQuizStep = 0;
+    }
 
     function normalizeQuizItem(item) {
       if (Array.isArray(item)) {
@@ -31588,6 +31648,7 @@ function checkSpellingAnswer() {
 
     // 啟動 10 題小考
     function startVocabQuizModal(mode = 'all') {
+      clearEndlessQuizTimers();
       quizSessionMode = mode;
       const fullDb = buildCombinedVocabQuizPool();
       const db = mode === 'wrong' ? ensureWrongAnswerStore() : fullDb;
@@ -31609,10 +31670,36 @@ function checkSpellingAnswer() {
       quizScore = 0;
       isQuizAnswering = false;
       sessionWrongAnswers = [];
+      endlessRunEnded = false;
+      setEndlessUiVisible(false);
 
       document.getElementById('vocabQuizModal').classList.remove('hidden');
       const modeLabel = document.getElementById('quizModeLabel');
       if (modeLabel) modeLabel.innerText = mode === 'wrong' ? 'WRONG ANSWER REVIEW' : 'TOEIC QUIZ';
+      renderQuizStep();
+    }
+
+    function startEndlessVocabChallenge() {
+      const db = buildCombinedVocabQuizPool();
+      if (db.length < 4) {
+        showToast('⚠️ 無盡挑戰至少需要 4 個不同單字。', 'warning');
+        return;
+      }
+      clearEndlessQuizTimers();
+      quizSessionMode = 'endless';
+      activeQuizList = shuffleVocabItems(db).map(normalizeQuizItem);
+      currentQuizStep = 0;
+      quizScore = 0;
+      endlessTicketsEarned = 0;
+      endlessRunEnded = false;
+      isQuizAnswering = false;
+      sessionWrongAnswers = [];
+      document.getElementById('vocabQuizModal').classList.remove('hidden');
+      document.getElementById('endlessResultOverlay')?.classList.add('hidden');
+      const modeLabel = document.getElementById('quizModeLabel');
+      if (modeLabel) modeLabel.innerText = '⚡ ENDLESS · 5 秒生存戰';
+      setEndlessUiVisible(true);
+      updateEndlessRewardHud();
       renderQuizStep();
     }
 
@@ -31623,14 +31710,20 @@ function checkSpellingAnswer() {
     }
 
 function closeVocabQuizModal() {
+  clearEndlessQuizTimers();
+  endlessRunEnded = true;
   document.getElementById('vocabQuizModal').classList.add('hidden');
 }
 
 // 渲染當前題目
 function renderQuizStep() {
   if (currentQuizStep >= activeQuizList.length) {
+    if (quizSessionMode === 'endless') {
+      refillEndlessQuizPool();
+    } else {
     finishVocabQuiz();
     return;
+    }
   }
 
   isQuizAnswering = false;
@@ -31638,8 +31731,12 @@ function renderQuizStep() {
 
   // 更新進度與題目
   const totalQuestions = activeQuizList.length;
-  document.getElementById('quizProgressText').innerText = `第 ${currentQuizStep + 1} / ${totalQuestions} 題`;
-  document.getElementById('quizProgressBar').style.width = `${((currentQuizStep + 1) / totalQuestions) * 100}%`;
+  document.getElementById('quizProgressText').innerText = quizSessionMode === 'endless'
+    ? `第 ${quizScore + 1} 關`
+    : `第 ${currentQuizStep + 1} / ${totalQuestions} 題`;
+  document.getElementById('quizProgressBar').style.width = quizSessionMode === 'endless'
+    ? '100%'
+    : `${((currentQuizStep + 1) / totalQuestions) * 100}%`;
   document.getElementById('quizWordPos').innerText = current.pos || 'n.';
   document.getElementById('quizQuestionWord').innerText = current.word;
   document.getElementById('quizQuestionExample').innerText = current.example ? `"${current.example}"` : '';
@@ -31676,11 +31773,18 @@ function renderQuizStep() {
   `).join('');
 
   lucide.createIcons();
+  if (quizSessionMode === 'endless') startEndlessQuestionTimer();
 }
 
 // 判定答案
 function handleQuizAnswer(btn, chosenEncoded, correctEncoded) {
   if (isQuizAnswering) return;
+  // The interval is only visual. This guard makes a tap after the real five-second
+  // deadline lose even if Safari delayed the visual timer while in the background.
+  if (quizSessionMode === 'endless' && endlessDeadlineAt && Date.now() >= endlessDeadlineAt) {
+    handleEndlessTimeout();
+    return;
+  }
   isQuizAnswering = true;
 
   const chosen = decodeURIComponent(chosenEncoded);
@@ -31690,10 +31794,24 @@ function handleQuizAnswer(btn, chosenEncoded, correctEncoded) {
   const feedback = document.getElementById('quizAnswerFeedback');
   const allBtns = document.querySelectorAll('#quizOptionsContainer button');
   allBtns.forEach(button => { button.disabled = true; });
+  if (quizSessionMode === 'endless' && endlessTimerId) {
+    window.clearInterval(endlessTimerId);
+    endlessTimerId = null;
+  }
 
   // 樣式回饋：正確綠色、錯誤紅色
   if (isCorrect) {
     quizScore++;
+    if (quizSessionMode === 'endless') {
+      state.scoutPoints = (Number(state.scoutPoints) || 0) + 1;
+      if (quizScore % 10 === 0) {
+        const milestoneTickets = quizScore / 10;
+        state.tickets = (Number(state.tickets) || 0) + milestoneTickets;
+        endlessTicketsEarned += milestoneTickets;
+        showToast(`🎟️ 通過第 ${quizScore} 關，里程碑獎勵 +${milestoneTickets} 張！`, 'success');
+      }
+      updateEndlessRewardHud();
+    }
     recordCorrectReview(current);
     btn.classList.remove('bg-slate-950', 'border-slate-700');
     btn.classList.add('bg-emerald-950/80', 'border-emerald-500', 'text-emerald-300');
@@ -31735,11 +31853,79 @@ function handleQuizAnswer(btn, chosenEncoded, correctEncoded) {
 
   saveGame();
 
+  if (quizSessionMode === 'endless') {
+    if (!isCorrect) {
+      quizAdvanceTimerId = window.setTimeout(() => finishEndlessChallenge('wrong'), 750);
+      return;
+    }
+    quizAdvanceTimerId = window.setTimeout(() => {
+      currentQuizStep++;
+      renderQuizStep();
+    }, 360);
+    return;
+  }
+
   // 留出閱讀正解與例句的時間，再進入下一題
-  setTimeout(() => {
+  quizAdvanceTimerId = window.setTimeout(() => {
     currentQuizStep++;
     renderQuizStep();
   }, isCorrect ? 1300 : 2200);
+}
+
+function handleEndlessTimeout() {
+  if (quizSessionMode !== 'endless' || endlessRunEnded || isQuizAnswering) return;
+  isQuizAnswering = true;
+  if (endlessTimerId) window.clearInterval(endlessTimerId);
+  endlessTimerId = null;
+  const current = activeQuizList[currentQuizStep];
+  if (current) recordWrongAnswer(current, '逾時');
+  document.querySelectorAll('#quizOptionsContainer button').forEach(button => {
+    button.disabled = true;
+    if (decodeURIComponent(button.dataset.answer || '') === current?.meaning) {
+      button.classList.remove('bg-slate-950', 'border-slate-700');
+      button.classList.add('bg-emerald-950/80', 'border-emerald-500', 'text-emerald-300');
+      const badge = button.querySelector('.quiz-badge');
+      if (badge) badge.innerText = '✅ 正解';
+    }
+  });
+  playSound('buzz');
+  saveGame();
+  quizAdvanceTimerId = window.setTimeout(() => finishEndlessChallenge('timeout'), 550);
+}
+
+function finishEndlessChallenge(reason) {
+  if (endlessRunEnded) return;
+  endlessRunEnded = true;
+  clearEndlessQuizTimers();
+  const previousBest = Number(state.toeic.endlessBest) || 0;
+  const isNewBest = quizScore > previousBest;
+  if (isNewBest) {
+    state.toeic.endlessBest = quizScore;
+    state.toeic.endlessBestAt = new Date().toISOString();
+  }
+  if (typeof window.recordPlannerQuizLog === 'function') {
+    window.recordPlannerQuizLog({
+      title: '無盡單字挑戰',
+      type: 'vocab',
+      score: quizScore,
+      totalQuestions: quizScore + 1,
+      sourceType: 'vocab'
+    });
+  }
+  saveGame();
+  renderAll();
+  const overlay = document.getElementById('endlessResultOverlay');
+  const title = document.getElementById('endlessResultTitle');
+  const reasonEl = document.getElementById('endlessResultReason');
+  const rewardsEl = document.getElementById('endlessResultRewards');
+  if (title) title.innerText = `${isNewBest ? '🏆 新紀錄 · ' : ''}通過 ${quizScore} 關`;
+  if (reasonEl) reasonEl.innerText = reason === 'timeout' ? `第 ${quizScore + 1} 關時間到` : `第 ${quizScore + 1} 關答錯了`;
+  if (rewardsEl) rewardsEl.innerHTML = `
+    <span><b>+${quizScore}</b> 💎 碎片</span>
+    <span><b>+${endlessTicketsEarned}</b> 🎟️ 抽獎券</span>
+    <span><b>${Math.max(previousBest, quizScore)}</b> 🏁 最高關卡</span>
+  `;
+  overlay?.classList.remove('hidden');
 }
 
 // 測驗結束結算
