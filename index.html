@@ -35,6 +35,7 @@
     <link rel="stylesheet" href="./css/season-v2.css?v=20261005-badge-cinema-1">
     <link rel="stylesheet" href="./css/study-planner.css?v=20261003-planner-3">
     <link rel="stylesheet" href="./css/vocab-endless.css?v=20261005-endless-1">
+    <link rel="stylesheet" href="./css/learning-tools.css?v=20261005-learning-1">
     <link rel="stylesheet" href="./css/theme-controls.css?v=20261005-theme-2">
     <link id="tqThemeAuto" rel="stylesheet" href="./css/system-theme.css?v=20261005-theme-2">
     <link id="tqThemeLight" rel="stylesheet" href="./css/system-theme-light.css?v=20261005-theme-2" media="not all" disabled>
@@ -102,6 +103,7 @@
 
             <!-- 下拉選單 -->
             <div id="topDropdownMenu" class="hidden absolute right-0 mt-2 w-44 bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl p-1.5 z-50 space-y-1 text-xs font-sans">
+              <button onclick="closeTopMenu(); openSaveTools();" type="button" class="w-full px-2.5 py-2 rounded-xl font-bold text-slate-300 text-left">💾 備份與換機</button>
               <button onclick="closeTopMenu(); openUpgradeModal();" type="button" class="w-full flex items-center justify-between px-2.5 py-2 rounded-xl font-bold text-indigo-300 hover:bg-indigo-950/60 active:bg-indigo-900 transition cursor-pointer">
                 <span class="flex items-center gap-2"><i data-lucide="star" class="w-3.5 h-3.5"></i> 升星所</span>
                 <span class="text-[10px] text-slate-500 font-mono">突破</span>
@@ -215,6 +217,7 @@
       </div>
 
       <div class="v2-home-lower">
+        <button id="nextStudyPrompt" type="button" class="next-study hidden" onclick="openNextStudyTask()"><span>NEXT STUDY</span><strong id="nextStudyTitle"></strong><small id="nextStudyMeta"></small></button>
         <section class="v2-home-summary" aria-labelledby="v2NewsTitle">
           <div class="v2-summary-heading"><span aria-hidden="true">✨</span><h2 id="v2NewsTitle">LEAGUE NEWS</h2></div>
           <div id="v2LeagueNews" class="v2-news-list"><p>新賽季即將開始。</p></div>
@@ -698,7 +701,9 @@
 </button>
         </div>
 
-        <div class="flex items-center justify-end gap-2">
+        <div class="flex items-center justify-end gap-2 flex-wrap">
+          <button type="button" onclick="openLearningProgress()" class="learning-inline-button">學習紀錄</button>
+          <button type="button" onclick="openSaveTools()" class="learning-inline-button">備份與換機</button>
           <label for="vocabListSort" class="text-[10px] font-bold text-slate-500">顯示順序</label>
           <select id="vocabListSort" onchange="changeVocabListSort(this.value)" class="bg-slate-950 border border-slate-700 text-slate-200 px-2.5 py-2 rounded-xl text-xs font-bold focus:outline-none focus:border-indigo-500">
             <option value="recent">最近新增</option>
@@ -780,6 +785,7 @@
 
           <div class="planner-day-section">
             <div class="planner-section-title"><h3>MY PLAN</h3><span id="plannerPlanCount">0 PLAN</span></div>
+            <div class="planner-quick-actions"><button type="button" onclick="copyPlannerPreviousDay()">複製前一天計畫</button><button type="button" onclick="movePlannerUnfinishedToTomorrow()">未完成移到明天</button><button type="button" onclick="openLearningProgress()">學習紀錄</button><button type="button" onclick="openSaveTools()">備份與換機</button></div>
             <div id="plannerTaskList" class="planner-task-list"></div>
           </div>
 
@@ -795,7 +801,7 @@
           </div>
 
           <div id="plannerTodayComplete" class="planner-today-complete hidden">
-            <strong>TODAY COMPLETE ✓</strong>
+            <strong id="plannerCompleteTitle">TODAY COMPLETE ✓</strong>
             <span id="plannerTodayCompleteMeta">0 / 0 PLANS FINISHED</span>
           </div>
         </section>
@@ -816,6 +822,13 @@
             <label class="planner-field"><span>類型</span><select id="plannerTaskType"><option value="study">📖 學習</option><option value="review">🔁 複習</option><option value="homework">✏️ 作業</option><option value="test">📝 測驗</option><option value="vocab">🔤 單字</option><option value="phrase">💬 片語</option></select></label>
             <label class="planner-field planner-field-wide"><span>提醒</span><select id="plannerTaskReminder"><option value="0">準時</option><option value="5">5 分鐘前</option><option value="10">10 分鐘前</option><option value="30">30 分鐘前</option><option value="60">1 小時前</option><option value="-1">不提醒</option></select></label>
             <label class="planner-field planner-field-wide"><span>備註</span><textarea id="plannerTaskNote" rows="3" maxlength="240" placeholder="選填"></textarea></label>
+            <label class="planner-field planner-field-wide"><span>每週固定時間</span><select id="plannerTaskRepeat" onchange="togglePlannerRepeatFields()"><option value="none">只安排這一次</option><option value="weekly">另外建立每週行程</option></select></label>
+            <div id="plannerRepeatFields" class="planner-field planner-field-wide hidden">
+              <span>重複星期</span>
+              <div id="plannerRepeatOptions"><label><input type="checkbox" name="plannerRepeatWeekday" value="0">日</label><label><input type="checkbox" name="plannerRepeatWeekday" value="1">一</label><label><input type="checkbox" name="plannerRepeatWeekday" value="2">二</label><label><input type="checkbox" name="plannerRepeatWeekday" value="3">三</label><label><input type="checkbox" name="plannerRepeatWeekday" value="4">四</label><label><input type="checkbox" name="plannerRepeatWeekday" value="5">五</label><label><input type="checkbox" name="plannerRepeatWeekday" value="6">六</label></div>
+              <label class="planner-field"><span>重複到（最長一年）</span><input id="plannerTaskRepeatUntil" type="date"></label>
+              <p class="planner-reminder-note">每筆行程都可單獨編輯、刪除；已完成的行程不會被重複建立。</p>
+            </div>
             <p class="planner-reminder-note planner-field-wide">提醒會在 ToeicQuest 網頁／PWA 開啟時檢查；純網頁無法保證 App 完全關閉後仍通知。</p>
             <button class="planner-primary planner-field-wide" type="submit">儲存行程</button>
           </form>
@@ -829,6 +842,7 @@
           <p id="plannerDetailMinutes" class="planner-detail-minutes">預計 30 MIN</p>
           <p id="plannerDetailNote" class="planner-detail-note"></p>
           <button id="plannerStartFocusBtn" class="planner-focus-button" type="button">START FOCUS</button>
+          <button id="plannerStartQuizBtn" class="planner-focus-button planner-start-quiz hidden" type="button">START QUIZ · 複習指定單字</button>
           <div class="planner-detail-actions">
             <button id="plannerEditBtn" type="button">編輯</button>
             <button id="plannerCompleteBtn" type="button">完成</button>
@@ -1341,6 +1355,7 @@
       <h3 id="endlessResultTitle">通過 0 關</h3>
       <p id="endlessResultReason"></p>
       <div id="endlessResultRewards" class="endless-result__rewards"></div>
+      <div id="endlessResultStudyActions" class="hidden"></div>
       <button onclick="startEndlessVocabChallenge()" type="button" class="endless-result__restart">再挑戰一次</button>
       <button onclick="closeVocabQuizModal()" type="button" class="endless-result__quit">返回單字庫</button>
     </div>
@@ -1394,7 +1409,8 @@
 
   <script src="./js/ui-v2/position-utils.js"></script>
   <script src="./js/focus-timer.js?v=20261003-split-focus-2"></script>
-  <script src="./js/app.js?v=20261005-endless-1"></script>
+  <script src="./js/core/save-backups.js?v=20261005-learning-1"></script>
+  <script src="./js/app.js?v=20261005-learning-1"></script>
 <!-- 🏀 季後賽逐場動態播報彈窗 -->
 <div id="playoffSeriesModal" onclick="if(event.target === this && !document.getElementById('posNextRoundBtn').disabled) closeSeriesAndShowBoxScore()" class="fixed inset-0 bg-slate-950/90 backdrop-blur-md z-50 hidden flex items-end sm:items-center justify-center p-3 sm:p-4 ios-safe-modal">
   <div class="bg-slate-900 border border-amber-500/50 rounded-3xl w-full max-w-lg p-6 shadow-2xl space-y-4 relative animate-modal-in">
@@ -1821,6 +1837,7 @@
 
     <!-- 額外特質/備註 -->
     <div id="rewardModalNoteBox" class="relative z-10 hidden p-2.5 rounded-xl bg-slate-950/80 border border-slate-800 text-[11px] text-amber-200"></div>
+    <div id="rewardModalStudyActions" class="relative z-10 hidden"></div>
 
     <div class="relative z-10 pt-2">
       <button id="rewardModalClaimBtn" onclick="closeRewardModal()" type="button" class="w-full bg-gradient-to-r from-amber-400 via-orange-500 to-amber-500 hover:brightness-110 text-slate-950 font-black py-3.5 rounded-2xl text-sm transition cursor-pointer active:scale-98 shadow-xl flex items-center justify-center gap-1.5">
@@ -2073,12 +2090,38 @@
     </div>
   </div>
 </div>
+<div id="saveToolsBackdrop" class="learning-sheet-backdrop hidden" onclick="if(event.target===this) closeSaveTools()">
+  <section class="learning-sheet" role="dialog" aria-modal="true" aria-labelledby="saveToolsTitle">
+    <div class="learning-sheet-head"><h3 id="saveToolsTitle">備份與換機</h3><button type="button" onclick="closeSaveTools()" aria-label="關閉備份">✕</button></div>
+    <p id="saveToolsStatus" class="learning-note"></p>
+    <div class="learning-action-grid">
+      <button type="button" onclick="exportGameSave()">匯出存檔</button>
+      <button type="button" onclick="document.getElementById('saveImportInput').click()">匯入存檔</button>
+      <button type="button" onclick="createManualSaveBackup()">建立還原點</button>
+    </div>
+    <input id="saveImportInput" type="file" accept=".json,application/json" onchange="importGameSave(event)" hidden>
+    <p class="learning-note">換手機／電腦：匯出檔案 → 用 AirDrop 或雲端硬碟傳送 → 在另一台裝置匯入。這是手動轉移，不會自動雲端同步。</p>
+    <h4 class="learning-subtitle">本機還原點</h4>
+    <p class="learning-note">自動保留最多 4 份，約每 15 分鐘更新。清除網站資料也會清除本機備份，請定期匯出檔案。</p>
+    <div id="saveBackupList"></div>
+  </section>
+</div>
+<div id="learningProgressBackdrop" class="learning-sheet-backdrop hidden" onclick="if(event.target===this) closeLearningProgress()">
+  <section class="learning-sheet" role="dialog" aria-modal="true" aria-labelledby="learningProgressTitle">
+    <div class="learning-sheet-head"><h3 id="learningProgressTitle">學習紀錄</h3><button type="button" onclick="closeLearningProgress()" aria-label="關閉學習紀錄">✕</button></div>
+    <div id="learningProgressSummary" class="learning-metrics"></div>
+    <h4 class="learning-subtitle">容易混淆的單字</h4><div id="learningConfusedWords"></div>
+    <h4 class="learning-subtitle">最近測驗</h4><div id="learningQuizHistory"></div>
+  </section>
+</div>
 <script src="./js/bootstrap.js"></script>
 <script src="./js/ui-v2/visual-match-simulator.js?v=20261003-season-interactions-2"></script>
 <script src="./js/season-journey.js?v=20261005-badge-cinema-1"></script>
 <script src="./js/ui-v2/ui-v2-adapter.js?v=20261001-4"></script>
 <script src="./js/ui-v2/home-v2.js?v=20261003-train-vocab-1"></script>
-<script src="./js/study-planner.js?v=20261003-study-planner-3"></script>
+<script src="./js/study-planner.js?v=20261005-learning-1"></script>
+<script src="./js/core/save-tools.js?v=20261005-learning-1"></script>
+<script src="./js/learning-insights.js?v=20261005-learning-1"></script>
 <script src="./js/ui-v2/team-v2.js"></script>
 <script src="./js/ui-v2/normal-card-v2.js?v=20261003-mobile-hydrate-2"></script>
 <script src="./js/ui-v2/card-themes.js"></script>

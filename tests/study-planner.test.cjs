@@ -42,6 +42,7 @@ function loadPlanner() {
     hidden: false,
     body: makeElement(),
     addEventListener() {},
+    querySelectorAll() { return []; },
     getElementById(id) {
       if (!elements.has(id)) elements.set(id, makeElement());
       return elements.get(id);
@@ -129,6 +130,47 @@ function loadPlanner() {
   }), true);
   assert.equal(context.state.studyPlanner.tasks.find(item => item.id === partial.id).completed, true);
   assert.equal(context.state.studyPlanner.logs.filter(log => log.taskId === partial.id).length, 1);
+}
+
+{
+  const { context } = loadPlanner();
+  context.renderStudyPlanner();
+  const template = context.StudyPlanner.buildTask({ id: 'weekly', title: '週末複習', date: '2026-10-03', time: '18:30', plannedMinutes: 25 });
+  context.state.studyPlanner.tasks.push(template);
+  assert.equal(context.StudyPlanner.scheduleWeeklyPlannerTasks(template, [6], '2026-10-17').length, 2);
+  assert.equal(context.StudyPlanner.scheduleWeeklyPlannerTasks(template, [6], '2026-10-17').length, 0, 'Repeated scheduling must be idempotent');
+  assert.deepEqual(Array.from(context.state.studyPlanner.tasks, task => task.date), ['2026-10-03', '2026-10-10', '2026-10-17']);
+  context.selectPlannerDate('2026-10-04');
+  assert.equal(context.copyPlannerPreviousDay(), 1);
+  assert.equal(context.copyPlannerPreviousDay(), 0);
+  const copy = context.state.studyPlanner.tasks.find(task => task.date === '2026-10-04');
+  assert.equal(copy.completed, false);
+  assert.equal(copy.repeatSeriesId, '');
+  context.state.studyPlanner.tasks.push(context.StudyPlanner.buildTask({ id: 'already-done', title: '已完成', date: '2026-10-04', completed: true }));
+  assert.equal(context.movePlannerUnfinishedToTomorrow(), 1);
+  assert.equal(context.state.studyPlanner.tasks.find(task => task.id === copy.id).date, '2026-10-05');
+  assert.equal(context.state.studyPlanner.tasks.find(task => task.id === 'already-done').date, '2026-10-04');
+  context.state.studyPlanner.tasks.push(context.StudyPlanner.buildTask({ id: 'overdue', title: '逾期複習', date: '2026-10-01' }));
+  context.selectPlannerDate('2026-10-01');
+  assert.equal(context.movePlannerUnfinishedToTomorrow(), 1);
+  assert.equal(context.state.studyPlanner.tasks.find(task => task.id === 'overdue').date, '2026-10-04', 'Past unfinished tasks should move to the actual tomorrow');
+  const session = { id: 'quiz-session', answers: [{ word: 'custom-review-word', meaning: '自訂測試字', correct: false }, { word: 'CUSTOM-REVIEW-WORD', meaning: '自訂測試字', correct: false }, { word: 'correct', meaning: '正確', correct: true }] };
+  const review = context.scheduleQuizReviewTask(session, 1);
+  assert.equal(review.date, '2026-10-04');
+  assert.equal(review.quizWords.length, 1, 'Review must contain the deduplicated failed word set');
+  assert.equal(context.scheduleQuizReviewTask(session, 1).id, review.id);
+  context.renderStudyPlanner();
+  assert.equal(context.state.studyPlanner.tasks.find(task => task.id === review.id).quizWords[0].word, 'CUSTOM-REVIEW-WORD');
+  let quizContext;
+  context.startVocabQuizModal = (mode, details) => { quizContext = { mode, details }; };
+  assert.equal(context.startPlannerTaskQuiz(review.id), true);
+  assert.equal(quizContext.mode, 'targeted');
+  assert.equal(quizContext.details.taskId, review.id);
+  context.recordPlannerQuizLog({ taskId: review.id, score: 1, totalQuestions: 1, actualMinutes: 2 });
+  assert.equal(context.state.studyPlanner.tasks.find(task => task.id === review.id).completed, true);
+  assert.equal(context.state.studyPlanner.logs.filter(log => log.taskId === review.id).length, 1);
+  context.recordPlannerQuizLog({ taskId: review.id, score: 1, totalQuestions: 1, actualMinutes: 2 });
+  assert.equal(context.state.studyPlanner.logs.filter(log => log.taskId === review.id).length, 1, 'Quiz completion must not duplicate the task log');
 }
 
 {

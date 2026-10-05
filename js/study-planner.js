@@ -95,6 +95,14 @@
       completedAt: raw?.completedAt || null,
       sourceType: ['manual', 'vocab', 'phrase', 'review'].includes(raw?.sourceType) ? raw.sourceType : 'manual',
       sourceIds: Array.isArray(raw?.sourceIds) ? [...raw.sourceIds] : [],
+      quizWords: Array.isArray(raw?.quizWords) ? raw.quizWords.filter(item => item?.word && item?.meaning).slice(0, 50).map(item => ({
+        word: String(item.word), pos: String(item.pos || 'n.'), meaning: String(item.meaning), example: String(item.example || '')
+      })) : [],
+      reviewSessionId: String(raw?.reviewSessionId || ''),
+      repeatSeriesId: String(raw?.repeatSeriesId || ''),
+      repeatWeekdays: Array.isArray(raw?.repeatWeekdays) ? [...new Set(raw.repeatWeekdays.map(Number).filter(day => Number.isInteger(day) && day >= 0 && day <= 6))] : [],
+      repeatUntil: /^\d{4}-\d{2}-\d{2}$/.test(String(raw?.repeatUntil || '')) ? raw.repeatUntil : '',
+      copiedFrom: String(raw?.copiedFrom || ''),
       createdAt: raw?.createdAt || new Date().toISOString(),
       updatedAt: raw?.updatedAt || new Date().toISOString(),
       remindedAt: raw?.remindedAt || null
@@ -191,6 +199,10 @@
     return `${WEEKDAYS[value.getDay()]} · ${MONTHS[value.getMonth()].slice(0, 3)} ${value.getDate()}`;
   }
 
+  function formatStudyMinutes(minutes) {
+    return minutes > 0 && minutes < 1 ? '<1 MIN' : `${Math.round(minutes)} MIN`;
+  }
+
   function renderSelectedDay() {
     const tasks = tasksOn(selectedDate);
     const logs = logsOn(selectedDate);
@@ -217,7 +229,8 @@
     if (taskList) {
       taskList.innerHTML = tasks.length ? tasks.map(task => {
         const meta = taskType(task);
-        return `<button type="button" class="planner-task-row ${task.completed ? 'is-complete' : ''}" onclick="openPlannerTaskDetail('${escapeHtml(task.id)}')">
+        const encodedId = encodeURIComponent(task.id).replace(/'/g, '%27');
+        return `<button type="button" class="planner-task-row ${task.completed ? 'is-complete' : ''}" onclick="openPlannerTaskDetail(decodeURIComponent('${encodedId}'))">
           <time>${escapeHtml(task.time || '--:--')}</time><span>${meta.icon}</span>
           <span class="planner-task-copy"><strong>${escapeHtml(task.title)}</strong><small>${meta.label} · ${task.plannedMinutes} MIN</small></span>
           <span class="planner-check">${task.completed ? '✓' : '›'}</span>
@@ -225,7 +238,7 @@
       }).join('') : '<p class="planner-empty">這天還沒有安排。按右下角 ＋ 新增。</p>';
     }
 
-    document.getElementById('plannerLogTotal').textContent = `${totalMinutes} MIN`;
+    document.getElementById('plannerLogTotal').textContent = formatStudyMinutes(totalMinutes);
     const logList = document.getElementById('plannerLogList');
     if (logList) {
       const logRows = logs.map(log => {
@@ -266,13 +279,16 @@
     const allDailyDone = !isToday || rows.every(row => row.done);
     complete?.classList.toggle('hidden', !(allPlansDone && allDailyDone));
     const completeMeta = document.getElementById('plannerTodayCompleteMeta');
-    if (completeMeta) completeMeta.textContent = `${completedTasks} / ${tasks.length} PLANS FINISHED · ${totalMinutes} MIN FOCUSED`;
+    if (completeMeta) completeMeta.textContent = `${completedTasks} / ${tasks.length} PLANS FINISHED · ${formatStudyMinutes(totalMinutes)} STUDIED`;
+    const completeTitle = document.getElementById('plannerCompleteTitle');
+    if (completeTitle) completeTitle.textContent = isToday ? 'TODAY COMPLETE ✓' : 'PLANS COMPLETE ✓';
   }
 
   function renderStudyPlanner() {
     normalizePlannerData();
     renderCalendar();
     renderSelectedDay();
+    renderNextStudy();
   }
 
   function selectPlannerDate(date) {
@@ -319,6 +335,12 @@
     document.getElementById('plannerTaskType').value = task?.type || 'study';
     document.getElementById('plannerTaskReminder').value = String(task?.reminderMinutes ?? -1);
     document.getElementById('plannerTaskNote').value = task?.note || '';
+    const repeat = document.getElementById('plannerTaskRepeat');
+    if (repeat) repeat.value = 'none';
+    const until = document.getElementById('plannerTaskRepeatUntil');
+    if (until) until.value = dateKey(addDays(task?.date || selectedDate, 84));
+    document.querySelectorAll('[name="plannerRepeatWeekday"]').forEach(input => { input.checked = Number(input.value) === parseDateKey(task?.date || selectedDate).getDay(); });
+    togglePlannerRepeatFields();
     showSheet('plannerTaskSheet');
     setTimeout(() => document.getElementById('plannerTaskTitle')?.focus(), 100);
   }
@@ -349,8 +371,16 @@
       remindedAt: null
     });
     if (!task.title) return;
+    const repeatWeekly = document.getElementById('plannerTaskRepeat')?.value === 'weekly';
+    const weekdays = repeatWeekly ? Array.from(document.querySelectorAll('[name="plannerRepeatWeekday"]:checked')).map(input => Number(input.value)) : [];
+    const until = document.getElementById('plannerTaskRepeatUntil')?.value;
+    if (repeatWeekly && (!weekdays.length || !until || until < task.date || until > dateKey(addDays(task.date, 365)))) {
+      if (typeof showToast === 'function') showToast('請選擇星期，並設定一年內的重複結束日期。', 'warning');
+      return;
+    }
     if (existing) Object.assign(existing, task);
     else planner.tasks.push(task);
+    if (repeatWeekly) scheduleWeeklyPlannerTasks(existing || task, weekdays, until);
     selectedDate = task.date;
     viewMonth = startOfMonth(parseDateKey(task.date));
     if (task.reminderMinutes >= 0) requestPlannerNotificationPermission();
@@ -376,6 +406,11 @@
     focusButton.disabled = task.completed;
     focusButton.classList.toggle('hidden', task.completed);
     focusButton.onclick = () => startPlannerTaskFocus(task.id);
+    const quizButton = document.getElementById('plannerStartQuizBtn');
+    if (quizButton) {
+      quizButton.classList.toggle('hidden', task.completed || !task.quizWords.length);
+      quizButton.onclick = () => startPlannerTaskQuiz(task.id);
+    }
     document.getElementById('plannerEditBtn').onclick = () => openPlannerTaskSheet(task.id);
     document.getElementById('plannerCompleteBtn').onclick = () => completePlannerTask(task.id, { actualMinutes: 0, method: 'manual' });
     document.getElementById('plannerCompleteBtn').disabled = task.completed;
@@ -438,10 +473,11 @@
   async function deletePlannerTask(taskId) {
     const task = taskById(taskId);
     if (!task) return;
+    closePlannerSheets();
     const confirmed = typeof showGameConfirm === 'function' ? await showGameConfirm({
       title: '刪除行程', message: `確定刪除「${task.title}」嗎？已留下的 Study Log 不會刪除。`, confirmText: '刪除', cancelText: '取消', type: 'danger'
     }) : global.confirm(`確定刪除「${task.title}」嗎？`);
-    if (!confirmed) return;
+    if (!confirmed) { openPlannerTaskDetail(taskId); return; }
     state.studyPlanner.tasks = plannerState().tasks.filter(item => item.id !== task.id);
     saveGame();
     closePlannerSheets();
@@ -501,7 +537,8 @@
       reminderMinutes: original.reminderMinutes,
       note: original.note,
       sourceType: 'review',
-      sourceIds: [original.id]
+      sourceIds: original.quizWords.length ? [...original.sourceIds] : [original.id],
+      quizWords: original.quizWords
     });
     plannerState().tasks.push(next);
     selectedDate = nextDate;
@@ -550,14 +587,110 @@
   function recordPlannerQuizLog(payload = {}) {
     const completedAt = new Date().toISOString();
     const date = todayKey();
-    plannerState().logs.push({
-      id: makeId('log'), taskId: payload.taskId || null, title: payload.title || '單字 Quiz', type: payload.type || 'vocab',
+    const existing = payload.taskId ? plannerState().logs.find(log => log.taskId === payload.taskId) : null;
+    const log = {
+      id: existing?.id || makeId('log'), taskId: payload.taskId || null, title: payload.title || '單字 Quiz', type: payload.type || 'vocab',
       date, plannedMinutes: 0, actualMinutes: Math.max(0, Number(payload.actualMinutes) || 0), completedAt,
       score: Number(payload.score) || 0, totalQuestions: Number(payload.totalQuestions) || 0,
       sourceType: payload.sourceType || 'vocab', sourceIds: Array.isArray(payload.sourceIds) ? payload.sourceIds : []
-    });
+    };
+    if (existing) Object.assign(existing, log);
+    else plannerState().logs.push(log);
     recordStudyActivity(date);
+    if (payload.taskId) completePlannerTask(payload.taskId, { actualMinutes: payload.actualMinutes, completedAt, offerReview: false });
     saveGame();
+  }
+
+  function togglePlannerRepeatFields() {
+    document.getElementById('plannerRepeatFields')?.classList.toggle('hidden', document.getElementById('plannerTaskRepeat')?.value !== 'weekly');
+  }
+
+  function scheduleWeeklyPlannerTasks(template, weekdays, until) {
+    const planner = plannerState();
+    const end = dateKey(addDays(template.date, 365));
+    if (!until || until < template.date || until > end || !weekdays.length) return [];
+    const seriesId = template.repeatSeriesId || makeId('weekly');
+    Object.assign(template, { repeatSeriesId: seriesId, repeatWeekdays: [...weekdays], repeatUntil: until });
+    const created = [];
+    for (let offset = 1; offset <= 365; offset++) {
+      const day = addDays(template.date, offset); const date = dateKey(day);
+      if (date > until) break;
+      if (!weekdays.includes(day.getDay()) || planner.tasks.some(task => task.repeatSeriesId === seriesId && task.date === date)) continue;
+      const occurrence = normalizeTask({ ...template, id: makeId('task'), date, completed: false, completedAt: null, remindedAt: null, createdAt: new Date().toISOString() });
+      planner.tasks.push(occurrence); created.push(occurrence);
+    }
+    return created;
+  }
+
+  function copyPlannerPreviousDay() {
+    const originals = tasksOn(dateKey(addDays(selectedDate, -1)));
+    let count = 0;
+    originals.forEach(original => {
+      if (tasksOn(selectedDate).some(task => task.copiedFrom === original.id || (task.title === original.title && task.time === original.time && task.type === original.type))) return;
+      plannerState().tasks.push(normalizeTask({ ...original, id: makeId('task'), date: selectedDate, copiedFrom: original.id,
+        completed: false, completedAt: null, remindedAt: null, repeatSeriesId: '', repeatWeekdays: [], repeatUntil: '', createdAt: new Date().toISOString() }));
+      count++;
+    });
+    saveGame(); renderStudyPlanner();
+    if (typeof showToast === 'function') showToast(count ? `已複製前一天的 ${count} 個行程。` : '前一天沒有可新增的行程，或已經複製過了。', 'info');
+    return count;
+  }
+
+  function movePlannerUnfinishedToTomorrow() {
+    const tomorrow = dateKey(addDays(selectedDate < todayKey() ? todayKey() : selectedDate, 1));
+    let count = 0;
+    tasksOn(selectedDate).filter(task => !task.completed && !(state.focusMode?.active && state.focusMode.taskId === task.id)).forEach(task => {
+      task.date = tomorrow; task.remindedAt = null; task.updatedAt = new Date().toISOString(); count++;
+    });
+    saveGame(); renderStudyPlanner();
+    if (typeof showToast === 'function') showToast(count ? `已將 ${count} 個未完成行程移到 ${tomorrow}。` : '沒有可移動的未完成行程。', 'info');
+    return count;
+  }
+
+  function scheduleQuizReviewTask(session, days = 1) {
+    const words = [...new Map((session?.answers || []).filter(item => !item.correct && item.word && item.meaning).map(item => [String(item.word).trim().toLowerCase(), item])).values()];
+    if (!words.length) return null;
+    const date = dateKey(addDays(todayKey(), days));
+    const existing = plannerState().tasks.find(task => task.reviewSessionId === session.id && task.date === date);
+    if (existing) return existing;
+    const task = normalizeTask({
+      id: makeId('task'), title: `複習 ${words.length} 個測驗錯字`, date, time: '20:00',
+      plannedMinutes: Math.max(5, Math.min(30, words.length * 2)), type: 'review', reminderMinutes: -1,
+      sourceType: 'vocab', sourceIds: words.map(item => String(item.word).trim().toLowerCase()),
+      quizWords: words, reviewSessionId: session.id, note: words.map(item => item.word).join('、')
+    });
+    plannerState().tasks.push(task);
+    saveGame(); renderStudyPlanner();
+    if (typeof showToast === 'function') showToast(`已安排 ${date} 20:00 複習 ${words.length} 個錯字。`, 'success');
+    return task;
+  }
+
+  function startPlannerTaskQuiz(taskId) {
+    const task = taskById(taskId);
+    if (!task || task.completed || !task.quizWords.length || typeof global.startVocabQuizModal !== 'function') return false;
+    closePlannerSheets();
+    global.startVocabQuizModal('targeted', { taskId: task.id, items: task.quizWords });
+    return true;
+  }
+
+  function nextStudyTask() {
+    return [...plannerState().tasks].filter(task => !task.completed && task.date >= todayKey()).sort((a, b) => `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`))[0] || null;
+  }
+  function renderNextStudy() {
+    const task = nextStudyTask();
+    const prompt = document.getElementById('nextStudyPrompt');
+    prompt?.classList.toggle('hidden', !task);
+    if (!task) return;
+    const title = document.getElementById('nextStudyTitle');
+    const meta = document.getElementById('nextStudyMeta');
+    if (title) title.textContent = task.title;
+    if (meta) meta.textContent = `${task.date === todayKey() ? '今天' : task.date.slice(5)} ${task.time} · ${task.plannedMinutes} MIN`;
+  }
+  function openNextStudyTask() {
+    const task = nextStudyTask();
+    if (!task) return;
+    if (typeof global.switchTab === 'function') global.switchTab('planner');
+    selectPlannerDate(task.date); openPlannerTaskDetail(task.id);
   }
 
   function plannerTaskStartAt(task) {
@@ -623,7 +756,13 @@
   global.recordPlannerFocusLog = recordPlannerFocusLog;
   global.recordPlannerQuizLog = recordPlannerQuizLog;
   global.recordStudyActivityForPlanner = recordStudyActivity;
-  global.StudyPlanner = { normalizeTask, dateKey, buildTask: normalizeTask, tasksOn, logsOn, updateStudyStreak };
+  global.togglePlannerRepeatFields = togglePlannerRepeatFields;
+  global.copyPlannerPreviousDay = copyPlannerPreviousDay;
+  global.movePlannerUnfinishedToTomorrow = movePlannerUnfinishedToTomorrow;
+  global.scheduleQuizReviewTask = scheduleQuizReviewTask;
+  global.startPlannerTaskQuiz = startPlannerTaskQuiz;
+  global.openNextStudyTask = openNextStudyTask;
+  global.StudyPlanner = { normalizeTask, dateKey, buildTask: normalizeTask, tasksOn, logsOn, updateStudyStreak, scheduleWeeklyPlannerTasks, nextStudyTask };
 
   document.addEventListener('visibilitychange', () => { if (!document.hidden) { checkPlannerReminders(); renderStudyPlanner(); } });
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initPlanner, { once: true });

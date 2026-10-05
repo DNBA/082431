@@ -2,6 +2,12 @@
        ① GAME CONFIG & DATABASE
     ===================================================== */
     const STORAGE_KEY = "toeicquest_nba_save_v1";
+    const saveBackupStore = (() => {
+      try { return window.ToeicQuestSaveBackups?.createStore(localStorage, STORAGE_KEY) || null; }
+      catch (_) { return null; }
+    })();
+    let saveRecoveryBlocked = false;
+    let lastSaveErrorAt = 0;
     const GACHA_RATES = { UR: 1, SSR: 3, SR: 10, R: 15, N: 71 };
 
     function escapeHtmlText(value) {
@@ -160,7 +166,7 @@
 
     // 4. 🎁 統一高規格獎勵結算彈窗 (P1: Reward Window)
     let currentRewardClaimCallback = null;
-    function showRewardModal({ title = '獲得獎勵！', subtitle = '', rewards = [], note = '', onClaim = null }) {
+    function showRewardModal({ title = '獲得獎勵！', subtitle = '', rewards = [], note = '', onClaim = null, learningResult = null }) {
       const modal = document.getElementById('unifiedRewardModal');
       const titleEl = document.getElementById('rewardModalTitle');
       const subEl = document.getElementById('rewardModalSubtitle');
@@ -192,6 +198,8 @@
       }
 
       currentRewardClaimCallback = onClaim;
+      modal.classList.toggle('has-learning-result', !!learningResult);
+      window.VocabLearning?.renderResultActions('rewardModalStudyActions', learningResult);
 
       // 觸發慶祝彩帶
       if (typeof confetti === 'function') {
@@ -28606,10 +28614,19 @@ dailyQuests: {
     };
 
 function saveGame() {
+      if (saveRecoveryBlocked) return false;
       try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        state.saveMeta = { ...(state.saveMeta || {}), updatedAt: new Date().toISOString() };
+        if (saveBackupStore) saveBackupStore.save(state);
+        else localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        return true;
       } catch (e) {
         console.error("Save failed (localStorage error):", e);
+        if (Date.now() - lastSaveErrorAt > 60000) {
+          lastSaveErrorAt = Date.now();
+          if (document.readyState !== 'loading') showToast('存檔空間不足，請到「備份與換機」匯出目前進度。', 'error');
+        }
+        return false;
       }
     }
 
@@ -28848,14 +28865,21 @@ function saveGame() {
     }
 
     function loadGame() {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (!raw) return JSON.parse(JSON.stringify(defaultState));
       try {
-        const parsed = JSON.parse(raw);
+        const recovery = saveBackupStore?.load();
+        saveRecoveryBlocked = !!recovery?.blocked;
+        if (recovery?.recovered || recovery?.blocked) {
+          window.toeicQuestSaveRecovery = recovery;
+        }
+        const raw = recovery ? null : localStorage.getItem(STORAGE_KEY);
+        const parsed = recovery?.state || (raw ? JSON.parse(raw) : null);
+        if (!parsed) return JSON.parse(JSON.stringify(defaultState));
         const merged = deepMergeState(defaultState, parsed);
         return migrateSaveData(merged);
       } catch (e) {
         console.error("Load save error, falling back to defaultState:", e);
+        saveRecoveryBlocked = true;
+        window.toeicQuestSaveRecovery = { blocked: true, message: '存檔尚未成功讀取，已暫停覆寫。請從備份還原或匯入存檔。' };
         return JSON.parse(JSON.stringify(defaultState));
       }
     }
@@ -28869,7 +28893,17 @@ function saveGame() {
         type: 'danger'
       });
       if (!confirmed) return;
-      localStorage.removeItem(STORAGE_KEY);
+      const previousState = state;
+      try {
+        if (saveBackupStore) saveBackupStore.snapshot(JSON.stringify(state), '重置前備份', true);
+        state = JSON.parse(JSON.stringify(defaultState));
+        saveRecoveryBlocked = false;
+        if (!saveGame()) throw new Error('無法儲存重置後的進度');
+      } catch (error) {
+        state = previousState;
+        showToast('無法安全重置，請先匯出目前進度。', 'error');
+        return;
+      }
       window.location.reload();
     }
 
@@ -31505,6 +31539,36 @@ function checkSpellingAnswer() {
     let endlessTicketsEarned = 0;
     let endlessRunEnded = false;
     let quizAdvanceTimerId = null;
+    let quizPlannerTaskId = null;
+    let quizSessionId = '';
+    let quizSessionFinished = true;
+    let quizAnswers = [];
+    let quizQuestionShownAt = 0;
+    let quizElapsedMs = 0;
+    let endlessStartingBest = 0;
+
+    function beginQuizLearningSession(taskId = null) {
+      quizPlannerTaskId = taskId;
+      quizSessionId = `quiz_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+      quizSessionFinished = false;
+      quizAnswers = [];
+      quizElapsedMs = 0;
+    }
+
+    function recordQuizLearningResult(status = 'completed') {
+      if (quizSessionFinished) return null;
+      quizSessionFinished = true;
+      return window.VocabLearning?.recordSession({
+        id: quizSessionId, mode: quizSessionMode, status, score: quizScore,
+        totalQuestions: quizAnswers.length, answers: quizAnswers, taskId: quizPlannerTaskId,
+        actualMinutes: quizElapsedMs / 60000
+      }) || null;
+    }
+
+    function recordQuizLearningAnswer(current, chosen, correct) {
+      quizElapsedMs += Math.min(quizSessionMode === 'endless' ? ENDLESS_QUESTION_MS : 120000, Math.max(0, Date.now() - quizQuestionShownAt));
+      quizAnswers.push({ ...normalizeQuizItem(current), chosen, correct });
+    }
 
     function clearEndlessQuizTimers() {
       if (endlessTimerId) window.clearInterval(endlessTimerId);
@@ -31647,11 +31711,9 @@ function checkSpellingAnswer() {
     }
 
     // 啟動 10 題小考
-    function startVocabQuizModal(mode = 'all') {
-      clearEndlessQuizTimers();
-      quizSessionMode = mode;
+    function startVocabQuizModal(mode = 'all', context = {}) {
       const fullDb = buildCombinedVocabQuizPool();
-      const db = mode === 'wrong' ? ensureWrongAnswerStore() : fullDb;
+      const db = mode === 'targeted' ? buildCombinedVocabQuizPool([], context.items || []) : mode === 'wrong' ? ensureWrongAnswerStore() : fullDb;
 
       if (mode === 'all' && db.length < 10) {
         showToast("⚠️ 單字庫中的單字不足 10 個，請先點擊新增更多單字！", "warning");
@@ -31662,9 +31724,17 @@ function checkSpellingAnswer() {
         return;
       }
 
-      // 一般測驗抽 10 題；錯題模式最多抽 10 題
+      if (mode === 'targeted' && !db.length) {
+        showToast('這個行程尚無可測驗的單字。', 'warning');
+        return;
+      }
+      if (!quizSessionFinished && quizAnswers.length) recordQuizLearningResult('quit');
+      clearEndlessQuizTimers();
+      quizSessionMode = mode;
+      // Calendar reviews use exactly their stored word set, up to 50 words.
       const shuffledDb = shuffleVocabItems(db);
-      activeQuizList = shuffledDb.slice(0, Math.min(10, shuffledDb.length)).map(normalizeQuizItem);
+      activeQuizList = shuffledDb.slice(0, mode === 'targeted' ? 50 : Math.min(10, shuffledDb.length)).map(normalizeQuizItem);
+      beginQuizLearningSession(context.taskId || null);
 
       currentQuizStep = 0;
       quizScore = 0;
@@ -31675,7 +31745,7 @@ function checkSpellingAnswer() {
 
       document.getElementById('vocabQuizModal').classList.remove('hidden');
       const modeLabel = document.getElementById('quizModeLabel');
-      if (modeLabel) modeLabel.innerText = mode === 'wrong' ? 'WRONG ANSWER REVIEW' : 'TOEIC QUIZ';
+      if (modeLabel) modeLabel.innerText = mode === 'targeted' ? 'PLANNED VOCAB REVIEW' : mode === 'wrong' ? 'WRONG ANSWER REVIEW' : 'TOEIC QUIZ';
       renderQuizStep();
     }
 
@@ -31686,7 +31756,10 @@ function checkSpellingAnswer() {
         return;
       }
       clearEndlessQuizTimers();
+      if (!quizSessionFinished && quizAnswers.length) recordQuizLearningResult('quit');
       quizSessionMode = 'endless';
+      endlessStartingBest = Number(state.toeic.endlessBest) || 0;
+      beginQuizLearningSession();
       activeQuizList = shuffleVocabItems(db).map(normalizeQuizItem);
       currentQuizStep = 0;
       quizScore = 0;
@@ -31709,7 +31782,9 @@ function checkSpellingAnswer() {
       if (item?.word) speakEnglishText(item.word);
     }
 
-function closeVocabQuizModal() {
+function closeVocabQuizModal(completed = false) {
+  if (!completed && !quizSessionFinished && quizAnswers.length) recordQuizLearningResult('quit');
+  if (!completed) quizSessionFinished = true;
   clearEndlessQuizTimers();
   endlessRunEnded = true;
   document.getElementById('vocabQuizModal').classList.add('hidden');
@@ -31721,8 +31796,8 @@ function renderQuizStep() {
     if (quizSessionMode === 'endless') {
       refillEndlessQuizPool();
     } else {
-    finishVocabQuiz();
-    return;
+      finishVocabQuiz();
+      return;
     }
   }
 
@@ -31760,19 +31835,21 @@ function renderQuizStep() {
 
   // 正確答案 + 干擾項合併並打亂
   const options = [current.meaning, ...distractors].sort(() => Math.random() - 0.5);
+  const encodeAnswer = value => encodeURIComponent(value).replace(/'/g, '%27');
 
   const container = document.getElementById('quizOptionsContainer');
   container.innerHTML = options.map(opt => `
-    <button onclick="handleQuizAnswer(this, '${encodeURIComponent(opt)}', '${encodeURIComponent(current.meaning)}')"
-            data-answer="${encodeURIComponent(opt)}"
+    <button onclick="handleQuizAnswer(this, '${encodeAnswer(opt)}', '${encodeAnswer(current.meaning)}')"
+            data-answer="${encodeAnswer(opt)}"
             type="button" 
             class="w-full text-left bg-slate-950 hover:bg-slate-800 border border-slate-700 hover:border-amber-400/60 p-3 rounded-2xl text-xs font-bold text-slate-200 transition flex justify-between items-center cursor-pointer">
-      <span>${opt}</span>
+      <span>${escapeHtmlText(opt)}</span>
       <span class="quiz-badge text-xs"></span>
     </button>
   `).join('');
 
   lucide.createIcons();
+  quizQuestionShownAt = Date.now();
   if (quizSessionMode === 'endless') startEndlessQuestionTimer();
 }
 
@@ -31791,6 +31868,7 @@ function handleQuizAnswer(btn, chosenEncoded, correctEncoded) {
   const correct = decodeURIComponent(correctEncoded);
   const isCorrect = (chosen === correct);
   const current = activeQuizList[currentQuizStep];
+  recordQuizLearningAnswer(current, chosen, isCorrect);
   const feedback = document.getElementById('quizAnswerFeedback');
   const allBtns = document.querySelectorAll('#quizOptionsContainer button');
   allBtns.forEach(button => { button.disabled = true; });
@@ -31803,6 +31881,10 @@ function handleQuizAnswer(btn, chosenEncoded, correctEncoded) {
   if (isCorrect) {
     quizScore++;
     if (quizSessionMode === 'endless') {
+      if (quizScore > (Number(state.toeic.endlessBest) || 0)) {
+        state.toeic.endlessBest = quizScore;
+        state.toeic.endlessBestAt = new Date().toISOString();
+      }
       state.scoutPoints = (Number(state.scoutPoints) || 0) + 1;
       if (quizScore % 10 === 0) {
         const milestoneTickets = quizScore / 10;
@@ -31878,7 +31960,10 @@ function handleEndlessTimeout() {
   if (endlessTimerId) window.clearInterval(endlessTimerId);
   endlessTimerId = null;
   const current = activeQuizList[currentQuizStep];
-  if (current) recordWrongAnswer(current, '逾時');
+  if (current) {
+    recordWrongAnswer(current, '逾時');
+    recordQuizLearningAnswer(current, '逾時', false);
+  }
   document.querySelectorAll('#quizOptionsContainer button').forEach(button => {
     button.disabled = true;
     if (decodeURIComponent(button.dataset.answer || '') === current?.meaning) {
@@ -31897,7 +31982,8 @@ function finishEndlessChallenge(reason) {
   if (endlessRunEnded) return;
   endlessRunEnded = true;
   clearEndlessQuizTimers();
-  const previousBest = Number(state.toeic.endlessBest) || 0;
+  const learningResult = recordQuizLearningResult(reason);
+  const previousBest = endlessStartingBest;
   const isNewBest = quizScore > previousBest;
   if (isNewBest) {
     state.toeic.endlessBest = quizScore;
@@ -31909,7 +31995,7 @@ function finishEndlessChallenge(reason) {
       type: 'vocab',
       score: quizScore,
       totalQuestions: quizScore + 1,
-      sourceType: 'vocab'
+      sourceType: 'vocab', actualMinutes: quizElapsedMs / 60000
     });
   }
   saveGame();
@@ -31926,11 +32012,14 @@ function finishEndlessChallenge(reason) {
     <span><b>${Math.max(previousBest, quizScore)}</b> 🏁 最高關卡</span>
   `;
   overlay?.classList.remove('hidden');
+  window.VocabLearning?.renderResultActions('endlessResultStudyActions', learningResult);
 }
 
 // 測驗結束結算
 function finishVocabQuiz() {
-  closeVocabQuizModal();
+  if (quizSessionFinished) return;
+  const learningResult = recordQuizLearningResult();
+  closeVocabQuizModal(true);
 
   const totalQuestions = activeQuizList.length;
   const accuracy = totalQuestions > 0 ? quizScore / totalQuestions : 0;
@@ -31955,7 +32044,7 @@ function finishVocabQuiz() {
       type: 'vocab',
       score: quizScore,
       totalQuestions,
-      sourceType: 'vocab'
+      sourceType: 'vocab', taskId: quizPlannerTaskId, actualMinutes: quizElapsedMs / 60000
     });
   }
 
@@ -31982,8 +32071,9 @@ function finishVocabQuiz() {
 
   showRewardModal({
     title: quizScore === totalQuestions ? '👑 滿分通關！神級表現！' : (accuracy >= 0.7 ? '🎉 測驗大捷！成績優秀！' : '🏁 測驗完成！持續精進！'),
-    subtitle: `${quizSessionMode === 'wrong' ? '錯題複習' : '多益四選一測驗'}完成，答對 ${quizScore} / ${totalQuestions} 題！`,
+    subtitle: `${quizSessionMode === 'targeted' ? '行程指定單字複習' : quizSessionMode === 'wrong' ? '錯題複習' : '多益四選一測驗'}完成，答對 ${quizScore} / ${totalQuestions} 題！`,
     rewards: rewardsList,
+    learningResult,
     note: sessionWrongAnswers.length
       ? `本次錯題：${sessionWrongAnswers.map(item => item.word).join('、')}。已收入錯題本，之後連續答對兩次即可畢業。`
       : '本次沒有新增錯題，繼續保持！'
