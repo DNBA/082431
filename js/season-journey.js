@@ -37,12 +37,12 @@
   ]);
   const MAX_INTERACTIVE_EVENTS = 4;
   const CARD_BACKS = [
-    { id: 'champion', icon: '💍', name: 'CHAMPION', tone: 'text-amber-300', hint: '成為冠軍隊成員' },
-    { id: 'fmvp', icon: '🏆', name: 'FINALS MVP', tone: 'text-yellow-200', hint: '獲得總決賽 MVP' },
-    { id: 'mvp', icon: '👑', name: 'MVP', tone: 'text-orange-300', hint: '獲得例行賽 MVP' },
-    { id: 'dpoy', icon: '🛡️', name: 'DPOY', tone: 'text-cyan-300', hint: '獲得年度最佳防守球員' },
-    { id: 'record', icon: '⚡', name: 'RECORD BREAKER', tone: 'text-fuchsia-300', hint: '創下指定單場或生涯紀錄' },
-    { id: 'legend', icon: '🐐', name: 'FRANCHISE LEGEND', tone: 'text-amber-200', hint: '8季、400場、1冠及1項重大榮譽' }
+    { id: 'champion', icon: '💍', name: 'CHAMPION', zh: '冠軍', art: './assets/cards/backs/champion-v1.webp', hint: '成為冠軍隊成員' },
+    { id: 'fmvp', icon: '🏆', name: 'FINALS MVP', zh: '總冠軍賽 MVP', art: './assets/cards/backs/fmvp-v1.webp', hint: '獲得總決賽 MVP' },
+    { id: 'mvp', icon: '👑', name: 'MVP', zh: '例行賽 MVP', art: './assets/cards/backs/mvp-v1.webp', hint: '獲得例行賽 MVP' },
+    { id: 'dpoy', icon: '🛡️', name: 'DPOY', zh: '年度最佳防守球員', art: './assets/cards/backs/dpoy-v1.webp', hint: '獲得年度最佳防守球員' },
+    { id: 'record', icon: '⚡', name: 'RECORD BREAKER', zh: '紀錄突破', art: './assets/cards/backs/record-v1.webp', hint: '創下指定單場或生涯紀錄' },
+    { id: 'legend', icon: '🐐', name: 'FRANCHISE LEGEND', zh: '隊史傳奇', art: './assets/cards/backs/legend-v1.webp', hint: '8季、400場、1冠及1項重大榮譽' }
   ];
   const BADGE_STORIES = {
     '曼巴精神': [
@@ -2472,7 +2472,16 @@
     const grid = document.getElementById('sjAdminBackGrid');
     if (!modal || !grid) return;
     const player = ['PG','SG','SF','PF','C'].map(pos => state.startingLineup[pos]).find(Boolean) || { name: 'PREVIEW PLAYER' };
-    grid.innerHTML = CARD_BACKS.map(back => `<div class="sj-cardback sj-back-${back.id} unlocked rounded-2xl border border-amber-500/50 p-3"><span class="text-2xl">${back.icon}</span><b class="block text-[10px] ${back.tone} mt-2">${back.name}</b><span class="block text-[9px] text-slate-300 mt-2">${back.hint}</span><span class="block text-[9px] text-white font-black mt-2 truncate">${safeText(player.name)}</span></div>`).join('');
+    const previewCard = {
+      ...player,
+      cardId: player.cardId || 'admin-back-preview',
+      achievementBacks: CARD_BACKS.map(back => ({ id: back.id, detail: back.hint, unlockedAt: new Date().toISOString() }))
+    };
+    grid.className = 'tq-achievement-backs-grid';
+    grid.innerHTML = window.ToeicQuestAchievementBacks
+      ? window.ToeicQuestAchievementBacks.renderGrid(previewCard, CARD_BACKS)
+      : CARD_BACKS.map(back => `<div>${safeText(back.name)}</div>`).join('');
+    window.ToeicQuestAchievementBacks?.hydrateImages(grid);
     modal.classList.remove('hidden');
   }
 
@@ -2592,13 +2601,32 @@
     const host = document.getElementById('sjAchievementBacks');
     if (!host || !card) return;
     ensureCardJourney(card);
-    host.innerHTML = CARD_BACKS.map(back => {
-      const owned = card.achievementBacks.find(item => item.id === back.id);
-      const active = card.activeCardBack === back.id;
-      return `<button ${owned ? `onclick="selectAchievementBack('${safeText(card.cardId)}','${back.id}')"` : 'disabled'} class="sj-cardback sj-back-${back.id} ${owned ? 'unlocked' : 'opacity-45 grayscale'} ${active ? 'active' : ''} text-left rounded-xl border border-slate-800 p-2.5">
-        <span class="text-lg">${back.icon}</span><b class="block text-[9px] ${back.tone} mt-1">${back.name}</b><span class="block text-[8px] text-slate-400 mt-1">${owned ? safeText(owned.detail || '已解鎖') : '🔒 ' + back.hint}</span><span class="block text-[8px] text-white font-black mt-1 truncate">${safeText(card.name)}</span>
-      </button>`;
-    }).join('');
+    const renderer = window.ToeicQuestAchievementBacks;
+    host.innerHTML = renderer
+      ? renderer.renderGrid(card, CARD_BACKS)
+      : CARD_BACKS.map(back => `<button type="button" disabled>${safeText(back.name)}</button>`).join('');
+    const summary = renderer?.summary(card, CARD_BACKS);
+    const ownedLabel = document.getElementById('sjBacksOwnedSummary');
+    const activeLabel = document.getElementById('sjBacksActiveSummary');
+    if (ownedLabel) ownedLabel.textContent = summary ? `${summary.owned} / ${summary.total} 已解鎖` : '';
+    if (activeLabel) activeLabel.textContent = summary?.activeName || '尚未裝備';
+    if (document.getElementById('sjAchievementBacksSection')?.open) renderer?.hydrateImages(host);
+  }
+
+  function hydrateAchievementBackImages(details) {
+    if (!details?.open) return;
+    window.ToeicQuestAchievementBacks?.hydrateImages(details);
+  }
+
+  function openAchievementBackPreview(target, explicitBackId) {
+    const cardId = typeof target === 'string' ? target : target?.dataset?.cardId;
+    const backId = explicitBackId || target?.dataset?.backId;
+    const card = (state.inventory || []).find(item => String(item.cardId) === String(cardId));
+    const back = CARD_BACKS.find(item => item.id === backId);
+    if (!card || !back) return;
+    ensureCardJourney(card);
+    const owned = card.achievementBacks.find(item => item.id === back.id);
+    window.ToeicQuestAchievementBacks?.openPreview(card, back, owned, card.activeCardBack === back.id);
   }
 
   function selectAchievementBack(cardId, backId) {
@@ -2607,6 +2635,7 @@
     card.activeCardBack = backId;
     saveGame();
     renderAchievementBacks(card);
+    window.ToeicQuestAchievementBacks?.closePreview();
     if (typeof renderInventory === 'function') renderInventory();
     if (typeof renderRoster === 'function') renderRoster();
     if (typeof showToast === 'function') showToast(`已將 ${CARD_BACKS.find(x => x.id === backId).name} 設為展示卡背`, 'success');
@@ -2617,7 +2646,7 @@
     if (!anchor || document.getElementById('sjAchievementBacks')) return;
     const section = document.createElement('section');
     section.className = 'mt-3 pt-3 border-t border-slate-800';
-    section.innerHTML = '<div class="flex justify-between items-center mb-2"><h4 class="text-[10px] text-amber-400 font-black sj-kicker">Badge Journey</h4><span id="sjBadgeMastery" class="text-[9px] text-slate-400"></span></div><div id="sjBadgeProgressList" class="sj-badge-progress-list"></div><div id="sjMomentSummary" class="text-[10px] text-slate-500 mb-3"></div><div class="player-detail-backs-heading"><div><span class="player-detail-backs-kicker">ACHIEVEMENT COLLECTION</span><h4>BACKS</h4></div><span>點選已解鎖卡背展示</span></div><div id="sjAchievementBacks" class="grid grid-cols-2 sm:grid-cols-3 gap-2"></div>';
+    section.innerHTML = '<div class="flex justify-between items-center mb-2"><h4 class="text-[10px] text-amber-400 font-black sj-kicker">Badge Journey</h4><span id="sjBadgeMastery" class="text-[9px] text-slate-400"></span></div><div id="sjBadgeProgressList" class="sj-badge-progress-list"></div><div id="sjMomentSummary" class="text-[10px] text-slate-500 mb-3"></div><details id="sjAchievementBacksSection" class="tq-backs-collection" ontoggle="hydrateAchievementBackImages(this)"><summary><span class="tq-backs-collection__title"><span>ACHIEVEMENT COLLECTION</span><strong>BACKS</strong></span><span class="tq-backs-collection__status"><b id="sjBacksActiveSummary">尚未裝備</b><span id="sjBacksOwnedSummary">0 / 6 已解鎖</span></span><span class="tq-backs-collection__chevron" aria-hidden="true">›</span></summary><div class="tq-backs-collection__body"><p class="tq-backs-collection__note">點卡背可放大查看；已解鎖的卡背可以設為展示外觀。</p><div id="sjAchievementBacks" class="tq-achievement-backs-grid"></div></div></details>';
     anchor.parentElement.appendChild(section);
   }
 
@@ -2631,6 +2660,8 @@
     showPlayerDetails = function (event, cardId) {
       oldShowPlayerDetails(event, cardId);
       installPlayerDetailExtension();
+      const backsSection = document.getElementById('sjAchievementBacksSection');
+      if (backsSection) backsSection.open = false;
       const card = (state.inventory || []).find(c => String(c.cardId) === String(cardId));
       renderAchievementBacks(card);
       if (card) {
@@ -2708,6 +2739,8 @@
   window.handleJourneyBadgeArtError = handleJourneyBadgeArtError;
   window.showJourneyBoxScore = showJourneyBoxScore;
   window.selectAchievementBack = selectAchievementBack;
+  window.openAchievementBackPreview = openAchievementBackPreview;
+  window.hydrateAchievementBackImages = hydrateAchievementBackImages;
   window.grantSeasonEnergy = grantEnergy;
   window.toggleJourneyAutoMode = toggleJourneyAutoMode;
   window.stopJourneyAutoMode = stopJourneyAutoMode;
