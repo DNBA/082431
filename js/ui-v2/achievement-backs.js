@@ -10,6 +10,8 @@
     fmvp: 'fmvps',
     mvp: 'mvps',
     dpoy: 'dpoys',
+    allstar: 'allStars',
+    threepoint: 'threePtTitles',
     record: 'records'
   });
 

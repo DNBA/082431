@@ -1,8 +1,8 @@
 (function (global) {
   'use strict';
 
-  const VERSION = 1;
-  const STAT_KEYS = ['pts', 'reb', 'ast', 'stl', 'blk'];
+  const VERSION = 2;
+  const STAT_KEYS = ['pts', 'reb', 'ast', 'stl', 'blk', 'threeM', 'threeA'];
   const LEADER_CONFIG = Object.freeze({
     PTS: { key: 'ppg', label: 'PTS', suffix: 'PPG' },
     REB: { key: 'rpg', label: 'REB', suffix: 'RPG' },
@@ -77,15 +77,20 @@
     const big = positions.some(position => ['PF', 'C'].includes(position));
     const center = positions.includes('C');
     const basic = player?.basic || {};
+    const threeA = clamp(numberStat(basic['3PA']) ?? (guard ? 4.6 : (big ? 1.8 : 3.2)), 0.3, 11.8);
+    let threePct = numberStat(basic['3P%']) ?? (guard ? 36 : 34);
+    if (threePct > 0 && threePct < 1) threePct *= 100;
     return {
       pts: clamp(numberStat(basic.PTS) ?? (6.2 + (ovr - 70) * .87 + (guard ? 1.2 : 0)), 4, 34.5),
       reb: clamp(numberStat(basic.REB) ?? (2.2 + (ovr - 70) * .14 + (big ? 4.2 : 0) + (center ? 1.4 : 0)), 1.5, 14.5),
       ast: clamp(numberStat(basic.AST) ?? (1.2 + (ovr - 70) * .1 + (guard ? 2 : 0) + (point ? 2.1 : 0)), .8, 11.5),
       stl: clamp(numberStat(basic.STL) ?? (.45 + (ovr - 70) * .035 + (guard ? .18 : 0)), .3, 2.4),
-      blk: clamp(numberStat(basic.BLK) ?? (.25 + (ovr - 70) * .025 + (big ? .55 : 0) + (center ? .45 : 0)), .15, 3.8)
+      blk: clamp(numberStat(basic.BLK) ?? (.25 + (ovr - 70) * .025 + (big ? .55 : 0) + (center ? .45 : 0)), .15, 3.8),
+      threeA,
+      threeM: clamp(threeA * clamp(threePct, 20, 50) / 100, 0, threeA)
     };
   }
-  function emptyTotals() { return { pts: 0, reb: 0, ast: 0, stl: 0, blk: 0 }; }
+  function emptyTotals() { return { pts: 0, reb: 0, ast: 0, stl: 0, blk: 0, threeM: 0, threeA: 0 }; }
   function createStatRecord(player, options = {}) {
     const team = options.team || player?.team || 'FA';
     const meta = TEAM_META[team];
@@ -158,12 +163,15 @@
     const monthlyForm = .91 + monthlyRandom() * .18;
     const line = {};
     STAT_KEYS.forEach((stat, index) => {
+      if (stat === 'threeM') return;
       const volatility = stat === 'pts' ? .28 : (['stl', 'blk'].includes(stat) ? .55 : .34);
       const noise = 1 + (random() - .5) * volatility * 2;
       const raw = record.base[stat] * monthlyForm * noise;
-      line[stat] = stat === 'pts' ? Math.max(0, Math.round(raw)) : round(Math.max(0, raw), 1);
+      line[stat] = stat === 'pts' ? Math.max(0, Math.round(raw)) : (stat === 'threeA' ? Math.max(0, Math.round(raw)) : round(Math.max(0, raw), 1));
       if (index % 2 === 0) random();
     });
+    const baseThreePct = record.base.threeA > 0 ? record.base.threeM / record.base.threeA : .34;
+    line.threeM = clamp(Math.round((line.threeA || 0) * clamp(baseThreePct + (random() - .5) * .09, .2, .52)), 0, line.threeA || 0);
     addLine(record, line, month.key);
   }
   function syncCpuStats(league, journey) {
@@ -227,13 +235,20 @@
   }
   function publicPlayer(record, league, monthKey = null) {
     const stat = averages(record, monthKey);
+    const statSource = monthKey ? record.months?.[monthKey] : record;
+    const statTotals = monthKey ? statSource : record.totals;
     const teamRecord = league.teamRecords[record.team] || { wins: 0, losses: 0, winPct: .5, games: 0, pointsAgainst: 0 };
     const defenseAllowed = teamRecord.games ? teamRecord.pointsAgainst / teamRecord.games : 112;
+    const threePa = round(stat.games ? Number(statTotals?.threeA || 0) / stat.games : Number(record.base?.threeA || 0));
+    const threePm = round(stat.games ? Number(statTotals?.threeM || 0) / stat.games : Number(record.base?.threeM || 0));
     return {
       key: record.key, name: record.name, nbaId: record.nbaId, team: record.team, conference: record.conference,
       ovr: record.ovr, isPlayer: record.isPlayer, projected: stat.games === 0, ...stat,
       teamWins: teamRecord.wins, teamLosses: teamRecord.losses, teamWinPct: teamRecord.games ? teamRecord.winPct : .5,
-      teamDefense: clamp(116 - defenseAllowed, -4, 12)
+      teamDefense: clamp(116 - defenseAllowed, -4, 12),
+      threePa,
+      threePm,
+      threePct: round(threePa > 0 ? threePm / threePa * 100 : 0)
     };
   }
   function combinedPlayers(league, monthKey = null) {

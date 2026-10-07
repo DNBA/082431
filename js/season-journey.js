@@ -41,6 +41,8 @@
     { id: 'fmvp', icon: '🏆', name: 'FINALS MVP', zh: '總冠軍賽 MVP', art: './assets/cards/backs/fmvp-v1.webp', hint: '獲得總決賽 MVP' },
     { id: 'mvp', icon: '👑', name: 'MVP', zh: '例行賽 MVP', art: './assets/cards/backs/mvp-v1.webp', hint: '獲得例行賽 MVP' },
     { id: 'dpoy', icon: '🛡️', name: 'DPOY', zh: '年度最佳防守球員', art: './assets/cards/backs/dpoy-v1.webp', hint: '獲得年度最佳防守球員' },
+    { id: 'allstar', icon: '⭐', name: 'ALL-STAR', zh: '全明星入選', art: './assets/cards/backs/allstar-v1.png', hint: '正式入選全明星陣容' },
+    { id: 'threepoint', icon: '🎯', name: '3-POINT CHAMPION', zh: '三分大賽冠軍', art: './assets/cards/backs/threepoint-v1.png', hint: '贏得全明星三分球大賽' },
     { id: 'record', icon: '⚡', name: 'RECORD BREAKER', zh: '紀錄突破', art: './assets/cards/backs/record-v1.webp', hint: '創下指定單場或生涯紀錄' },
     { id: 'legend', icon: '🐐', name: 'FRANCHISE LEGEND', zh: '隊史傳奇', art: './assets/cards/backs/legend-v1.webp', hint: '8季、400場、1冠及1項重大榮譽' }
   ];
@@ -442,7 +444,8 @@
       if (game === 1) special = { key: 'opening', icon: '🏟️', label: 'Opening Night' };
       else if (game === rivalryAt) special = { key: 'rivalry', icon: '⚔️', label: 'Rivalry Game' };
       else if (game === christmasAt) special = { key: 'christmas', icon: '🔥', label: 'Christmas Game' };
-      else if (game === 41) special = { key: 'allstar', icon: '⭐', label: 'All-Star Break' };
+      else if (game === 47) special = { key: 'allstar-selection', icon: '★', label: 'All-Star Selection' };
+      else if (game === 50) special = { key: 'allstar', icon: '⭐', label: 'All-Star Weekend' };
       else if (game === 55) special = { key: 'deadline', icon: '🔄', label: 'Trade Deadline' };
       else if (game === 82) special = { key: 'finale', icon: '🏁', label: 'Regular Season Finale' };
       return {
@@ -461,6 +464,9 @@
     if (!Array.isArray(card.achievementBacks)) card.achievementBacks = [];
     if (!Array.isArray(card.legacy.traits)) card.legacy.traits = [];
     if (!Array.isArray(card.legacy.monthlyHonors)) card.legacy.monthlyHonors = [];
+    if (!Array.isArray(card.legacy.allStarHonors)) card.legacy.allStarHonors = [];
+    card.legacy.allStars = Math.max(0, Number(card.legacy.allStars) || 0);
+    card.legacy.threePtTitles = Math.max(0, Number(card.legacy.threePtTitles) || 0);
     if (!card.badgeJourney || typeof card.badgeJourney !== 'object') {
       card.badgeJourney = { triggers: 0, mastery: 'Bronze', moments: [], badges: {} };
     }
@@ -538,23 +544,31 @@
     } else if (special.key === 'christmas') {
       if (!state.isAdmin) grantEnergy(1, 'Christmas Game 紀念獎勵');
       notify('🔥 Christmas Game', '聖誕大戰完成，獲得紀念體力球 1 顆。');
-    } else if (special.key === 'allstar') {
-      const totals = {};
-      state.seasonJourney.schedule.slice(0, 41).forEach(game => (game.boxScore || []).forEach(row => {
-        totals[row.name] = (totals[row.name] || 0) + Number(row.pts || 0);
-      }));
-      const topName = Object.keys(totals).sort((a,b) => totals[b] - totals[a])[0];
-      const card = (state.inventory || []).find(player => player?.name === topName) || state.startingLineup.SG || state.startingLineup.PG;
-      state.tickets += 2;
-      state.scoutPoints = (Number(state.scoutPoints) || 0) + 30;
-      if (card) {
-        document.getElementById('asgPlayerImg').src = getPlayerImgUrl(card.nbaId);
-        document.getElementById('asgPlayerName').textContent = card.name;
-        document.getElementById('asgPlayerStats').textContent = `前 41 場場均 ${(Number(totals[card.name] || 0) / 41).toFixed(1)} 分`;
+    } else if (special.key === 'allstar-selection') {
+      const weekend = announceAllStarSelections();
+      const selected = window.SeasonAllStar?.playerSelections(weekend) || [];
+      const snubs = window.SeasonAllStar?.playerSnubs(weekend) || [];
+      if (selected.length) {
+        state.tickets += 2;
+        state.scoutPoints = (Number(state.scoutPoints) || 0) + 30;
       }
-      if (silent) notify('⭐ All-Star Break', `${card?.name || '球隊核心'} 入選明星賽，獲得 2 張抽卡券與 30 選秀碎片。`);
+      const message = selected.length
+        ? `${selected.map(player => player.name).join('、')} 入選全明星並解鎖 ALL-STAR BACK。`
+        : (snubs.length ? `${snubs.map(player => player.name).join('、')} 遺憾落選，下一場進入 REVENGE GAME。` : '東西區全明星與三分大賽名單正式公布。');
+      if (silent) notify('★ All-Star Selection', message);
       else {
-        pauseAutoForEvent('All-Star Break');
+        if (typeof addNotification === 'function') addNotification({ title: '★ All-Star Selection', message, icon: '⭐', type: 'achievement' });
+        pauseAutoForEvent('All-Star Selection');
+        openAllStarSelectionAnnouncement(weekend);
+      }
+    } else if (special.key === 'allstar') {
+      const league = syncLeagueState();
+      const weekend = window.SeasonAllStar?.ensure(state.seasonJourney, league);
+      if (weekend) weekend.weekendSeen = true;
+      if (silent) notify('⭐ All-Star Weekend', '明星賽與三分球大賽正式登場，完整名單已寫入本季紀錄。');
+      else {
+        pauseAutoForEvent('All-Star Weekend');
+        renderAllStarWeekend(weekend);
         const modal = document.getElementById('allStarEventModal');
         if (modal) { modal.classList.remove('hidden'); modal.style.display = 'flex'; }
       }
@@ -619,6 +633,12 @@
     if ((legacy.dpoys || 0) > 0 && !card.achievementBacks.some(x => x.id === 'dpoy')) {
       card.achievementBacks.push({ id: 'dpoy', unlockedAt: new Date().toISOString(), detail: `DPOY ×${legacy.dpoys}` });
     }
+    if ((legacy.allStars || 0) > 0 && !card.achievementBacks.some(x => x.id === 'allstar')) {
+      card.achievementBacks.push({ id: 'allstar', unlockedAt: new Date().toISOString(), detail: `ALL-STAR ×${legacy.allStars}` });
+    }
+    if ((legacy.threePtTitles || 0) > 0 && !card.achievementBacks.some(x => x.id === 'threepoint')) {
+      card.achievementBacks.push({ id: 'threepoint', unlockedAt: new Date().toISOString(), detail: `3-POINT CHAMPION ×${legacy.threePtTitles}` });
+    }
     const major = (legacy.mvps || 0) + (legacy.fmvps || 0) + (legacy.dpoys || 0) + (legacy.records || 0);
     if ((legacy.seasons || 0) >= 8 && (legacy.games || 0) >= 400 && (legacy.rings || 0) >= 1 && major >= 1 && !card.achievementBacks.some(x => x.id === 'legend')) {
       card.achievementBacks.push({ id: 'legend', unlockedAt: new Date().toISOString(), detail: `${legacy.seasons}季・${legacy.games}場` });
@@ -667,17 +687,158 @@
     return league;
   }
 
+  function cardForAllStarPlayer(player) {
+    if (!player?.isPlayer) return null;
+    const cardId = String(player.key || '').replace(/^player:/, '');
+    return activeSeasonCards().find(card => String(card.cardId) === cardId)
+      || activeSeasonCards().find(card => card.name === player.name)
+      || (state.inventory || []).find(card => card?.name === player.name)
+      || null;
+  }
+
+  function allStarRowMarkup(player, label) {
+    return `<div class="flex items-center justify-between gap-3 rounded-xl border ${player.isPlayer ? 'border-amber-400/60 bg-amber-500/10' : 'border-slate-800 bg-slate-950/65'} px-3 py-2">
+      <div class="min-w-0"><b class="block truncate text-xs ${player.isPlayer ? 'text-amber-300' : 'text-slate-100'}">${safeText(player.name)}</b><span class="text-[9px] text-slate-500">${safeText(player.team)} · ${safeText(label)}</span></div>
+      <span class="shrink-0 text-[10px] font-mono text-slate-300">${Number(player.ppg || 0).toFixed(1)} PTS · ${Number(player.rpg || 0).toFixed(1)} REB · ${Number(player.apg || 0).toFixed(1)} AST</span>
+    </div>`;
+  }
+
+  function applyAllStarHonors(weekend) {
+    if (!weekend || weekend.honorsApplied) return;
+    const selected = window.SeasonAllStar?.playerSelections(weekend) || [];
+    selected.forEach(player => {
+      const card = cardForAllStarPlayer(player);
+      if (!card) return;
+      ensureCardJourney(card);
+      card.legacy.allStars = (Number(card.legacy.allStars) || 0) + 1;
+      if (!Array.isArray(card.legacy.allStarHonors)) card.legacy.allStarHonors = [];
+      card.legacy.allStarHonors.push({ seasonNo: state.seasonJourney.seasonNo, role: player.selectionType, conference: player.conference });
+      unlockBack(card, 'allstar', `Season ${state.seasonJourney.seasonNo} · ${player.conference.toUpperCase()} ${player.selectionType.toUpperCase()}`);
+    });
+    weekend.revengeGames = (window.SeasonAllStar?.playerSnubs(weekend) || []).map(player => ({
+      player: player.name,
+      playerKey: player.key,
+      game: Number(weekend.selectionGame || 47) + 1,
+      reason: player.reason
+    }));
+    weekend.honorsApplied = true;
+  }
+
+  function announceAllStarSelections() {
+    const league = syncLeagueState();
+    const weekend = window.SeasonAllStar?.announce(state.seasonJourney, league);
+    if (!weekend) return null;
+    applyAllStarHonors(weekend);
+    return weekend;
+  }
+
+  function renderAllStarSelectionAnnouncement(weekend) {
+    const host = document.getElementById('allStarSelectionContent');
+    if (!host || !weekend) return;
+    const playerSelections = window.SeasonAllStar?.playerSelections(weekend) || [];
+    const playerSnubs = window.SeasonAllStar?.playerSnubs(weekend) || [];
+    const invites = window.SeasonAllStar?.playerThreePointInvites(weekend) || [];
+    const conference = block => `<section><h4 class="mb-2 text-[10px] font-black tracking-[.16em] text-blue-300">${block.conference.toUpperCase()} · STARTERS / RESERVES</h4><div class="space-y-1.5">${block.selected.map(player => allStarRowMarkup(player, player.selectionType)).join('')}</div></section>`;
+    host.innerHTML = `<div class="grid gap-4 md:grid-cols-2">${conference(weekend.west)}${conference(weekend.east)}</div>
+      <section class="mt-4 rounded-2xl border border-rose-500/30 bg-rose-950/20 p-3"><h4 class="text-[10px] font-black tracking-[.16em] text-rose-300">SNUB WATCH</h4><div class="mt-2 space-y-1">${weekend.snubs.slice(0, 4).map(player => `<div class="flex justify-between gap-2 text-[10px]"><b class="${player.isPlayer ? 'text-amber-300' : 'text-slate-200'}">${safeText(player.name)}${player.isPlayer ? ' · REVENGE GAME' : ''}</b><span class="text-slate-500">${safeText(player.reason)}</span></div>`).join('')}</div></section>
+      <section class="mt-3 rounded-2xl border border-amber-400/30 bg-amber-500/5 p-3"><h4 class="text-[10px] font-black tracking-[.16em] text-amber-300">3PT CONTEST · INVITED</h4><p class="mt-1 text-[10px] text-slate-300">${weekend.threePointParticipants.map(player => `${safeText(player.name)}${player.isPlayer ? ' ✓' : ''}`).join(' · ')}</p>${weekend.threePointDeclined?.length ? `<p class="mt-2 text-[9px] text-slate-500">DECLINED：${weekend.threePointDeclined.map(player => safeText(player.name)).join('、')}；已由候補遞補。</p>` : ''}</section>
+      <p class="mt-3 text-center text-[10px] font-bold text-slate-400">YOUR PLAYERS · ${playerSelections.length ? playerSelections.map(player => `${safeText(player.name)} ★`).join(' · ') : '本季無人入選'}${playerSnubs.length ? ` · ${playerSnubs.map(player => `${safeText(player.name)} SNUB`).join(' · ')}` : ''}${invites.length ? ` · ${invites.map(player => `${safeText(player.name)} 3PT ACCEPTED`).join(' · ')}` : ''}</p>`;
+  }
+
+  function openAllStarSelectionAnnouncement(weekend) {
+    renderAllStarSelectionAnnouncement(weekend);
+    const modal = document.getElementById('allStarSelectionModal');
+    if (modal) { modal.classList.remove('hidden'); modal.style.display = 'flex'; }
+  }
+
+  function closeAllStarSelectionAnnouncement() {
+    const modal = document.getElementById('allStarSelectionModal');
+    if (modal) { modal.classList.add('hidden'); modal.style.display = ''; }
+    resumeAutoAfterEvent();
+  }
+
+  function closeAllStarWeekend() {
+    const modal = document.getElementById('allStarEventModal');
+    if (modal) { modal.classList.add('hidden'); modal.style.display = ''; }
+    resumeAutoAfterEvent();
+  }
+
+  function renderAllStarWeekend(weekend) {
+    if (!weekend) return;
+    const selections = window.SeasonAllStar?.playerSelections(weekend) || [];
+    const invites = window.SeasonAllStar?.playerThreePointInvites(weekend) || [];
+    const primary = selections[0] || invites[0] || weekend.west?.starters?.[0];
+    const card = cardForAllStarPlayer(primary);
+    const image = document.getElementById('asgPlayerImg');
+    if (image) image.src = getPlayerImgUrl(card?.nbaId || primary?.nbaId || 0);
+    const name = document.getElementById('asgPlayerName');
+    if (name) name.textContent = primary?.name || 'LEAGUE ALL-STARS';
+    const stats = document.getElementById('asgPlayerStats');
+    if (stats) stats.textContent = primary ? `${primary.selectionType === 'starter' ? '先發' : '替補'} · ${primary.ppg.toFixed(1)}分 ${primary.rpg.toFixed(1)}板 ${primary.apg.toFixed(1)}助` : '東西區明星齊聚';
+    const summary = document.getElementById('allStarWeekendSummary');
+    if (summary) summary.innerHTML = `<div class="grid grid-cols-2 gap-2 text-[10px]"><div class="rounded-xl bg-blue-950/40 border border-blue-500/20 p-2"><b class="text-blue-300">WEST</b><p class="mt-1 text-slate-300">${weekend.west.starters.map(player => safeText(player.name)).join(' · ')}</p></div><div class="rounded-xl bg-rose-950/40 border border-rose-500/20 p-2"><b class="text-rose-300">EAST</b><p class="mt-1 text-slate-300">${weekend.east.starters.map(player => safeText(player.name)).join(' · ')}</p></div></div>`;
+    const snub = document.getElementById('allStarSnubPanel');
+    const playerSnubs = window.SeasonAllStar?.playerSnubs(weekend) || [];
+    if (snub) {
+      snub.classList.toggle('hidden', !playerSnubs.length);
+      snub.innerHTML = playerSnubs.length ? `<div class="rounded-xl border border-rose-500/30 bg-rose-950/25 p-2 text-[10px]"><b class="text-rose-300">REVENGE GAME ACTIVE</b><p class="text-slate-300">${playerSnubs.map(player => safeText(player.name)).join('、')} 因落選獲得下一場敘事加成。</p></div>` : '';
+    }
+    const button = document.getElementById('btnOpenThreePtFromAllStar');
+    if (button) {
+      const canPlay = invites.length > 0 && !state.season?.threePtContestPlayed;
+      button.disabled = !canPlay;
+      button.innerText = state.season?.threePtContestPlayed
+        ? `🎯 三分大賽已完成 · ${state.season.threePtContestScore || 0}分`
+        : (canPlay ? `🎯 ${invites[0].name} · ACCEPTED` : '🎯 本季未獲三分大賽邀請');
+      button.classList.toggle('opacity-50', !canPlay);
+      button.classList.toggle('cursor-not-allowed', !canPlay);
+    }
+  }
+
+  function allStarRevengeName(gameNumber) {
+    return state.seasonJourney?.allStarWeekend?.revengeGames?.find(item => Number(item.game) === Number(gameNumber))?.player || '';
+  }
+
+  function awardThreePointChampion(playerName, score, leaderboard) {
+    const card = findActiveCardByName(playerName);
+    if (!card) return false;
+    const weekend = state.seasonJourney?.allStarWeekend;
+    if (weekend?.threePointBackAwarded) return false;
+    ensureCardJourney(card);
+    card.legacy.threePtTitles = (Number(card.legacy.threePtTitles) || 0) + 1;
+    unlockBack(card, 'threepoint', `Season ${state.seasonJourney.seasonNo} · ${score} PTS · CONTEST WINNER`);
+    if (weekend) {
+      weekend.threePointBackAwarded = true;
+      weekend.threePointChampionName = playerName;
+      const participant = weekend.threePointParticipants?.find(player => player.name === playerName);
+      weekend.threePointChampionKey = participant?.key || null;
+      weekend.contestResult = (leaderboard || []).map(player => ({ name: String(player.name || '').replace(' (你)', ''), score: Number(player.score || 0), isPlayer: !!player.isPlayer }));
+    }
+    if (typeof addNotification === 'function') addNotification({ title: '🎯 3-POINT CHAMPION', message: `${playerName} 贏得三分球大賽，解鎖全新 Achievement BACK。`, icon: '🏆', type: 'achievement' });
+    saveGame();
+    return true;
+  }
+
+  function applyAllStarRevengeScript(script, gameNumber) {
+    const name = allStarRevengeName(gameNumber);
+    if (!script || !name) return script;
+    script.featuredPlayerName = name;
+    script.featuredBoost = Math.max(1.18, Number(script.featuredBoost) || 1);
+    script.revengeGame = true;
+    return script;
+  }
+
   function ensureJourneyState() {
     if (!state.seasonJourney || typeof state.seasonJourney !== 'object') {
       state.seasonJourney = {
-        version: 2, seasonNo: 1, teamName: PLAYER_TEAM_FALLBACK,
+        version: 3, seasonNo: 1, teamName: PLAYER_TEAM_FALLBACK,
         gameIndex: 0, wins: 0, losses: 0, streak: 0, bestStreak: 0,
         schedule: buildSchedule(), recent: [], history: [], completed: false,
         seasonStartedAt: new Date().toISOString()
       };
     }
     const journey = state.seasonJourney;
-    journey.version = 2;
+    journey.version = 3;
     if (!Array.isArray(journey.schedule) || journey.schedule.length !== SEASON_LENGTH) journey.schedule = buildSchedule();
     if (!Array.isArray(journey.recent)) journey.recent = [];
     if (!Array.isArray(journey.history)) journey.history = [];
@@ -685,6 +846,9 @@
     journey.teamName = String(journey.teamName || PLAYER_TEAM_FALLBACK).slice(0, 24);
     journey.gameIndex = clamp(Number(journey.gameIndex) || 0, 0, SEASON_LENGTH);
     journey.schedule.forEach(game => {
+      if (game.game === 41 && game.special?.key === 'allstar') game.special = null;
+      if (game.game === 47) game.special = { key: 'allstar-selection', icon: '★', label: 'All-Star Selection' };
+      if (game.game === 50) game.special = { key: 'allstar', icon: '⭐', label: 'All-Star Weekend' };
       if (!Array.isArray(game.moments)) game.moments = [];
       if (game.played && !game.analysis) game.analysis = null;
     });
@@ -943,7 +1107,17 @@
     const leaderCategories = ['PTS', 'AST', 'BLK'];
     const leaderCategory = leaderCategories[Math.floor(leaguePulseIndex / 3) % leaderCategories.length];
     const leader = view.leaders?.[leaderCategory]?.[0];
+    const gameIndex = Number(state.seasonJourney.gameIndex || 0);
+    const allStarPreview = gameIndex >= 40 && gameIndex < 47 && window.SeasonAllStar
+      ? window.SeasonAllStar.build(state.seasonJourney, state.seasonJourney.leagueState)
+      : null;
+    const allStarWatch = allStarPreview
+      ? window.SeasonAllStar.playerSelections(allStarPreview)[0]
+        || allStarPreview.west?.selected?.find(player => player.isPlayer)
+        || allStarPreview.west?.starters?.[0]
+      : null;
     const items = [
+      allStarWatch && { target: 'awards', label: 'ALL-STAR WATCH · GAME 47', name: allStarWatch.name, stat: `${allStarWatch.ppg.toFixed(1)} PPG · ${allStarWatch.selectionType.toUpperCase()} PROJECTION`, rank: '★' },
       playerCandidate && { target: 'awards', label: 'MVP RACE', name: playerCandidate.name, stat: `${playerCandidate.ppg.toFixed(1)} PPG · ${playerCandidate.teamWins} WINS`, rank: `#${playerCandidate.rank} ${seasonMovementMarkup(playerCandidate.movement)}` },
       hotTeam && { target: 'league', label: 'HOT TEAM · LAST 5', name: hotTeam.isPlayer ? state.seasonJourney.teamName : hotTeam.name, stat: hotTeam.form.join(' · ') || 'SEASON OPENING', rank: `${hotTeam.winsLast5}W` },
       leader && { target: 'league', label: `LEAGUE LEADER · ${leaderCategory}`, name: leader.name, stat: `${leader.value.toFixed(1)} ${leader.suffix}`, rank: '#1' }
@@ -2633,7 +2807,10 @@
     playJourneySound('whistle');
     const win = activeGame.homeScore > activeGame.awayScore;
     const badgeEffects = typeof analyzeLineupBadges === 'function' ? analyzeLineupBadges() : null;
-    const playerSimulationScript = simulationScriptForSide(activeGame.gameScript, 'user', activeGame.starters);
+    const playerSimulationScript = applyAllStarRevengeScript(
+      simulationScriptForSide(activeGame.gameScript, 'user', activeGame.starters),
+      activeGame.scheduleGame.game
+    );
     const gameData = generateGameBoxScoreData({
       starters: activeGame.starters.map(moraleAdjustedCard), bench: activeGame.bench.map(moraleAdjustedCard),
       myScore: activeGame.homeScore, oppScore: activeGame.awayScore, win,
@@ -2648,6 +2825,8 @@
     gameData.opponentBenchPts = opponentGameData.benchPts;
     const generatedMoments = Array.isArray(gameData.badgeMoments) ? gameData.badgeMoments : [];
     gameData.badgeMoments = generatedMoments.concat(activeGame.moments.map(m => ({ badge: m.badge, icon: m.icon, player: m.player, color: 'text-amber-300 bg-amber-950/50 border-amber-500/40', desc: `${m.title} 漫畫時刻已收錄。` })));
+    const revengeName = allStarRevengeName(activeGame.scheduleGame.game);
+    if (revengeName) gameData.badgeMoments.push({ badge: 'REVENGE GAME', icon: '🔥', player: revengeName, color: 'text-rose-300 bg-rose-950/60 border-rose-500/40', desc: `${revengeName} 回應全明星落選，本場獲得進攻戲份與 Badge Moment 加成。` });
     const recordResult = evaluateJourneyRecords(gameData, activeGame.scheduleGame);
     gameData.badgeMoments.push(...recordMomentCards(recordResult, opponentHistoric));
     gameData.records = recordResult.records;
@@ -2766,7 +2945,7 @@
       let theirs = scriptedResult?.away ?? randomInt(92, 132);
       if (mine === theirs) mine += scriptRoll(gameScript, 'admin-tiebreak') < .5 ? 1 : -1;
       const win = mine > theirs;
-      const playerSimulationScript = simulationScriptForSide(gameScript, 'user', starters);
+      const playerSimulationScript = applyAllStarRevengeScript(simulationScriptForSide(gameScript, 'user', starters), item.game);
       const gameData = generateGameBoxScoreData({
         starters: starters.map(moraleAdjustedCard), bench: bench.map(moraleAdjustedCard),
         myScore: mine, oppScore: theirs, win, oppTeam: item.opponent,
@@ -2782,6 +2961,8 @@
       gameData.opponentBenchPts = opponentGameData.benchPts;
       const recordResult = evaluateJourneyRecords(gameData, item);
       gameData.badgeMoments = (gameData.badgeMoments || []).concat(recordMomentCards(recordResult, opponentHistoric));
+      const revengeName = allStarRevengeName(item.game);
+      if (revengeName) gameData.badgeMoments.push({ badge: 'REVENGE GAME', icon: '🔥', player: revengeName, color: 'text-rose-300 bg-rose-950/60 border-rose-500/40', desc: `${revengeName} 回應全明星落選，本場獲得進攻戲份與 Badge Moment 加成。` });
       gameData.records = recordResult.records;
       gameData.personalBests = recordResult.personalBests;
       gameData.historicLine = userHistoric || opponentHistoric || null;
@@ -2895,14 +3076,19 @@
   function startNextJourneySeason() {
     const old = state.seasonJourney;
     state.seasonJourney = {
-      version: 2,
+      version: 3,
       seasonNo: (Number(old.seasonNo) || 1) + 1,
       teamName: old.teamName || PLAYER_TEAM_FALLBACK,
       gameIndex: 0, wins: 0, losses: 0, streak: 0, bestStreak: 0,
       schedule: buildSchedule(), recent: [],
       history: Array.isArray(old.history) ? old.history : [],
       awards: [], completed: false, seasonStartedAt: new Date().toISOString(),
-      recordBook: seasonSimulation()?.ensureRecordBook(old.recordBook) || old.recordBook || null
+      recordBook: seasonSimulation()?.ensureRecordBook(old.recordBook) || old.recordBook || null,
+      allStarHistory: (Array.isArray(old.allStarHistory) ? old.allStarHistory : []).concat(old.allStarWeekend ? [{
+        seasonNo: old.seasonNo,
+        threePointParticipants: old.allStarWeekend.threePointParticipants || [],
+        threePointChampionKey: old.allStarWeekend.threePointChampionKey || null
+      }] : []).slice(-8)
     };
     state.season.hasPlayedPlayoffs = false;
     state.season.threePtContestPlayed = false;
@@ -3051,7 +3237,7 @@
     if (!anchor || document.getElementById('sjAchievementBacks')) return;
     const section = document.createElement('section');
     section.className = 'mt-3 pt-3 border-t border-slate-800';
-    section.innerHTML = '<div class="flex justify-between items-center mb-2"><h4 class="text-[10px] text-amber-400 font-black sj-kicker">Badge Journey</h4><span id="sjBadgeMastery" class="text-[9px] text-slate-400"></span></div><div id="sjBadgeProgressList" class="sj-badge-progress-list"></div><div id="sjMomentSummary" class="text-[10px] text-slate-500 mb-3"></div><div id="sjMonthlyCareerHonors" class="sj-career-monthly hidden"><h5>MONTHLY HONORS</h5><div id="sjMonthlyCareerHonorList"></div></div><details id="sjAchievementBacksSection" class="tq-backs-collection" ontoggle="hydrateAchievementBackImages(this)"><summary><span class="tq-backs-collection__title"><span>ACHIEVEMENT COLLECTION</span><strong>BACKS</strong></span><span class="tq-backs-collection__status"><b id="sjBacksActiveSummary">尚未裝備</b><span id="sjBacksOwnedSummary">0 / 6 已解鎖</span></span><span class="tq-backs-collection__chevron" aria-hidden="true">›</span></summary><div class="tq-backs-collection__body"><p class="tq-backs-collection__note">點卡背可放大查看；已解鎖的卡背可以設為展示外觀。</p><div id="sjAchievementBacks" class="tq-achievement-backs-grid"></div></div></details>';
+    section.innerHTML = '<div class="flex justify-between items-center mb-2"><h4 class="text-[10px] text-amber-400 font-black sj-kicker">Badge Journey</h4><span id="sjBadgeMastery" class="text-[9px] text-slate-400"></span></div><div id="sjBadgeProgressList" class="sj-badge-progress-list"></div><div id="sjMomentSummary" class="text-[10px] text-slate-500 mb-3"></div><div id="sjMonthlyCareerHonors" class="sj-career-monthly hidden"><h5>MONTHLY HONORS</h5><div id="sjMonthlyCareerHonorList"></div></div><details id="sjAchievementBacksSection" class="tq-backs-collection" ontoggle="hydrateAchievementBackImages(this)"><summary><span class="tq-backs-collection__title"><span>ACHIEVEMENT COLLECTION</span><strong>BACKS</strong></span><span class="tq-backs-collection__status"><b id="sjBacksActiveSummary">尚未裝備</b><span id="sjBacksOwnedSummary">0 / 8 已解鎖</span></span><span class="tq-backs-collection__chevron" aria-hidden="true">›</span></summary><div class="tq-backs-collection__body"><p class="tq-backs-collection__note">點卡背可放大查看；已解鎖的卡背可以設為展示外觀。</p><div id="sjAchievementBacks" class="tq-achievement-backs-grid"></div></div></details>';
     anchor.parentElement.appendChild(section);
   }
 
@@ -3160,6 +3346,9 @@
   window.selectLeagueLeaderCategory = selectLeagueLeaderCategory;
   window.openLeaguePulse = openLeaguePulse;
   window.closeMonthlyAwardModal = closeMonthlyAwardModal;
+  window.closeAllStarSelectionAnnouncement = closeAllStarSelectionAnnouncement;
+  window.closeAllStarWeekend = closeAllStarWeekend;
+  window.awardThreePointChampion = awardThreePointChampion;
   window.saveJourneyTeamName = saveJourneyTeamName;
   window.closeJourneyTeamName = closeJourneyTeamName;
   window.closeJourneyGame = closeJourneyGame;

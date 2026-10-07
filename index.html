@@ -478,16 +478,29 @@
     </section>
 <!-- 👇👇👇 請直接貼在 </section> 的前一行（或緊接在下方） 👇👇👇 -->
 
-<!-- 🌟 全明星週末（第 41 場）榮譽結算彈窗 -->
-<div id="allStarEventModal" onclick="if(event.target === this) resumeSimFromEvent('allStarEventModal')" class="fixed inset-0 bg-slate-950/90 backdrop-blur-md z-50 hidden flex items-end sm:items-center justify-center p-3 sm:p-4 ios-safe-modal">
+<!-- 🌟 全明星週末（第 50 場）V3.0 榮譽結算彈窗 -->
+<div id="allStarSelectionModal" onclick="if(event.target === this) closeAllStarSelectionAnnouncement()" class="fixed inset-0 bg-slate-950/90 backdrop-blur-md z-50 hidden flex items-end sm:items-center justify-center p-3 sm:p-4 ios-safe-modal">
+  <div class="bg-slate-900 border border-blue-400/50 rounded-3xl w-full max-w-2xl p-5 shadow-2xl space-y-4 relative animate-modal-in max-h-[calc(100dvh-1.5rem)] overflow-y-auto">
+    <div class="flex items-start justify-between gap-3">
+      <div><span class="text-[10px] text-blue-300 font-black tracking-[.18em]">GAME 47 · SELECTION NIGHT</span><h3 class="text-xl font-black text-white">★ ALL-STAR SELECTION ★</h3></div>
+      <button type="button" onclick="closeAllStarSelectionAnnouncement()" class="text-slate-400 hover:text-white text-xl font-bold">✕</button>
+    </div>
+    <div id="allStarSelectionContent"></div>
+    <button onclick="closeAllStarSelectionAnnouncement()" type="button" class="w-full bg-gradient-to-r from-blue-500 to-amber-400 text-slate-950 font-black py-3.5 rounded-2xl text-sm shadow-lg">確認名單 · CONTINUE</button>
+  </div>
+</div>
+
+<div id="allStarEventModal" onclick="if(event.target === this) closeAllStarWeekend()" class="fixed inset-0 bg-slate-950/90 backdrop-blur-md z-50 hidden flex items-end sm:items-center justify-center p-3 sm:p-4 ios-safe-modal">
   <div class="bg-slate-900 border border-amber-500/60 rounded-3xl w-full max-w-md p-6 shadow-2xl text-center space-y-4 relative animate-modal-in">
     <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-400/40 text-xs font-mono font-bold">
-      ★ 2026 NBA ALL-STAR WEEKEND ★
+      ★ NBA ALL-STAR WEEKEND · V3.0 ★
 <button id="btnOpenThreePtFromAllStar" onclick="openThreePointContest()" class="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-lg text-xs shadow-md cursor-pointer transition-all">
   🎯 全明星三分球大賽
 </button>
     </div>
-    <h3 class="text-xl font-black text-white">例行賽半程：全明星盛典！</h3>
+    <h3 class="text-xl font-black text-white">GAME 50 · 全明星盛典</h3>
+    <div id="allStarWeekendSummary" class="text-left"></div>
+    <div id="allStarSnubPanel" class="hidden text-left"></div>
     <div class="p-4 bg-slate-950 rounded-2xl border border-slate-800 flex items-center gap-3 text-left">
       <img id="asgPlayerImg" src="" class="w-14 h-14 rounded-full object-cover object-top bg-slate-900 border border-amber-400 flex-shrink-0" onerror="this.src='https://cdn.nba.com/headshots/nba/latest/1040x760/fallback.png'">
       <div>
@@ -497,7 +510,7 @@
       </div>
     </div>
     <p class="text-xs text-slate-300">半程戰績斐然！聯盟特頒全明星嘉獎：<br><span class="text-amber-400 font-bold font-mono">+2 🎟️ 抽卡券 ｜ +30 💎 選秀碎片</span>！</p>
-    <button onclick="resumeSimFromEvent('allStarEventModal')" type="button" class="w-full bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 text-slate-950 font-black py-3.5 rounded-2xl text-xs sm:text-sm shadow-lg cursor-pointer active:scale-98 flex items-center justify-center gap-1.5">
+    <button onclick="closeAllStarWeekend()" type="button" class="w-full bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 text-slate-950 font-black py-3.5 rounded-2xl text-xs sm:text-sm shadow-lg cursor-pointer active:scale-98 flex items-center justify-center gap-1.5">
       收下榮譽並繼續下半季賽程 ➔
     </button>
   </div>
@@ -2130,10 +2143,11 @@
 <script src="./js/bootstrap.js"></script>
 <script src="./js/ui-v2/visual-match-simulator.js?v=20261003-season-interactions-2"></script>
 <script src="./js/season-standings.js?v=20261005-standings-1"></script>
-<script src="./js/season-league.js?v=20261007-league-1"></script>
+<script src="./js/season-league.js?v=20261007-all-star-v3-1"></script>
+<script src="./js/season-all-star.js?v=20261007-v3-1"></script>
 <script src="./js/season-simulation.js?v=20261007-variance-1"></script>
 <script src="./js/ui-v2/achievement-backs.js?v=20261006-backs-1"></script>
-<script src="./js/season-journey.js?v=20261007-real-bench-1"></script>
+<script src="./js/season-journey.js?v=20261007-allstar-v3-1"></script>
 <script src="./js/ui-v2/ui-v2-adapter.js?v=20261005-standings-1"></script>
 <script src="./js/ui-v2/home-v2.js?v=20261003-train-vocab-1"></script>
 <script src="./js/study-planner.js?v=20261005-learning-1"></script>

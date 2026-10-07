@@ -57,6 +57,9 @@ assert.equal((css.match(/{/g) || []).length, (css.match(/}/g) || []).length, 'CS
 for (const id of ['champion', 'fmvp', 'mvp', 'dpoy', 'record', 'legend']) {
   assert.ok(fs.existsSync(path.join(root, 'assets', 'cards', 'backs', `${id}-v1.webp`)), `${id} art is missing`);
 }
+for (const id of ['allstar', 'threepoint']) {
+  assert.ok(fs.existsSync(path.join(root, 'assets', 'cards', 'backs', `${id}-v1.png`)), `${id} art is missing`);
+}
 assert.ok(fs.existsSync(path.join(root, 'assets', 'cards', 'backs', 'nba-logo.svg')), 'NBA logo is missing');
 
 console.log('Achievement BACKS: six full-art cards, NBA logo layer, save-compatible counts, upgrades, collapsed collection, and responsive layout passed.');

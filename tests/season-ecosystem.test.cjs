@@ -5,11 +5,13 @@ const root = path.resolve(__dirname, '..');
 const read = file => fs.readFileSync(path.join(root, file), 'utf8');
 const season = read('js/season-journey.js');
 const league = read('js/season-league.js');
+const allStar = read('js/season-all-star.js');
 const index = read('index.html');
 const css = read('css/season-league.css');
 
 assert.match(index, /season-league\.css/);
 assert.match(index, /season-league\.js/);
+assert.match(index, /season-all-star\.js/);
 assert.ok(index.indexOf('season-league.js') < index.indexOf('season-journey.js'), 'league layer must load before Journey UI');
 for (const view of ['journey', 'league', 'awards']) assert.match(season, new RegExp(`data-sj-view="${view}"`));
 assert.match(season, /function renderJourneyGameWindow\(\)/);
@@ -28,6 +30,9 @@ assert.doesNotMatch(league, /Math\.random/, 'CPU league simulation must be deter
 assert.match(league, /finalAwardsLocked/);
 assert.match(league, /monthlyAwardsSeen/);
 assert.match(league, /source: options\.isPlayer \? 'player' : 'cpu'/);
+assert.match(allStar, /SELECTION_GAME = 47/);
+assert.match(allStar, /WEEKEND_GAME = 50/);
+assert.match(allStar, /threePointParticipants/);
 assert.match(css, /grid-template-columns:\s*repeat\(5/);
 assert.match(css, /overflow-x:\s*auto/);
 assert.match(css, /@media \(max-width: 430px\)/);

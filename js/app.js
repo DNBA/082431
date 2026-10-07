@@ -32707,19 +32707,27 @@ function updateMeterDifficulty(shooter) {
 function openThreePointContest() {
   const modal = document.getElementById('threePtModal');
   if (!modal) return;
-  modal.classList.remove('hidden');
-  modal.style.display = 'flex';
 
   const isSeasonPlayed = !!(state.season && state.season.threePtContestPlayed);
   const lockedShooterName = state.season?.threePtContestShooter || null;
 
-  const myPlayers = getAllMyPlayers();
+  const allStarWeekend = state.seasonJourney?.allStarWeekend;
+  const invitedNames = allStarWeekend?.announced && window.SeasonAllStar
+    ? new Set(window.SeasonAllStar.playerThreePointInvites(allStarWeekend).map(player => player.name))
+    : null;
+  const myPlayers = getAllMyPlayers().filter(player => !invitedNames || invitedNames.has(player.name));
+  if (invitedNames && myPlayers.length === 0 && !isSeasonPlayed) {
+    showToast('本季沒有你的球員接受三分大賽邀請。', 'warning');
+    return;
+  }
+  modal.classList.remove('hidden');
+  modal.style.display = 'flex';
   const selectElem = document.getElementById('threePtShooterSelect');
   const lockedBadge = document.getElementById('threePtShooterLockedBadge');
   if (selectElem) selectElem.innerHTML = '';
 
   if (myPlayers.length > 0) {
-    // 依「三分命中率 (3P%)」從高到低嚴格排序，挑出真正射手
+    // V3.0：公布名單後只顯示已接受邀請的隊內射手。
     myPlayers.sort((a, b) => getShooter3PtPercent(b) - getShooter3PtPercent(a));
     myPlayers.forEach(p => {
       const pct = getShooter3PtPercent(p);
@@ -32812,7 +32820,11 @@ function onShooterSelectChange(selectedName) {
   if (state.season?.threePtContestPlayed || state.season?.threePtContestShooter) {
     return; // 已鎖定球員，不可更換
   }
-  const myPlayers = getAllMyPlayers();
+  const weekend = state.seasonJourney?.allStarWeekend;
+  const invitedNames = weekend?.announced && window.SeasonAllStar
+    ? new Set(window.SeasonAllStar.playerThreePointInvites(weekend).map(player => player.name))
+    : null;
+  const myPlayers = getAllMyPlayers().filter(player => !invitedNames || invitedNames.has(player.name));
   const found = myPlayers.find(p => p.name === selectedName);
   if (found) {
     threePtState.shooter = found;
@@ -33061,14 +33073,24 @@ function finishContest() {
     asgBtn.className = "px-3 py-1.5 bg-slate-800 text-amber-400/80 border border-slate-700 font-bold rounded-lg text-xs shadow-md cursor-pointer";
   }
 
-  const aiShooters = [
-    { name: playerName.includes("Curry") ? "Buddy Hield" : "Stephen Curry", score: 27 },
-    { name: playerName.includes("Lillard") ? "Tyrese Haliburton" : "Damian Lillard", score: 25 },
-    { name: playerName.includes("Thompson") ? "Devin Booker" : "Klay Thompson", score: 23 },
-    { name: `${playerName} (你)`, score: myScore, isPlayer: true }
-  ].sort((a, b) => b.score - a.score);
+  const weekend = state.seasonJourney?.allStarWeekend;
+  const aiShooters = window.SeasonAllStar && weekend
+    ? window.SeasonAllStar.contestBoard(weekend, playerName, myScore).map(player => ({ ...player, isPlayer: !!player.isUserEntry, name: player.isUserEntry ? `${player.name} (你)` : player.name }))
+    : [
+        { name: playerName.includes("Curry") ? "Buddy Hield" : "Stephen Curry", score: 27 },
+        { name: playerName.includes("Lillard") ? "Tyrese Haliburton" : "Damian Lillard", score: 25 },
+        { name: playerName.includes("Thompson") ? "Devin Booker" : "Klay Thompson", score: 23 },
+        { name: `${playerName} (你)`, score: myScore, isPlayer: true }
+      ].sort((a, b) => b.score - a.score);
 
   const isChamp = aiShooters[0].isPlayer;
+  if (weekend) {
+    weekend.contestResult = aiShooters.map(player => ({ key: player.key || '', name: player.name.replace(' (你)', ''), score: player.score, isPlayer: !!player.isPlayer }));
+    weekend.threePointChampionKey = aiShooters[0].key || null;
+    weekend.threePointChampionName = aiShooters[0].name.replace(' (你)', '');
+  }
+  if (isChamp && typeof window.awardThreePointChampion === 'function') window.awardThreePointChampion(playerName, myScore, aiShooters);
+  saveGame();
 
   const trophyEl = document.getElementById('contestTrophyIcon');
   if (trophyEl) trophyEl.innerText = isChamp ? '🏆' : '🥈';

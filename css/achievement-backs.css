@@ -14,6 +14,8 @@
 .sj-surface-fmvp { --sj-equipped-back: url('../assets/cards/backs/fmvp-v1.webp'); }
 .sj-surface-mvp { --sj-equipped-back: url('../assets/cards/backs/mvp-v1.webp'); }
 .sj-surface-dpoy { --sj-equipped-back: url('../assets/cards/backs/dpoy-v1.webp'); }
+.sj-surface-allstar { --sj-equipped-back: url('../assets/cards/backs/allstar-v1.png'); }
+.sj-surface-threepoint { --sj-equipped-back: url('../assets/cards/backs/threepoint-v1.png'); }
 .sj-surface-record { --sj-equipped-back: url('../assets/cards/backs/record-v1.webp'); }
 .sj-surface-legend { --sj-equipped-back: url('../assets/cards/backs/legend-v1.webp'); }
 
@@ -135,6 +137,8 @@
 .tq-achievement-back--fmvp { --back-accent: #f7d48a; }
 .tq-achievement-back--mvp { --back-accent: #c28cff; }
 .tq-achievement-back--dpoy { --back-accent: #9dd5ff; }
+.tq-achievement-back--allstar { --back-accent: #77b8ff; }
+.tq-achievement-back--threepoint { --back-accent: #ffca63; }
 .tq-achievement-back--record { --back-accent: #ff5d4c; }
 .tq-achievement-back--legend { --back-accent: #f0bc68; }
 
