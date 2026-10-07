@@ -1,0 +1,36 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const root = path.resolve(__dirname, '..');
+const read = file => fs.readFileSync(path.join(root, file), 'utf8');
+const season = read('js/season-journey.js');
+const league = read('js/season-league.js');
+const index = read('index.html');
+const css = read('css/season-league.css');
+
+assert.match(index, /season-league\.css/);
+assert.match(index, /season-league\.js/);
+assert.ok(index.indexOf('season-league.js') < index.indexOf('season-journey.js'), 'league layer must load before Journey UI');
+for (const view of ['journey', 'league', 'awards']) assert.match(season, new RegExp(`data-sj-view="${view}"`));
+assert.match(season, /function renderJourneyGameWindow\(\)/);
+assert.match(season, /slice\(start, start \+ 5\)/);
+assert.match(season, /id="sjLeaguePulse"/);
+assert.match(season, /id="sjLeagueLeaders"/);
+assert.match(season, /id="sjMvpRace"/);
+assert.match(season, /id="sjDpoyRace"/);
+assert.match(season, /id="sjMonthlyAwardModal"/);
+assert.match(season, /monthlyHonors/);
+assert.match(season, /MonthlyCareerHonors/);
+assert.match(season, /start82GamesSimulation = openJourneyGame/);
+assert.match(season, /window\.SeasonLeague\.sync/);
+assert.match(season, /award\.isPlayer/, 'annual Achievement BACK unlocks must only use player-owned winners');
+assert.doesNotMatch(league, /Math\.random/, 'CPU league simulation must be deterministic');
+assert.match(league, /finalAwardsLocked/);
+assert.match(league, /monthlyAwardsSeen/);
+assert.match(league, /source: options\.isPlayer \? 'player' : 'cpu'/);
+assert.match(css, /grid-template-columns:\s*repeat\(5/);
+assert.match(css, /overflow-x:\s*auto/);
+assert.match(css, /@media \(max-width: 430px\)/);
+assert.equal((css.match(/{/g) || []).length, (css.match(/}/g) || []).length, 'Season League CSS braces must be balanced');
+
+console.log('Season ecosystem UI: three tabs, compact five-game Journey, League, Awards, monthly modal, career honors, and responsive CSS passed.');

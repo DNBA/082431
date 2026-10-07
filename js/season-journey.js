@@ -125,6 +125,11 @@
   let energyTimer = null;
   let autoMode = { running: false, remaining: 0, timer: null };
   let standingsConference = 'west';
+  let currentSeasonView = 'journey';
+  let standingsExpanded = false;
+  let leagueLeaderCategory = 'PTS';
+  let leaguePulseIndex = 0;
+  let leaguePulseTimer = null;
 
   function now() { return Date.now(); }
   function clamp(n, min, max) { return Math.max(min, Math.min(max, n)); }
@@ -330,6 +335,7 @@
     }
     if (!Array.isArray(card.achievementBacks)) card.achievementBacks = [];
     if (!Array.isArray(card.legacy.traits)) card.legacy.traits = [];
+    if (!Array.isArray(card.legacy.monthlyHonors)) card.legacy.monthlyHonors = [];
     if (!card.badgeJourney || typeof card.badgeJourney !== 'object') {
       card.badgeJourney = { triggers: 0, mastery: 'Bronze', moments: [], badges: {} };
     }
@@ -494,6 +500,48 @@
     }
   }
 
+  function activeSeasonCards() {
+    const cards = LINEUP_POSITIONS.map(position => state.startingLineup?.[position])
+      .concat(Array.isArray(state.benchLineup) ? state.benchLineup : [])
+      .filter(Boolean);
+    const seen = new Set();
+    return cards.filter(card => {
+      const key = card.cardId || `${card.name}:${card.edition || ''}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }
+
+  function applyMonthlyCareerHonors() {
+    const journey = state.seasonJourney;
+    const awards = journey?.leagueState?.monthlyAwards || [];
+    awards.filter(award => award.isPlayer).forEach(award => {
+      const cardId = String(award.playerKey || '').replace(/^player:/, '');
+      const card = (state.inventory || []).find(item => String(item.cardId) === cardId)
+        || activeSeasonCards().find(item => item.name === award.player);
+      if (!card) return;
+      ensureCardJourney(card);
+      if (card.legacy.monthlyHonors.some(honor => honor.id === award.id)) return;
+      card.legacy.monthlyHonors.push({
+        id: award.id, type: 'player-of-the-month', seasonNo: journey.seasonNo,
+        monthKey: award.monthKey, monthLabel: award.monthLabel,
+        conference: award.conference, settledAtGame: award.settledAtGame
+      });
+    });
+  }
+
+  function syncLeagueState(forceRace = false) {
+    const journey = state.seasonJourney;
+    if (!journey || !window.SeasonLeague) return null;
+    const players = typeof NBA_PLAYERS !== 'undefined' && Array.isArray(NBA_PLAYERS) ? NBA_PLAYERS : [];
+    const standings = window.SeasonStandings?.view(journey, players) || null;
+    const league = window.SeasonLeague.sync(journey, players, activeSeasonCards(), standings);
+    if (forceRace && league) window.SeasonLeague.finalizeAwards(league, journey);
+    applyMonthlyCareerHonors();
+    return league;
+  }
+
   function ensureJourneyState() {
     if (!state.seasonJourney || typeof state.seasonJourney !== 'object') {
       state.seasonJourney = {
@@ -516,6 +564,7 @@
       if (game.played && !game.analysis) game.analysis = null;
     });
     window.SeasonStandings?.ensure(journey, typeof NBA_PLAYERS !== 'undefined' ? NBA_PLAYERS : []);
+    syncLeagueState();
 
     if (!state.seasonEnergy || typeof state.seasonEnergy !== 'object') {
       state.seasonEnergy = { current: ENERGY_MAX, lastRegenAt: now() };
@@ -623,6 +672,8 @@
     if (!view) return;
     const progress = document.getElementById('sjStandingsProgress');
     if (progress) progress.textContent = `例行賽 ${view.round} / 82 場 · 每場結束後更新`;
+    const expandButton = document.getElementById('sjStandingsExpand');
+    if (expandButton) expandButton.textContent = standingsExpanded ? '收合至前 8 名' : '查看完整排名';
     document.querySelectorAll('[data-sj-conference-tab]').forEach(button => {
       const active = button.dataset.sjConferenceTab === standingsConference;
       button.setAttribute('aria-selected', String(active));
@@ -633,7 +684,8 @@
       const body = document.getElementById(`sjStandings${conference === 'west' ? 'West' : 'East'}Rows`);
       if (panel) panel.dataset.active = String(standingsConference === conference);
       if (!body) continue;
-      body.innerHTML = view.conferences[conference].map(team => {
+      const rows = standingsExpanded ? view.conferences[conference] : view.conferences[conference].slice(0, 8);
+      body.innerHTML = rows.map(team => {
         const percentage = team.games ? team.percentage.toFixed(3).replace(/^0/, '') : '—';
         const behind = team.rank === 1 || !view.round ? '—' : Number.isInteger(team.gamesBack) ? String(team.gamesBack) : team.gamesBack.toFixed(1);
         return `<tr class="${team.isPlayer ? 'is-player' : ''}">
@@ -643,6 +695,11 @@
         </tr>`;
       }).join('');
     }
+  }
+
+  function toggleJourneyStandingsExpansion() {
+    standingsExpanded = !standingsExpanded;
+    renderJourneyStandings();
   }
 
   function getSeasonRoadSteps() {
@@ -695,212 +752,293 @@
     return [regular, playIn, playoffs, finals];
   }
 
+  function seasonMovementMarkup(movement) {
+    const symbol = movement === 'up' ? '↑' : (movement === 'down' ? '↓' : '—');
+    return `<span class="sj-race-movement is-${movement || 'same'}" aria-label="${movement === 'up' ? '排名上升' : movement === 'down' ? '排名下降' : '排名不變'}">${symbol}</span>`;
+  }
+
+  function showSeasonView(view) {
+    currentSeasonView = ['journey', 'league', 'awards'].includes(view) ? view : 'journey';
+    document.querySelectorAll('[data-sj-view]').forEach(button => {
+      const active = button.dataset.sjView === currentSeasonView;
+      button.classList.toggle('is-active', active);
+      button.setAttribute('aria-selected', String(active));
+    });
+    document.querySelectorAll('[data-sj-view-panel]').forEach(panel => panel.classList.toggle('hidden', panel.dataset.sjViewPanel !== currentSeasonView));
+    if (currentSeasonView === 'league') renderLeaguePanel();
+    if (currentSeasonView === 'awards') renderAwardsPanel();
+  }
+
+  function selectLeagueLeaderCategory(category) {
+    leagueLeaderCategory = ['PTS', 'REB', 'AST', 'STL', 'BLK'].includes(category) ? category : 'PTS';
+    renderLeaguePanel();
+  }
+
+  function openLeaguePulse(button) {
+    showSeasonView(button?.dataset?.target || 'league');
+  }
+
+  function renderJourneyGameWindow() {
+    const journey = state.seasonJourney;
+    const host = document.getElementById('sjGameWindow');
+    if (!host) return;
+    const currentIndex = journey.completed ? 81 : clamp(journey.gameIndex, 0, 81);
+    const start = clamp(currentIndex - 2, 0, 77);
+    host.innerHTML = journey.schedule.slice(start, start + 5).map(game => {
+      const current = !journey.completed && game.game === journey.gameIndex + 1;
+      const complete = !!game.played;
+      const special = dynamicSpecial(game);
+      const marker = complete ? '✓' : (current ? '●' : '○');
+      const detail = special ? `${special.icon} ${special.key.toUpperCase()}` : (complete ? (game.win ? 'WIN' : 'LOSS') : safeText(game.opponent));
+      return `<div class="sj-game-node ${complete ? 'is-complete' : ''} ${current ? 'is-current' : ''}" title="Game ${game.game} vs ${safeText(game.opponent)}">
+        <small>GAME ${game.game}</small><b>${marker}</b><em>${detail}</em>
+      </div>`;
+    }).join('');
+  }
+
+  function renderJourneyRecent() {
+    const host = document.getElementById('sjRecentList');
+    if (!host) return;
+    const games = state.seasonJourney.schedule.filter(game => game.played).slice(-3).reverse();
+    host.innerHTML = games.length ? games.map(game => `<div class="sj-recent-row ${game.win ? '' : 'is-loss'}">
+      <b>${game.win ? 'W' : 'L'}</b><span>Game ${game.game} · ${safeText(game.opponent)}</span><em>${game.myScore}-${game.oppScore}</em>
+    </div>`).join('') : '<p class="sj-empty-copy">完成第一場比賽後，最近賽果會顯示在這裡。</p>';
+  }
+
+  function renderLeaguePulse() {
+    const button = document.getElementById('sjLeaguePulse');
+    const body = document.getElementById('sjLeaguePulseBody');
+    if (!button || !body || !window.SeasonLeague) return;
+    const view = window.SeasonLeague.view(state.seasonJourney);
+    if (!view) return;
+    const mvpRace = view.awardRaces.mvp || [];
+    const playerCandidate = mvpRace.find(player => player.isPlayer) || mvpRace[0];
+    const hotTeam = view.teamTrends?.[0];
+    const leaderCategories = ['PTS', 'AST', 'BLK'];
+    const leaderCategory = leaderCategories[Math.floor(leaguePulseIndex / 3) % leaderCategories.length];
+    const leader = view.leaders?.[leaderCategory]?.[0];
+    const items = [
+      playerCandidate && { target: 'awards', label: 'MVP RACE', name: playerCandidate.name, stat: `${playerCandidate.ppg.toFixed(1)} PPG · ${playerCandidate.teamWins} WINS`, rank: `#${playerCandidate.rank} ${seasonMovementMarkup(playerCandidate.movement)}` },
+      hotTeam && { target: 'league', label: 'HOT TEAM · LAST 5', name: hotTeam.isPlayer ? state.seasonJourney.teamName : hotTeam.name, stat: hotTeam.form.join(' · ') || 'SEASON OPENING', rank: `${hotTeam.winsLast5}W` },
+      leader && { target: 'league', label: `LEAGUE LEADER · ${leaderCategory}`, name: leader.name, stat: `${leader.value.toFixed(1)} ${leader.suffix}`, rank: '#1' }
+    ].filter(Boolean);
+    const item = items[leaguePulseIndex % Math.max(1, items.length)];
+    if (!item) {
+      button.dataset.target = 'league';
+      body.innerHTML = '<div class="sj-league-pulse__copy"><small>LEAGUE PULSE</small><strong>賽季即將開始</strong><span>完成第一場後更新聯盟動態</span></div><div class="sj-league-pulse__rank">›</div>';
+      return;
+    }
+    button.dataset.target = item.target;
+    body.innerHTML = `<div class="sj-league-pulse__copy"><small>${item.label}</small><strong>${safeText(item.name)}</strong><span>${item.stat}</span></div><div class="sj-league-pulse__rank">${item.rank}</div>`;
+  }
+
+  function renderLeaguePanel() {
+    if (!window.SeasonLeague) return;
+    const view = window.SeasonLeague.view(state.seasonJourney);
+    if (!view) return;
+    renderJourneyStandings();
+    document.querySelectorAll('[data-sj-leader]').forEach(button => button.classList.toggle('is-active', button.dataset.sjLeader === leagueLeaderCategory));
+    const leaders = document.getElementById('sjLeagueLeaders');
+    const rows = view.leaders?.[leagueLeaderCategory] || [];
+    if (leaders) leaders.innerHTML = rows.length ? rows.map(player => `<div class="sj-ranking-row ${player.isPlayer ? 'is-player' : ''}">
+      <span class="sj-ranking-row__rank">${player.rank}</span><span class="sj-ranking-row__player"><b>${safeText(player.name)}${player.isPlayer ? ' · YOU' : ''}</b><small>${player.isPlayer ? safeText(state.seasonJourney.teamName) : safeText(player.team)}${player.projected ? ' · PRESEASON' : ''}</small></span><strong class="sj-ranking-row__value">${player.value.toFixed(1)} ${player.suffix}</strong>
+    </div>`).join('') : '<p class="sj-empty-copy">尚無聯盟數據。</p>';
+    const trends = document.getElementById('sjTeamTrends');
+    if (trends) {
+      const hot = view.teamTrends?.[0];
+      const win = [...(view.teamTrends || [])].filter(team => team.streakType === 'W').sort((a, b) => b.streak - a.streak)[0];
+      const loss = [...(view.teamTrends || [])].filter(team => team.streakType === 'L').sort((a, b) => b.streak - a.streak)[0];
+      const cards = [
+        hot && { label: 'HOT · LAST 5', name: hot.isPlayer ? state.seasonJourney.teamName : hot.name, value: `${hot.winsLast5}-W` },
+        win && { label: 'WIN STREAK', name: win.isPlayer ? state.seasonJourney.teamName : win.name, value: `W${win.streak}` },
+        loss && { label: 'COLD STREAK', name: loss.isPlayer ? state.seasonJourney.teamName : loss.name, value: `L${loss.streak}` }
+      ].filter(Boolean);
+      trends.innerHTML = cards.length ? cards.map(card => `<div class="sj-trend-card"><small>${card.label}</small><b>${safeText(card.name)}</b><strong>${card.value}</strong></div>`).join('') : '<p class="sj-empty-copy">完成比賽後產生球隊趨勢。</p>';
+    }
+  }
+
+  function raceMarkup(players) {
+    return (players || []).map(player => `<div class="sj-ranking-row ${player.isPlayer ? 'is-player' : ''}">
+      <span class="sj-ranking-row__rank">${player.rank}</span><span class="sj-ranking-row__player"><b>${safeText(player.name)}${seasonMovementMarkup(player.movement)}</b><small>${player.isPlayer ? 'YOUR TEAM' : safeText(player.team)} · ${player.ppg.toFixed(1)} PPG</small></span><strong class="sj-ranking-row__value">${player.score.toFixed(1)}</strong>
+    </div>`).join('') || '<p class="sj-empty-copy">完成比賽後開始更新獎項排名。</p>';
+  }
+
+  function renderAwardsPanel() {
+    if (!window.SeasonLeague) return;
+    const journey = state.seasonJourney;
+    const view = window.SeasonLeague.view(journey);
+    if (!view) return;
+    const mvp = document.getElementById('sjMvpRace');
+    const dpoy = document.getElementById('sjDpoyRace');
+    if (mvp) mvp.innerHTML = raceMarkup(view.awardRaces.mvp);
+    if (dpoy) dpoy.innerHTML = raceMarkup(view.awardRaces.dpoy);
+    const monthHost = document.getElementById('sjMonthlyAwards');
+    if (monthHost) {
+      const groups = [...new Set(view.monthlyAwards.map(award => award.monthKey))].reverse();
+      monthHost.innerHTML = groups.length ? groups.map(monthKey => {
+        const awards = view.monthlyAwards.filter(award => award.monthKey === monthKey);
+        const label = awards[0] ? `${awards[0].monthLabel} ${awards[0].year}` : monthKey;
+        return `<div class="sj-month-group"><b>${label}</b><div class="sj-month-winners">${['west', 'east'].map(conference => {
+          const award = awards.find(item => item.conference === conference);
+          return award ? `<div class="sj-month-winner ${award.isPlayer ? 'is-player' : ''}"><small>${conference.toUpperCase()} PLAYER OF THE MONTH</small><strong>${safeText(award.player)}${award.isPlayer ? ' · YOU' : ''}</strong><span>${award.stats.ppg.toFixed(1)} PTS · ${award.stats.rpg.toFixed(1)} REB · ${award.stats.apg.toFixed(1)} AST</span></div>` : '';
+        }).join('')}</div></div>`;
+      }).join('') : '<p class="sj-empty-copy">跨入下一個月份後，East / West 月最佳球員會保存在這裡。</p>';
+    }
+    const honorsHost = document.getElementById('sjAwardsList');
+    const historicalAwards = [...(journey.history || [])].reverse().find(entry => Array.isArray(entry.awards) && entry.awards.length)?.awards || [];
+    const honors = (journey.awards || []).length ? journey.awards : (view.finalAwards.length ? view.finalAwards : historicalAwards);
+    if (honorsHost) honorsHost.innerHTML = honors.length ? honors.map(award => `<div class="sj-honor-card"><span>${award.icon || '🏆'}</span><div><small>${safeText(award.label)}</small><b>${safeText(award.player)}</b><em>${safeText(award.stat || '')}</em></div></div>`).join('') : '<p class="sj-empty-copy">82 場結束後正式鎖定 Season Honors。</p>';
+  }
+
+  function renderSeasonCollections() {
+    const journey = state.seasonJourney;
+    const legacyList = document.getElementById('sjLegacyList');
+    if (legacyList) {
+      const seasons = [...journey.history].reverse().slice(0, 5);
+      legacyList.innerHTML = seasons.length ? seasons.map(history => `<div class="sj-recent-row"><b>S${history.season}</b><span>${safeText(history.result || 'REGULAR SEASON')}</span><em>${safeText(history.record)}</em></div>`).join('') : '<p class="sj-empty-copy">完成第一個賽季後，球季歷史會永久留在這裡。</p>';
+    }
+    const allMoments = (state.inventory || []).flatMap(card => (card.badgeJourney?.moments || []).map((moment, momentIndex) => ({ card, player: card.name, moment, momentIndex })));
+    const count = document.getElementById('sjMomentCount');
+    if (count) count.textContent = `${allMoments.length} unlocked`;
+    const momentList = document.getElementById('sjMomentList');
+    if (momentList) momentList.innerHTML = allMoments.length ? allMoments.slice(-5).reverse().map(item => `<button type="button" class="sj-moment-replay" data-card-id="${safeText(item.card.cardId)}" data-moment-index="${item.momentIndex}" onclick="replayJourneyMoment(this.dataset.cardId, Number(this.dataset.momentIndex))"><span><b>${safeText(item.moment.split(':').pop())}</b><small>${safeText(item.player)}</small></span><em>▶ REPLAY</em></button>`).join('') : '<p class="sj-empty-copy">重要回合中觸發徽章，即可收藏 Badge Moment。</p>';
+  }
+
+  function maybeOpenMonthlyAwardModal() {
+    const seasonTab = document.getElementById('tab-season');
+    const modal = document.getElementById('sjMonthlyAwardModal');
+    const league = state.seasonJourney?.leagueState;
+    if (!modal || !league || seasonTab?.classList.contains('hidden') || !modal.classList.contains('hidden')) return;
+    const monthKey = [...new Set((league.monthlyAwards || []).map(award => award.monthKey))]
+      .find(key => !(league.monthlyAwardsSeen || []).includes(key));
+    if (!monthKey) return;
+    const awards = league.monthlyAwards.filter(award => award.monthKey === monthKey);
+    if (!awards.length) return;
+    const label = document.getElementById('sjMonthlyModalLabel');
+    const winners = document.getElementById('sjMonthlyModalWinners');
+    modal.dataset.monthKey = monthKey;
+    if (label) label.textContent = `${awards[0].monthLabel} ${awards[0].year} AWARDS`;
+    if (winners) winners.innerHTML = ['west', 'east'].map(conference => {
+      const award = awards.find(item => item.conference === conference);
+      return award ? `<div class="sj-month-modal__winner"><small>${conference.toUpperCase()}</small><strong>${safeText(award.player)}${award.isPlayer ? ' · YOU' : ''}</strong><span>${award.stats.ppg.toFixed(1)} PTS · ${award.stats.rpg.toFixed(1)} REB · ${award.stats.apg.toFixed(1)} AST</span></div>` : '';
+    }).join('');
+    modal.classList.remove('hidden');
+  }
+
+  function closeMonthlyAwardModal(openAwards = false) {
+    const modal = document.getElementById('sjMonthlyAwardModal');
+    const monthKey = modal?.dataset?.monthKey;
+    if (monthKey) window.SeasonLeague?.markMonthSeen(state.seasonJourney, monthKey);
+    modal?.classList.add('hidden');
+    saveGame();
+    if (openAwards) showSeasonView('awards');
+  }
+
   function renderJourneyShell() {
     const host = document.getElementById('tab-season');
     if (!host) return;
     host.innerHTML = `
-      <div class="sj-shell space-y-4">
+      <div class="sj-shell">
         <span id="seasonLimitTip" class="hidden">Season Journey Energy</span>
-        <section class="sj-scoreboard rounded-3xl border border-slate-800 shadow-xl overflow-hidden">
-          <div class="p-4 sm:p-6 border-b border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div>
-              <div class="sj-kicker text-[10px] font-black text-amber-400">Season Journey · Season <span id="sjSeasonNo">1</span></div>
-              <div class="flex items-center gap-2 mt-1">
-                <h2 id="sjTeamName" class="text-xl sm:text-2xl font-black text-white"></h2>
-                <button onclick="editJourneyTeamName()" class="text-slate-500 hover:text-amber-300 text-xs" title="修改球隊名稱">✎</button>
-              </div>
-              <p class="text-xs text-slate-500 mt-1">逐場寫下你的 82 場球季，不再一次跳過整季。</p>
-            </div>
-            <div class="flex items-center gap-3 bg-slate-950/80 border border-slate-800 rounded-2xl px-3 py-2.5">
-              <span class="sj-energy-ball">🏀</span>
-              <div>
-                <div class="text-[10px] text-slate-500 font-bold">GAME ENERGY</div>
-                <div class="flex items-baseline gap-2"><b id="sjEnergyCount" class="text-lg text-white font-mono">15/15</b><span id="sjEnergyTimer" class="text-[10px] text-amber-400"></span></div>
-              </div>
-            </div>
-          </div>
+        <nav class="sj-view-tabs" role="tablist" aria-label="Season 分頁">
+          <button type="button" data-sj-view="journey" onclick="showSeasonView('journey')" role="tab" aria-selected="true" class="is-active">JOURNEY<small>82 GAMES</small></button>
+          <button type="button" data-sj-view="league" onclick="showSeasonView('league')" role="tab" aria-selected="false">LEAGUE<small>NBA</small></button>
+          <button type="button" data-sj-view="awards" onclick="showSeasonView('awards')" role="tab" aria-selected="false">AWARDS<small>RACES</small></button>
+        </nav>
 
-          <div class="sj-season-road" aria-label="賽季完整旅程">
-            <div class="sj-season-road__eyebrow"><span>ROAD TO THE FINALS</span><strong>82 GAMES → CHAMPIONSHIP</strong></div>
-            <div id="sjSeasonRoad" class="sj-season-road__track" role="list"></div>
-          </div>
+        <main data-sj-view-panel="journey" class="sj-view-panel sj-journey-layout" role="tabpanel">
+          <header class="sj-compact-header">
+            <div class="sj-compact-header__identity"><div id="sjSeasonLabel" class="sj-compact-header__eyebrow">SEASON 2026-27</div><h2 id="sjTeamName"></h2><div class="sj-compact-header__team"><span id="sjRecord">0-0</span><span>·</span><span id="sjRank">尚未排名</span><button type="button" onclick="editJourneyTeamName()" aria-label="修改球隊名稱">✎</button></div></div>
+            <div class="sj-energy-compact"><span>🏀</span><div><b id="sjEnergyCount">15/15</b><small id="sjEnergyTimer"></small></div></div>
+          </header>
+          <section class="sj-progress-card">
+            <div class="sj-progress-card__head"><span id="sjGameLabel">GAME 1 / 82</span><b id="sjProgressPercent">0%</b></div>
+            <div class="sj-progress-meter"><i id="sjProgressFill"></i></div><div id="sjGameWindow" class="sj-game-window" aria-label="目前場次附近賽程"></div>
+          </section>
+          <section class="sj-next-game-card">
+            <div class="sj-next-game-card__head"><b>NEXT GAME</b><span id="sjSpecialLabel"></span></div>
+            <div class="sj-next-matchup"><div><strong id="sjHomeName"></strong><small id="sjHomeRecord"></small></div><i>VS</i><div><strong id="sjAwayName"></strong><small id="sjAwayRecord"></small></div></div>
+            <div class="sj-next-meta"><span id="sjOpponentOvr"></span><span id="sjRecent"></span><span id="sjMatchup"></span></div>
+            <button id="simSeasonBtn" onclick="start82GamesSimulation()" class="sj-play-button">PLAY GAME</button>
+            <button id="playoffBtn" onclick="openJourneyPostseason()" class="sj-postseason-button hidden">進入 Playoffs</button>
+            <details id="sjAutoControls" class="sj-auto-details"><summary>掛機模式 · <span id="sjAutoStatus">尚未啟動</span></summary><div class="sj-auto-details__controls"><input id="sjAutoCount" type="number" min="1" value="1" placeholder="自動比賽場數"><button id="sjAutoBtn" onclick="toggleJourneyAutoMode()">開始掛機</button></div></details>
+          </section>
+          <button id="sjLeaguePulse" type="button" data-target="league" onclick="openLeaguePulse(this)" class="sj-league-pulse"><div class="sj-league-pulse__head"><b>LEAGUE PULSE</b><span>VIEW LEAGUE ›</span></div><div id="sjLeaguePulseBody" class="sj-league-pulse__body"></div></button>
+          <section class="sj-recent-card"><div class="sj-recent-card__head"><span>RECENT GAMES</span><span>LAST 3</span></div><div id="sjRecentList" class="sj-recent-list"></div></section>
+        </main>
 
-          <div class="p-4 sm:p-6 grid lg:grid-cols-[1.2fr_.8fr] gap-4">
-            <div class="bg-slate-950/70 border border-slate-800 rounded-2xl p-4 sm:p-5">
-              <div class="flex items-center justify-between gap-2">
-                <span id="sjGameLabel" class="sj-kicker text-xs font-black text-slate-300">GAME 1 / 82</span>
-                <span id="sjSpecialLabel" class="text-[10px] font-black text-amber-300 bg-amber-950/40 border border-amber-700/40 rounded-full px-2.5 py-1"></span>
-              </div>
-              <div class="grid grid-cols-[1fr_auto_1fr] items-center gap-3 my-5 text-center">
-                <div><div id="sjHomeName" class="font-black text-white text-lg truncate"></div><div id="sjHomeRecord" class="text-emerald-400 font-mono text-sm">0-0</div></div>
-                <div class="text-slate-600 font-black text-xl">VS</div>
-                <div><div id="sjAwayName" class="font-black text-white text-lg truncate"></div><div id="sjAwayRecord" class="text-rose-300 font-mono text-sm">0-0</div></div>
-              </div>
-              <div class="grid grid-cols-3 gap-2 text-center text-[10px]">
-                <div class="rounded-xl bg-slate-900 border border-slate-800 p-2"><span class="text-slate-500 block">分區排名</span><b id="sjRank" class="text-slate-200"></b></div>
-                <div class="rounded-xl bg-slate-900 border border-slate-800 p-2"><span class="text-slate-500 block">近期戰績</span><b id="sjRecent" class="text-slate-200"></b></div>
-                <div class="rounded-xl bg-slate-900 border border-slate-800 p-2"><span class="text-slate-500 block">關鍵對位</span><b id="sjMatchup" class="text-slate-200"></b></div>
-              </div>
-              <button id="simSeasonBtn" onclick="start82GamesSimulation()" class="mt-4 w-full bg-amber-500 hover:bg-amber-400 active:scale-[.99] text-slate-950 font-black py-3.5 rounded-2xl text-sm transition shadow-lg">🏀 進入本場比賽</button>
-              <button id="playoffBtn" onclick="openJourneyPostseason()" class="hidden mt-3 w-full bg-orange-500 hover:bg-orange-400 text-slate-950 font-black py-3 rounded-2xl text-sm">🏆 進入 Play-In / Playoffs</button>
-              <div id="sjAutoControls" class="mt-3 rounded-2xl bg-slate-900 border border-slate-800 p-3">
-                <div class="flex justify-between items-center"><b class="text-[10px] text-slate-300 sj-kicker">掛機模式</b><span id="sjAutoStatus" class="text-[10px] text-slate-500">尚未啟動</span></div>
-                <div class="grid grid-cols-[1fr_auto] gap-2 mt-2">
-                  <input id="sjAutoCount" type="number" min="1" value="1" class="min-w-0 bg-slate-950 border border-slate-700 rounded-xl px-3 text-xs text-white" placeholder="自動比賽場數">
-                  <button id="sjAutoBtn" onclick="toggleJourneyAutoMode()" class="bg-indigo-600 hover:bg-indigo-500 text-white font-black px-4 py-2.5 rounded-xl text-xs">開始掛機</button>
-                </div>
-                <p class="text-[9px] text-slate-500 mt-2">依正常速度逐節播放；漫畫自動翻頁。可隨時停止。</p>
-              </div>
-            </div>
-            <div class="bg-slate-950/70 border border-slate-800 rounded-2xl p-4">
-              <div class="flex justify-between items-center"><h3 class="text-xs font-black text-white">預計先發</h3><span class="text-[10px] text-slate-500">球員狀態</span></div>
-              <div id="sjStarters" class="mt-3 space-y-2"></div>
-            </div>
-          </div>
-        </section>
+        <main data-sj-view-panel="league" class="sj-view-panel hidden" role="tabpanel">
+          <section class="sj-standings" aria-labelledby="sjStandingsTitle"><div class="sj-standings-heading"><div><h3 id="sjStandingsTitle">Conference Standings</h3><p id="sjStandingsProgress"></p></div><button id="sjStandingsExpand" type="button" onclick="toggleJourneyStandingsExpansion()" class="sj-section-action">查看完整排名</button></div><div class="sj-standings-tabs" role="tablist" aria-label="選擇分區"><button type="button" role="tab" data-sj-conference-tab="west" onclick="selectJourneyConference('west')" aria-controls="sjStandingsWest" aria-selected="true">西區</button><button type="button" role="tab" data-sj-conference-tab="east" onclick="selectJourneyConference('east')" aria-controls="sjStandingsEast" aria-selected="false">東區</button></div><div class="sj-standings-grid"><section id="sjStandingsWest" class="sj-standings-conference" data-active="true"><h4>WEST · 西區 <small>前 8 名優先</small></h4><table aria-label="西區排名"><thead><tr><th>#</th><th>球隊</th><th>勝</th><th>敗</th><th>勝率</th><th>勝差</th></tr></thead><tbody id="sjStandingsWestRows"></tbody></table></section><section id="sjStandingsEast" class="sj-standings-conference" data-active="false"><h4>EAST · 東區 <small>前 8 名優先</small></h4><table aria-label="東區排名"><thead><tr><th>#</th><th>球隊</th><th>勝</th><th>敗</th><th>勝率</th><th>勝差</th></tr></thead><tbody id="sjStandingsEastRows"></tbody></table></section></div><p class="sj-standings-note">每場結束後同步更新；你的球隊會以金色外框標示。</p></section>
+          <section class="sj-section-card"><div class="sj-section-heading"><div><h3>League Leaders</h3><p>整個聯盟 Top 5；玩家球員使用實際 Journey 數據。</p></div><span>TOP 5</span></div><div class="sj-leader-tabs">${['PTS','REB','AST','STL','BLK'].map(category => `<button type="button" data-sj-leader="${category}" onclick="selectLeagueLeaderCategory('${category}')">${category}</button>`).join('')}</div><div id="sjLeagueLeaders" class="sj-ranking-list"></div></section>
+          <section class="sj-section-card"><div class="sj-section-heading"><div><h3>Team Trends</h3><p>最近 5 場熱度與連勝／連敗。</p></div><span>FORM</span></div><div id="sjTeamTrends" class="sj-trend-grid"></div></section>
+        </main>
 
-        <section class="sj-standings" aria-labelledby="sjStandingsTitle">
-          <div class="sj-standings-heading"><div><h3 id="sjStandingsTitle">分區動態排名</h3><p id="sjStandingsProgress"></p></div><span>STANDINGS</span></div>
-          <div class="sj-standings-tabs" role="tablist" aria-label="選擇分區">
-            <button type="button" role="tab" data-sj-conference-tab="west" onclick="selectJourneyConference('west')" aria-controls="sjStandingsWest" aria-selected="true">西區</button>
-            <button type="button" role="tab" data-sj-conference-tab="east" onclick="selectJourneyConference('east')" aria-controls="sjStandingsEast" aria-selected="false">東區</button>
-          </div>
-          <div class="sj-standings-grid">
-            <section id="sjStandingsWest" class="sj-standings-conference" data-active="true" aria-labelledby="sjStandingsWestTitle">
-              <h4 id="sjStandingsWestTitle">WEST · 西區 <small>NBA 15 隊＋你的球隊</small></h4>
-              <table aria-label="西區完整排名"><thead><tr><th scope="col">#</th><th scope="col">球隊</th><th scope="col">勝</th><th scope="col">敗</th><th scope="col">勝率</th><th scope="col" title="與榜首的勝差">勝差</th></tr></thead><tbody id="sjStandingsWestRows"></tbody></table>
-            </section>
-            <section id="sjStandingsEast" class="sj-standings-conference" data-active="false" aria-labelledby="sjStandingsEastTitle">
-              <h4 id="sjStandingsEastTitle">EAST · 東區 <small>NBA 15 隊</small></h4>
-              <table aria-label="東區完整排名"><thead><tr><th scope="col">#</th><th scope="col">球隊</th><th scope="col">勝</th><th scope="col">敗</th><th scope="col">勝率</th><th scope="col" title="與榜首的勝差">勝差</th></tr></thead><tbody id="sjStandingsEastRows"></tbody></table>
-            </section>
-          </div>
-          <p class="sj-standings-note">本遊戲賽季模擬排名。同勝率依勝場、場均淨勝分與球隊代碼排序。</p>
-        </section>
-
-        <section class="bg-slate-900/80 border border-slate-800 rounded-3xl p-4 sm:p-5">
-          <div class="flex justify-between items-center mb-3"><h3 class="text-xs font-black text-white sj-kicker">82-Game Tracker</h3><span id="sjRecord" class="text-sm font-mono font-black text-amber-400">0-0</span></div>
-          <div id="gameGrid" class="grid grid-cols-8 sm:grid-cols-12 md:grid-cols-[repeat(21,minmax(0,1fr))] gap-1"></div>
-        </section>
-        <section class="grid md:grid-cols-2 gap-4">
-          <div class="bg-slate-900/80 border border-slate-800 rounded-3xl p-4 sm:p-5">
-            <div class="flex justify-between items-center mb-3"><h3 class="text-xs font-black text-white sj-kicker">Franchise Legacy</h3><span class="text-[10px] text-slate-500">永久球季紀錄</span></div>
-            <div id="sjLegacyList" class="space-y-2"></div>
-          </div>
-          <div class="bg-slate-900/80 border border-slate-800 rounded-3xl p-4 sm:p-5">
-            <div class="flex justify-between items-center mb-3"><h3 class="text-xs font-black text-white sj-kicker">Moment Collection</h3><span id="sjMomentCount" class="text-[10px] text-amber-400"></span></div>
-            <div id="sjMomentList" class="space-y-2"></div>
-          </div>
-        </section>
-        <section id="sjAwardsSection" class="hidden bg-gradient-to-br from-amber-950/35 to-slate-900 border border-amber-500/30 rounded-3xl p-4 sm:p-5">
-          <div class="flex justify-between items-center mb-3"><div><div class="text-[10px] text-amber-400 font-black sj-kicker">Season Honors</div><h3 class="text-sm font-black text-white mt-1">年度獎項</h3></div><span class="text-2xl">🏆</span></div>
-          <div id="sjAwardsList" class="grid sm:grid-cols-2 lg:grid-cols-4 gap-2"></div>
-        </section>
-        <section id="sjAdminPanel" class="hidden bg-indigo-950/30 border border-indigo-500/40 rounded-3xl p-4 sm:p-5">
-          <div class="flex justify-between items-center"><div><div class="text-[10px] text-indigo-300 font-black sj-kicker">Administrator Simulator</div><h3 class="text-sm font-black text-white mt-1">管理員快速測試</h3></div><span class="text-xs text-amber-300 font-black">🏀 ∞</span></div>
-          <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-2 mt-4">
-            <div class="grid grid-cols-[1fr_auto] gap-1.5"><input id="sjAdminTarget" type="number" min="1" max="82" value="82" class="min-w-0 bg-slate-950 border border-indigo-700/50 rounded-xl px-3 text-xs text-white" placeholder="模擬到第幾場"><button onclick="adminSimulateToInput()" class="bg-indigo-600 hover:bg-indigo-500 text-white font-black px-3 rounded-xl text-xs">執行</button></div>
-            <button onclick="adminSimulateFullSeason()" class="bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-200 font-bold py-2.5 rounded-xl text-xs">一鍵完成例行賽</button>
-            <button onclick="adminSimulatePlayoffs()" class="bg-amber-500 hover:bg-amber-400 text-slate-950 font-black py-2.5 rounded-xl text-xs">一鍵奪冠測試</button>
-            <button onclick="openAdminBackPreview()" class="bg-fuchsia-700 hover:bg-fuchsia-600 text-white font-black py-2.5 rounded-xl text-xs">預覽全部卡背</button>
-          </div>
-        </section>
-      </div>`;
+        <main data-sj-view-panel="awards" class="sj-view-panel hidden" role="tabpanel">
+          <div class="sj-award-races"><section class="sj-section-card"><div class="sj-section-heading"><div><h3>MVP Race</h3><p>個人表現 70% · 戰績 20% · 月份狀態 10%</p></div><span>TOP 5</span></div><div id="sjMvpRace" class="sj-ranking-list" style="margin-top:12px"></div></section><section class="sj-section-card"><div class="sj-section-heading"><div><h3>DPOY Race</h3><p>抄截、阻攻、籃板與團隊防守。</p></div><span>TOP 5</span></div><div id="sjDpoyRace" class="sj-ranking-list" style="margin-top:12px"></div></section></div>
+          <section class="sj-section-card"><div class="sj-section-heading"><div><h3>Monthly Awards</h3><p>East / West Player of the Month</p></div><span>POTM</span></div><div id="sjMonthlyAwards" class="sj-month-groups"></div></section>
+          <section id="sjAwardsSection" class="sj-section-card"><div class="sj-section-heading"><div><h3>Season Honors</h3><p>82 場結束後正式鎖定，不影響 Playoffs / FMVP。</p></div><span>FINAL</span></div><div id="sjAwardsList" class="sj-honors-grid"></div></section>
+          <div class="sj-awards-grid"><section class="sj-section-card"><div class="sj-section-heading"><div><h3>Franchise Legacy</h3><p>永久球季紀錄</p></div><span>HISTORY</span></div><div id="sjLegacyList" class="sj-recent-list"></div></section><section class="sj-section-card"><div class="sj-section-heading"><div><h3>Moment Collection</h3><p>比賽中解鎖的 Badge Moment</p></div><span id="sjMomentCount"></span></div><div id="sjMomentList" style="display:grid;gap:6px;margin-top:10px"></div></section></div>
+          <section id="sjAdminPanel" class="sj-section-card hidden"><div class="sj-section-heading"><div><h3>Administrator Simulator</h3><p>僅供測試 Season 流程</p></div><span>🏀 ∞</span></div><div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-2 mt-4"><div class="grid grid-cols-[1fr_auto] gap-1.5"><input id="sjAdminTarget" type="number" min="1" max="82" value="82" class="min-w-0 bg-slate-950 border border-indigo-700/50 rounded-xl px-3 text-xs text-white"><button onclick="adminSimulateToInput()" class="bg-indigo-600 text-white font-black px-3 rounded-xl text-xs">執行</button></div><button onclick="adminSimulateFullSeason()" class="bg-slate-900 border border-slate-700 text-slate-200 font-bold py-2.5 rounded-xl text-xs">完成例行賽</button><button onclick="adminSimulatePlayoffs()" class="bg-amber-500 text-slate-950 font-black py-2.5 rounded-xl text-xs">一鍵奪冠</button><button onclick="openAdminBackPreview()" class="bg-fuchsia-700 text-white font-black py-2.5 rounded-xl text-xs">預覽卡背</button></div></section>
+        </main>
+      </div>
+      <div id="sjMonthlyAwardModal" class="sj-month-modal hidden" role="dialog" aria-modal="true" aria-labelledby="sjMonthlyModalLabel"><section class="sj-month-modal__card"><div class="sj-month-modal__eyebrow">MONTH COMPLETE</div><h3 id="sjMonthlyModalLabel">MONTHLY AWARDS</h3><div id="sjMonthlyModalWinners" class="sj-month-modal__winners"></div><div class="sj-month-modal__actions"><button type="button" onclick="closeMonthlyAwardModal(true)">VIEW AWARDS</button><button type="button" onclick="closeMonthlyAwardModal(false)">CONTINUE SEASON</button></div></section></div>`;
   }
 
   function renderJourneySeasonTab() {
     ensureJourneyState();
-    if (!document.getElementById('sjGameLabel')) renderJourneyShell();
-    const j = state.seasonJourney;
+    if (!document.querySelector('.sj-view-tabs')) renderJourneyShell();
+    const journey = state.seasonJourney;
     const game = currentGameInfo();
     const special = dynamicSpecial(game);
-    const starters = ['PG','SG','SF','PF','C'].map(pos => ({ pos, card: state.startingLineup[pos] })).filter(x => x.card);
-    const top = [...starters].sort((a,b) => (Number(b.card.ovr || 0) + moraleValue(b.card)) - (Number(a.card.ovr || 0) + moraleValue(a.card)));
-    const set = (id, value) => { const el = document.getElementById(id); if (el) el.textContent = value; };
-    set('sjSeasonNo', j.seasonNo);
-    set('sjTeamName', j.teamName);
-    set('sjGameLabel', j.completed ? 'REGULAR SEASON COMPLETE' : `GAME ${j.gameIndex + 1} / ${SEASON_LENGTH}`);
-    set('sjHomeName', j.teamName);
-    set('sjHomeRecord', `${j.wins}-${j.losses}`);
-    set('sjAwayName', game ? game.opponent : '—');
-    const opponentStanding = game ? getJourneyStandings()?.byOpponent(game.opponent) : null;
-    set('sjAwayRecord', opponentStanding ? `${opponentStanding.wins}-${opponentStanding.losses}` : '—');
+    const starters = LINEUP_POSITIONS.map(position => state.startingLineup[position]).filter(Boolean);
+    const top = [...starters].sort((a, b) => Number(b.ovr || 0) - Number(a.ovr || 0));
+    const standings = getJourneyStandings();
+    const opponent = game ? standings?.byOpponent(game.opponent) : null;
+    const season = window.SeasonLeague?.seasonYears(journey.seasonNo) || { label: `Season ${journey.seasonNo}` };
+    const set = (id, value) => { const element = document.getElementById(id); if (element) element.textContent = value; };
+    set('sjSeasonLabel', `SEASON ${season.label}`);
+    set('sjTeamName', journey.teamName);
+    set('sjRecord', `${journey.wins}W - ${journey.losses}L`);
     set('sjRank', rankLabel());
-    set('sjRecent', j.recent.length ? j.recent.slice(-5).map(x => x.win ? 'W' : 'L').join(' ') : '—');
-    set('sjMatchup', top.length >= 2 ? `${top[0].card.name} × ${game.opponent}` : '補齊先發');
-    set('sjRecord', `${j.wins}-${j.losses}`);
-    const seasonRoad = document.getElementById('sjSeasonRoad');
-    if (seasonRoad) seasonRoad.innerHTML = getSeasonRoadSteps().map(step => `
-      <div class="sj-season-road__stage" data-state="${step.state}" role="listitem">
-        <div class="sj-season-road__marker">${step.icon}</div>
-        <b>${step.label}</b>
-        <span>${safeText(step.detail)}</span>
-      </div>`).join('');
-    const specialEl = document.getElementById('sjSpecialLabel');
-    if (specialEl) {
-      specialEl.textContent = special ? `${special.icon} ${special.label}` : 'REGULAR GAME';
-      specialEl.classList.toggle('invisible', !special);
-    }
-    const starterEl = document.getElementById('sjStarters');
-    if (starterEl) starterEl.innerHTML = starters.length ? starters.map(({pos, card}) => {
-      const morale = moraleValue(card);
-      const statusText = morale > 0 ? '🔥 狀態火熱 +1' : (morale < 0 ? '🧊 狀態不好 -1' : '➖ 狀態普通');
-      const statusClass = morale > 0 ? 'text-emerald-400' : (morale < 0 ? 'text-sky-400' : 'text-slate-500');
-      return `
-      <div class="flex items-center justify-between rounded-xl bg-slate-900/80 border border-slate-800 px-3 py-2">
-        <div class="min-w-0"><span class="text-[9px] text-amber-400 font-black mr-2">${pos}</span><span class="text-xs text-white font-bold">${safeText(card.name)}</span></div>
-        <div class="text-right"><b class="text-xs font-mono text-slate-200">${Number(card.ovr || card.baseOvr || 75) + morale}</b><span class="block text-[9px] ${statusClass}">${statusText}</span></div>
-      </div>`;
-    }).join('') : '<p class="text-xs text-slate-500 py-8 text-center">請先到陣容頁補齊先發五人</p>';
-    const grid = document.getElementById('gameGrid');
-    if (grid) grid.innerHTML = j.schedule.map(item => {
-      const cls = item.played ? (item.win ? 'is-win' : 'is-loss') : (item.game === j.gameIndex + 1 && !j.completed ? 'is-current' : '');
-      return `<div class="sj-game-cell ${cls} rounded-md border border-slate-800 bg-slate-950 flex items-center justify-center text-[10px] font-mono" title="Game ${item.game} vs ${safeText(item.opponent)}">${item.played ? (item.win ? 'W' : 'L') : item.game}</div>`;
-    }).join('');
-    const btn = document.getElementById('simSeasonBtn');
-    if (btn) {
-      const mayStartNext = j.completed && (j.wins < 36 || !!state.season.hasPlayedPlayoffs);
-      btn.disabled = j.completed && !mayStartNext;
-      btn.textContent = mayStartNext ? '開啟下一個賽季' : (j.completed ? '請先完成 Play-In / Playoffs' : `🏀 進入 Game ${j.gameIndex + 1}（消耗 1 球）`);
-      btn.classList.toggle('opacity-50', j.completed && !mayStartNext);
+    set('sjGameLabel', journey.completed ? 'REGULAR SEASON COMPLETE' : `GAME ${journey.gameIndex + 1} / ${SEASON_LENGTH}`);
+    set('sjProgressPercent', `${Math.round(journey.gameIndex / SEASON_LENGTH * 100)}%`);
+    const progress = document.getElementById('sjProgressFill');
+    if (progress) progress.style.width = `${journey.gameIndex / SEASON_LENGTH * 100}%`;
+    set('sjHomeName', journey.teamName);
+    set('sjHomeRecord', `${journey.wins}-${journey.losses}`);
+    set('sjAwayName', game?.opponent || '—');
+    set('sjAwayRecord', opponent ? `${opponent.wins}-${opponent.losses}` : '—');
+    set('sjOpponentOvr', game ? `Opponent OVR ${game.opponentOvr}` : 'Season complete');
+    set('sjRecent', journey.recent.length ? `Last 5 · ${journey.recent.slice(-5).map(item => item.win ? 'W' : 'L').join('')}` : 'No games yet');
+    set('sjMatchup', top[0] && game ? `${top[0].name} leads` : 'Set lineup');
+    set('sjSpecialLabel', special ? `${special.icon} ${special.label}` : 'REGULAR SEASON');
+    renderJourneyGameWindow();
+    renderJourneyRecent();
+    const button = document.getElementById('simSeasonBtn');
+    if (button) {
+      const mayStartNext = journey.completed && (journey.wins < 36 || !!state.season.hasPlayedPlayoffs);
+      button.disabled = journey.completed && !mayStartNext;
+      button.textContent = mayStartNext ? 'START NEXT SEASON' : (journey.completed ? 'COMPLETE POSTSEASON FIRST' : 'PLAY GAME');
     }
     const playoff = document.getElementById('playoffBtn');
     if (playoff) {
-      const eliminatedInPlayIn = j.wins < 42 && j.playInResolved && !j.playInWon;
-      playoff.classList.toggle('hidden', !j.completed || j.wins < 36 || eliminatedInPlayIn);
-      playoff.textContent = j.wins >= 42 || j.playInWon ? '🏆 進入 Playoffs' : '⚠️ 進入 Play-In 生死戰';
+      const eliminatedInPlayIn = journey.wins < 42 && journey.playInResolved && !journey.playInWon;
+      playoff.classList.toggle('hidden', !journey.completed || journey.wins < 36 || eliminatedInPlayIn);
+      playoff.textContent = journey.wins >= 42 || journey.playInWon ? '🏆 ENTER PLAYOFFS' : '⚠️ PLAY-IN GAME';
     }
-    const legacyList = document.getElementById('sjLegacyList');
-    if (legacyList) {
-      const seasons = [...j.history].reverse().slice(0, 5);
-      legacyList.innerHTML = seasons.length ? seasons.map(h => `<div class="flex justify-between items-center rounded-xl bg-slate-950 border border-slate-800 px-3 py-2 text-xs"><span class="text-slate-400">Season ${h.season}</span><b class="text-white font-mono">${safeText(h.record)}</b></div>`).join('') : '<p class="text-xs text-slate-500 py-5 text-center">完成第一個賽季後，歷史會永久留在這裡。</p>';
-    }
-    const allMoments = (state.inventory || []).flatMap(card => (card.badgeJourney?.moments || []).map((moment, momentIndex) => ({ card, player: card.name, moment, momentIndex })));
-    set('sjMomentCount', `${allMoments.length} unlocked`);
-    const momentList = document.getElementById('sjMomentList');
-    if (momentList) momentList.innerHTML = allMoments.length ? allMoments.slice(-5).reverse().map(item => `<button type="button" class="sj-moment-replay" data-card-id="${safeText(item.card.cardId)}" data-moment-index="${item.momentIndex}" onclick="replayJourneyMoment(this.dataset.cardId, Number(this.dataset.momentIndex))"><span><b>${safeText(item.moment.split(':').pop())}</b><small>${safeText(item.player)}</small></span><em>▶ REPLAY</em></button>`).join('') : '<p class="text-xs text-slate-500 py-5 text-center">重要回合中觸發徽章，即可收藏 Badge Moment。</p>';
-    const awardsSection = document.getElementById('sjAwardsSection');
-    const awardsList = document.getElementById('sjAwardsList');
-    const historicalAwards = [...(j.history || [])].reverse().find(entry => Array.isArray(entry.awards) && entry.awards.length)?.awards || [];
-    const legacyAwards = Array.isArray(state.season?.lastBoxScores) ? state.season.lastBoxScores.map(item => {
-      const title = String(item.title || '年度獎項');
-      const iconMatch = title.match(/^\s*([^\w\u4e00-\u9fff]+)\s*/);
-      return { icon: iconMatch?.[1]?.trim() || '🏆', label: title.replace(/^\s*[^\w\u4e00-\u9fff]+\s*/, ''), player: item.player, stat: String(item.stat || '').replace(/<[^>]+>/g, ' ') };
-    }) : [];
-    const awards = Array.isArray(j.awards) && j.awards.length ? j.awards : (historicalAwards.length ? historicalAwards : legacyAwards);
-    if (awardsSection) awardsSection.classList.toggle('hidden', !awards.length);
-    if (awardsList) awardsList.innerHTML = awards.map(award => `
-      <div class="sj-award-card">
-        <span>${award.icon || '🏆'}</span><div><small>${safeText(award.label)}</small><b>${safeText(award.player)}</b><em>${safeText(award.stat || '')}</em></div>
-      </div>`).join('');
-    const adminPanel = document.getElementById('sjAdminPanel');
-    if (adminPanel) adminPanel.classList.toggle('hidden', !state.isAdmin);
     const autoStatus = document.getElementById('sjAutoStatus');
-    const autoBtn = document.getElementById('sjAutoBtn');
+    const autoButton = document.getElementById('sjAutoBtn');
     if (autoStatus) autoStatus.textContent = autoMode.running ? `剩餘 ${autoMode.remaining} 場` : '尚未啟動';
-    if (autoBtn) autoBtn.textContent = autoMode.running ? '停止掛機' : '開始掛機';
+    if (autoButton) autoButton.textContent = autoMode.running ? '停止掛機' : '開始掛機';
+    const admin = document.getElementById('sjAdminPanel');
+    if (admin) admin.classList.toggle('hidden', !state.isAdmin);
+    renderLeaguePulse();
+    renderLeaguePanel();
+    renderAwardsPanel();
+    renderSeasonCollections();
     renderEnergy();
-    renderJourneyStandings();
+    showSeasonView(currentSeasonView);
+    window.requestAnimationFrame?.(maybeOpenMonthlyAwardModal);
   }
 
   function injectGameModal() {
@@ -2320,6 +2458,7 @@
     triggerSpecialGameEvent(item, gameData, autoMode.running);
     if (j.gameIndex >= SEASON_LENGTH) completeRegularSeason();
     window.SeasonStandings?.ensure(j, typeof NBA_PLAYERS !== 'undefined' ? NBA_PLAYERS : []);
+    syncLeagueState();
     saveGame();
     const actions = document.getElementById('sjGameActions'); if (actions) actions.classList.add('hidden');
     const finals = document.getElementById('sjFinalActions'); if (finals) { finals.classList.remove('hidden'); finals.classList.add('grid'); }
@@ -2332,17 +2471,27 @@
     j.completed = true;
     const cards = LINEUP_POSITIONS.map(pos => state.startingLineup[pos]).filter(Boolean).concat((state.benchLineup || []).filter(Boolean));
     cards.forEach(card => { ensureCardJourney(card); card.legacy.seasons = (card.legacy.seasons || 0) + 1; });
-    const totals = cards.map(card => {
-      const rows = j.schedule.flatMap(g => g.boxScore || []).filter(s => s.name === card.name);
-      return { card, value: rows.reduce((sum,s) => sum + (s.pts || 0) + (s.reb || 0) * 1.1 + (s.ast || 0) * 1.4, 0), defense: rows.reduce((sum,s) => sum + (s.blk || 0) * 2.2 + (s.stl || 0) * 2 + (s.reb || 0) * .5, 0) };
-    });
-    if (totals.length) {
-      const mvp = [...totals].sort((a,b) => b.value - a.value)[0].card;
-      const dpoy = [...totals].sort((a,b) => b.defense - a.defense)[0].card;
-      mvp.legacy.mvps = (mvp.legacy.mvps || 0) + 1; unlockBack(mvp, 'mvp', `Season ${j.seasonNo} MVP`);
-      dpoy.legacy.dpoys = (dpoy.legacy.dpoys || 0) + 1; unlockBack(dpoy, 'dpoy', `Season ${j.seasonNo} DPOY`);
+    const league = syncLeagueState(true);
+    const leagueAwards = Array.isArray(league?.finalAwards) ? league.finalAwards : [];
+    const cardForAward = award => {
+      if (!award?.isPlayer) return null;
+      const cardId = String(award.playerKey || '').replace(/^player:/, '');
+      return cards.find(card => String(card.cardId) === cardId) || cards.find(card => card.name === award.player) || null;
+    };
+    const mvpAward = leagueAwards.find(award => award.awardId === 'mvp');
+    const dpoyAward = leagueAwards.find(award => award.awardId === 'dpoy');
+    const mvpCard = cardForAward(mvpAward);
+    const dpoyCard = cardForAward(dpoyAward);
+    if (mvpCard) {
+      mvpCard.legacy.mvps = (mvpCard.legacy.mvps || 0) + 1;
+      unlockBack(mvpCard, 'mvp', `Season ${j.seasonNo} MVP`);
     }
-    j.awards = calculateSeasonAwards(j);
+    if (dpoyCard) {
+      dpoyCard.legacy.dpoys = (dpoyCard.legacy.dpoys || 0) + 1;
+      unlockBack(dpoyCard, 'dpoy', `Season ${j.seasonNo} DPOY`);
+    }
+    const supportingAwards = calculateSeasonAwards(j).filter(award => !/MVP|DPOY|得分王|助攻王|籃板王/.test(award.label));
+    j.awards = leagueAwards.length ? leagueAwards.concat(supportingAwards) : calculateSeasonAwards(j);
     j.history.push({ season: j.seasonNo, record: `${j.wins}-${j.losses}`, awards: j.awards, completedAt: new Date().toISOString() });
     state.season.lastSimRecord = `${j.wins} 勝 ${j.losses} 敗`;
     state.season.lastSimWins = j.wins;
@@ -2411,6 +2560,7 @@
     }
     if (j.gameIndex >= SEASON_LENGTH && !j.completed) completeRegularSeason();
     window.SeasonStandings?.ensure(j, typeof NBA_PLAYERS !== 'undefined' ? NBA_PLAYERS : []);
+    syncLeagueState();
     saveGame(); renderAll();
     if (typeof showToast === 'function') showToast(`⚡ 管理員已模擬至 Game ${finalTarget}`, 'success');
   }
@@ -2492,7 +2642,7 @@
   function startNextJourneySeason() {
     const old = state.seasonJourney;
     state.seasonJourney = {
-      version: 1,
+      version: 2,
       seasonNo: (Number(old.seasonNo) || 1) + 1,
       teamName: old.teamName || PLAYER_TEAM_FALLBACK,
       gameIndex: 0, wins: 0, losses: 0, streak: 0, bestStreak: 0,
@@ -2505,6 +2655,7 @@
     state.season.threePtContestShooter = null;
     state.season.threePtContestScore = null;
     window.SeasonStandings?.ensure(state.seasonJourney, typeof NBA_PLAYERS !== 'undefined' ? NBA_PLAYERS : []);
+    syncLeagueState();
     saveGame();
     renderJourneySeasonTab();
     if (typeof showToast === 'function') showToast(`🏟️ Season ${state.seasonJourney.seasonNo} 正式開幕！`, 'success');
@@ -2646,7 +2797,7 @@
     if (!anchor || document.getElementById('sjAchievementBacks')) return;
     const section = document.createElement('section');
     section.className = 'mt-3 pt-3 border-t border-slate-800';
-    section.innerHTML = '<div class="flex justify-between items-center mb-2"><h4 class="text-[10px] text-amber-400 font-black sj-kicker">Badge Journey</h4><span id="sjBadgeMastery" class="text-[9px] text-slate-400"></span></div><div id="sjBadgeProgressList" class="sj-badge-progress-list"></div><div id="sjMomentSummary" class="text-[10px] text-slate-500 mb-3"></div><details id="sjAchievementBacksSection" class="tq-backs-collection" ontoggle="hydrateAchievementBackImages(this)"><summary><span class="tq-backs-collection__title"><span>ACHIEVEMENT COLLECTION</span><strong>BACKS</strong></span><span class="tq-backs-collection__status"><b id="sjBacksActiveSummary">尚未裝備</b><span id="sjBacksOwnedSummary">0 / 6 已解鎖</span></span><span class="tq-backs-collection__chevron" aria-hidden="true">›</span></summary><div class="tq-backs-collection__body"><p class="tq-backs-collection__note">點卡背可放大查看；已解鎖的卡背可以設為展示外觀。</p><div id="sjAchievementBacks" class="tq-achievement-backs-grid"></div></div></details>';
+    section.innerHTML = '<div class="flex justify-between items-center mb-2"><h4 class="text-[10px] text-amber-400 font-black sj-kicker">Badge Journey</h4><span id="sjBadgeMastery" class="text-[9px] text-slate-400"></span></div><div id="sjBadgeProgressList" class="sj-badge-progress-list"></div><div id="sjMomentSummary" class="text-[10px] text-slate-500 mb-3"></div><div id="sjMonthlyCareerHonors" class="sj-career-monthly hidden"><h5>MONTHLY HONORS</h5><div id="sjMonthlyCareerHonorList"></div></div><details id="sjAchievementBacksSection" class="tq-backs-collection" ontoggle="hydrateAchievementBackImages(this)"><summary><span class="tq-backs-collection__title"><span>ACHIEVEMENT COLLECTION</span><strong>BACKS</strong></span><span class="tq-backs-collection__status"><b id="sjBacksActiveSummary">尚未裝備</b><span id="sjBacksOwnedSummary">0 / 6 已解鎖</span></span><span class="tq-backs-collection__chevron" aria-hidden="true">›</span></summary><div class="tq-backs-collection__body"><p class="tq-backs-collection__note">點卡背可放大查看；已解鎖的卡背可以設為展示外觀。</p><div id="sjAchievementBacks" class="tq-achievement-backs-grid"></div></div></details>';
     anchor.parentElement.appendChild(section);
   }
 
@@ -2655,6 +2806,22 @@
     renderAll = function () { oldRenderAll(); ensureJourneyState(); renderJourneySeasonTab(); };
     renderSeasonTab = renderJourneySeasonTab;
     start82GamesSimulation = openJourneyGame;
+
+    const oldSwitchTab = window.switchTab;
+    if (typeof oldSwitchTab === 'function' && !oldSwitchTab.__seasonJourneyWrapped) {
+      const wrappedSwitchTab = function (tabKey) {
+        if (tabKey === 'season') currentSeasonView = 'journey';
+        const result = oldSwitchTab.call(this, tabKey);
+        if (tabKey === 'season') {
+          renderJourneySeasonTab();
+          showSeasonView('journey');
+        }
+        return result;
+      };
+      wrappedSwitchTab.__seasonJourneyWrapped = true;
+      window.switchTab = wrappedSwitchTab;
+      try { switchTab = wrappedSwitchTab; } catch (error) {}
+    }
 
     const oldShowPlayerDetails = showPlayerDetails;
     showPlayerDetails = function (event, cardId) {
@@ -2682,6 +2849,15 @@
         if (moments) moments.textContent = card.badgeJourney.moments.length
           ? `已收藏 ${card.badgeJourney.moments.length} 個 Moment：${card.badgeJourney.moments.map(x => x.split(':').pop()).join('、')}`
           : '尚未解鎖 Badge Moment，於比賽的重要回合中探索。';
+        const monthlyHost = document.getElementById('sjMonthlyCareerHonors');
+        const monthlyList = document.getElementById('sjMonthlyCareerHonorList');
+        const monthlyHonors = card.legacy.monthlyHonors || [];
+        if (monthlyHost) monthlyHost.classList.toggle('hidden', !monthlyHonors.length);
+        if (monthlyList) monthlyList.innerHTML = monthlyHonors.map(honor => {
+          const year = String(honor.monthKey || '').slice(0, 4);
+          const shortMonth = String(honor.monthLabel || honor.monthKey || '').slice(0, 3).toUpperCase();
+          return `<p>${safeText(shortMonth)} ${safeText(year)} · ${String(honor.conference || '').toUpperCase()} POTM</p>`;
+        }).join('');
       }
     };
 
@@ -2714,12 +2890,22 @@
     renderJourneySeasonTab();
     if (energyTimer) clearInterval(energyTimer);
     energyTimer = setInterval(renderEnergy, 1000);
+    if (leaguePulseTimer) clearInterval(leaguePulseTimer);
+    leaguePulseTimer = setInterval(() => {
+      leaguePulseIndex += 1;
+      renderLeaguePulse();
+    }, 8000);
     saveGame();
   }
 
   window.editJourneyTeamName = editJourneyTeamName;
   window.getJourneyStandings = getJourneyStandings;
   window.selectJourneyConference = selectJourneyConference;
+  window.toggleJourneyStandingsExpansion = toggleJourneyStandingsExpansion;
+  window.showSeasonView = showSeasonView;
+  window.selectLeagueLeaderCategory = selectLeagueLeaderCategory;
+  window.openLeaguePulse = openLeaguePulse;
+  window.closeMonthlyAwardModal = closeMonthlyAwardModal;
   window.saveJourneyTeamName = saveJourneyTeamName;
   window.closeJourneyTeamName = closeJourneyTeamName;
   window.closeJourneyGame = closeJourneyGame;
