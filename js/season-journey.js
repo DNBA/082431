@@ -322,6 +322,53 @@
     return roster;
   }
 
+  function isPlaceholderOpponentBench(player, opponentName) {
+    const name = String(player?.name || '');
+    return !name
+      || /^B[1-6]$/.test(name)
+      || name.startsWith(`${opponentName || ''} 替補`)
+      || name.startsWith(`${opponentName || ''} Rotation`);
+  }
+
+  function getOpponentBench(game) {
+    if (!game) return [];
+    const saved = Array.isArray(game.opponentBench) ? game.opponentBench : [];
+    if (saved.length === 6 && saved.every(player => !isPlaceholderOpponentBench(player, game.opponent))) return saved;
+
+    const code = TEAM_CODES[game.opponent];
+    const starters = getOpponentRoster(game);
+    const starterNames = new Set(starters.map(player => player.name));
+    const pool = typeof NBA_PLAYERS !== 'undefined'
+      ? NBA_PLAYERS
+        .filter(player => player.team === code && String(player.edition || '') === '26' && !starterNames.has(player.name))
+        .sort((a, b) => playerOvr(b) - playerOvr(a))
+      : [];
+    const preferredPositions = ['PG', 'SG', 'SF', 'PF', 'C', 'G'];
+    const unused = [...pool];
+    const bench = preferredPositions.map((position, index) => {
+      let foundAt = unused.findIndex(player => normalizePositions(player).includes(position));
+      if (foundAt < 0) foundAt = 0;
+      const player = unused.splice(foundAt, 1)[0];
+      return player
+        ? {
+            name: player.name,
+            ovr: playerOvr(player),
+            baseOvr: playerOvr(player),
+            nbaId: player.nbaId || 0,
+            positions: normalizePositions(player),
+            basic: player.basic || null
+          }
+        : {
+            name: `${game.opponent} Rotation ${index + 1}`,
+            positions: [index < 2 ? 'G' : index < 4 ? 'F' : 'C'],
+            ovr: clamp(Number(game.opponentOvr || 80) - 5 - index, 68, 88),
+            baseOvr: clamp(Number(game.opponentOvr || 80) - 5 - index, 68, 88)
+          };
+    });
+    game.opponentBench = bench;
+    return bench;
+  }
+
   function scoutOpponent(game) {
     if (game?.scouting && Array.isArray(game.scouting.ratings) && game.scouting.ratings.length) return game.scouting;
     const roster = getOpponentRoster(game);
@@ -2556,11 +2603,10 @@
       ...player, positions: Array.isArray(player.positions) && player.positions.length ? player.positions : [player.position || 'G'],
       baseOvr: Number(player.ovr || scheduleGame.opponentOvr || 78), realOvr: Number(player.ovr || scheduleGame.opponentOvr || 78)
     }));
-    const bench = Array.from({ length: 6 }, (_, index) => ({
-      name: `${scheduleGame.opponent} 替補 ${index + 1}`,
-      positions: [index < 2 ? 'G' : index < 4 ? 'F' : 'C'],
-      ovr: clamp(Number(scheduleGame.opponentOvr || 80) - 5 - index, 68, 88),
-      baseOvr: clamp(Number(scheduleGame.opponentOvr || 80) - 5 - index, 68, 88)
+    const bench = getOpponentBench(scheduleGame).map(player => ({
+      ...player,
+      positions: Array.isArray(player.positions) && player.positions.length ? player.positions : ['G'],
+      baseOvr: Number(player.baseOvr || player.ovr || scheduleGame.opponentOvr || 74)
     }));
     const emptyBadges = { starters: [], bench: [], mambaPlayers: [], sharpshooters: [], floorGenerals: [], rimProtectors: [], perimeterLocks: [], pickpockets: [], sixthMans: [], hasMamba: false, hasFloorGeneral: false };
     const opponentSimulationScript = simulationScriptForSide(gameScript, 'opponent', opponentRoster);

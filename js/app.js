@@ -30458,24 +30458,48 @@ playSound('click');
     /* =====================================================
        圖鑑、兌換碼、單字與番茄鐘
     ===================================================== */
+    let activeBinderEdition = '26';
+
+    function switchBinderEdition(edition) {
+      activeBinderEdition = edition === '25' ? '25' : '26';
+      openBinderModal();
+    }
+
     function openBinderModal() {
       const container = document.getElementById('binderTeamGrid');
+      const edition = activeBinderEdition;
+      const editionData = edition === '25' ? TEAM_DATA_2025 : TEAM_DATA_2026;
+      const ownedEditionCards = state.inventory.filter(card => getCardEdition(card) === edition);
+      const edition25Button = document.getElementById('binderEdition25Btn');
+      const edition26Button = document.getElementById('binderEdition26Btn');
+      [edition25Button, edition26Button].forEach(button => {
+        if (!button) return;
+        const selected = button.id === `binderEdition${edition}Btn`;
+        button.setAttribute('aria-selected', String(selected));
+        button.className = `rounded-xl px-3 py-2 text-xs font-black transition ${selected ? 'bg-amber-400 text-slate-950 shadow' : 'text-slate-400 hover:text-white'}`;
+      });
+      const summary = document.getElementById('binderEditionSummary');
+      if (summary) {
+        const uniqueOwned = new Set(ownedEditionCards.map(card => `${card.team}:${card.name}`)).size;
+        summary.innerText = `'${edition} EDITION · 已收藏 ${uniqueOwned} 張不同球員卡`;
+      }
       container.innerHTML = ALL_30_TEAMS.map(teamCode => {
-        const teamPool = TEAM_DATA[teamCode] || [];
-        const owned = state.inventory.filter(p => p.team === teamCode && getCardEdition(p) === '26');
-        const hasChemistry = owned.length >= 3;
-        const isMastered = owned.length >= 15;
+        const teamPool = editionData[teamCode] || [];
+        const ownedNames = new Set(ownedEditionCards.filter(card => card.team === teamCode).map(card => card.name));
+        const ownedCount = teamPool.filter(player => ownedNames.has(player.name)).length;
+        const hasChemistry = ownedCount >= 3;
+        const isMastered = teamPool.length >= 15 && ownedCount >= teamPool.length;
         const hasClaimed = state.claimedTeamRewards.includes(teamCode);
 
         return `
           <div class="bg-slate-900 border ${isMastered ? 'border-amber-400 gold-glow' : (hasChemistry ? 'border-amber-400/70' : 'border-slate-800')} rounded-2xl p-3 flex flex-col justify-between text-center relative">
             <div class="flex justify-between items-center text-[10px] font-mono border-b border-slate-800/80 pb-1.5 mb-2">
               <span class="font-black text-amber-400 text-sm tracking-wider">${teamCode}</span>
-              <span class="${isMastered ? 'text-amber-300 font-bold' : (hasChemistry ? 'text-amber-400' : 'text-slate-400')}">${owned.length} / 15 ${isMastered ? '👑' : ''}</span>
+              <span class="${isMastered ? 'text-amber-300 font-bold' : (hasChemistry ? 'text-amber-400' : 'text-slate-400')}">${ownedCount} / ${teamPool.length || 15} ${isMastered ? '👑' : ''}</span>
             </div>
             <div class="grid grid-cols-5 gap-1.5 my-1">
               ${teamPool.map(player => {
-                const userHas = state.inventory.some(p => p.name === player.name && getCardEdition(p) === '26');
+                const userHas = ownedNames.has(player.name);
                 return `<div class="w-8 h-8 rounded-full overflow-hidden border ${userHas ? 'border-amber-400 opacity-100' : 'border-slate-800 opacity-20 grayscale'} bg-slate-950 mx-auto"><img src="${getPlayerImgUrl(player.id)}" class="w-full h-full object-cover object-top" onerror="this.src='https://cdn.nba.com/headshots/nba/latest/1040x760/fallback.png'"></div>`;
               }).join('')}
             </div>
@@ -30488,6 +30512,7 @@ playSound('click');
       document.getElementById('binderModal').classList.remove('hidden');
       lucide.createIcons();
     }
+    window.switchBinderEdition = switchBinderEdition;
     function closeBinderModal() { document.getElementById('binderModal').classList.add('hidden'); }
 
     function claimTeamMasterReward(teamCode) {

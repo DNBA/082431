@@ -1247,12 +1247,17 @@
     <div class="max-w-5xl w-full mx-auto flex justify-between items-center mb-4">
       <div>
         <h2 class="text-base sm:text-lg font-black text-white flex items-center gap-2">
-          <i data-lucide="book-marked" class="text-amber-400 w-4 h-4"></i> 30 隊圖鑑冊 (制霸送 10 🎟️)
+          <i data-lucide="book-marked" class="text-amber-400 w-4 h-4"></i> 30 隊圖鑑冊 · 25 / 26
         </h2>
-        <p class="text-xs text-slate-400">全隊 15 人集滿即可領取專屬「隊史制霸獎勵」！</p>
+        <p class="text-xs text-slate-400">切換版本查看各隊 15 人收藏進度；隊史制霸獎勵每隊限領一次。</p>
       </div>
       <button onclick="closeBinderModal()" class="bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold px-3.5 py-2.5 rounded-xl border border-slate-700 transition cursor-pointer active:scale-98">關閉</button>
     </div>
+    <div class="max-w-5xl w-full mx-auto mb-3 grid grid-cols-2 gap-2 rounded-2xl bg-slate-900 border border-slate-800 p-1" role="tablist" aria-label="圖鑑版本">
+      <button id="binderEdition25Btn" type="button" role="tab" onclick="switchBinderEdition('25')" class="rounded-xl px-3 py-2 text-xs font-black transition">2024–25 · '25</button>
+      <button id="binderEdition26Btn" type="button" role="tab" onclick="switchBinderEdition('26')" class="rounded-xl px-3 py-2 text-xs font-black transition">2025–26 · '26</button>
+    </div>
+    <div id="binderEditionSummary" class="max-w-5xl w-full mx-auto mb-3 text-[11px] font-bold text-slate-400"></div>
     <div class="max-w-5xl w-full mx-auto grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3" id="binderTeamGrid"></div>
 
     <!-- 📱 底部大拇指關閉按鈕 -->
@@ -1444,7 +1449,7 @@
   <script src="./js/focus-timer.js?v=20261003-split-focus-2"></script>
   <script src="./js/core/save-backups.js?v=20261005-learning-1"></script>
   <script src="./js/box-score-integrity.js?v=20261007-integrity-1"></script>
-  <script src="./js/app.js?v=20261007-box-score-1"></script>
+  <script src="./js/app.js?v=20261007-binder-editions-1"></script>
 <!-- 🏀 季後賽逐場動態播報彈窗 -->
 <div id="playoffSeriesModal" onclick="if(event.target === this && !document.getElementById('posNextRoundBtn').disabled) closeSeriesAndShowBoxScore()" class="fixed inset-0 bg-slate-950/90 backdrop-blur-md z-50 hidden flex items-end sm:items-center justify-center p-3 sm:p-4 ios-safe-modal">
   <div class="bg-slate-900 border border-amber-500/50 rounded-3xl w-full max-w-lg p-6 shadow-2xl space-y-4 relative animate-modal-in">
@@ -2128,7 +2133,7 @@
 <script src="./js/season-league.js?v=20261007-league-1"></script>
 <script src="./js/season-simulation.js?v=20261007-variance-1"></script>
 <script src="./js/ui-v2/achievement-backs.js?v=20261006-backs-1"></script>
-<script src="./js/season-journey.js?v=20261007-variance-1"></script>
+<script src="./js/season-journey.js?v=20261007-real-bench-1"></script>
 <script src="./js/ui-v2/ui-v2-adapter.js?v=20261005-standings-1"></script>
 <script src="./js/ui-v2/home-v2.js?v=20261003-train-vocab-1"></script>
 <script src="./js/study-planner.js?v=20261005-learning-1"></script>
