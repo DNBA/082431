@@ -1,0 +1,269 @@
+/* Focused post-game Box Score: compact overview first, shooting detail on demand. */
+#gameBoxScoreModal > div {
+  scrollbar-gutter: stable;
+}
+
+.tq-box-stat-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .35rem;
+  padding: .25rem;
+  border: 1px solid rgba(51, 65, 85, .78);
+  border-radius: .85rem;
+  background: rgba(2, 6, 23, .72);
+}
+
+.tq-box-stat-tabs button {
+  min-height: 2.25rem;
+  border-radius: .65rem;
+  color: #64748b;
+  font-size: .66rem;
+  font-weight: 900;
+  letter-spacing: .04em;
+  transition: color .16s ease, background .16s ease, box-shadow .16s ease;
+}
+
+.tq-box-stat-tabs button.is-active {
+  color: #fde68a;
+  background: rgba(245, 158, 11, .14);
+  box-shadow: inset 0 0 0 1px rgba(245, 158, 11, .25);
+}
+
+.tq-box-score-table {
+  border-collapse: separate;
+  border-spacing: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.tq-box-score-table thead {
+  color: #64748b;
+  background: rgba(15, 23, 42, .96);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: .58rem;
+  font-weight: 900;
+  letter-spacing: .06em;
+}
+
+.tq-box-score-table th,
+.tq-box-score-table td {
+  height: 2.8rem;
+  padding: .4rem .48rem;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.tq-box-score-table th.tq-box-player,
+.tq-box-score-table td.tq-box-player {
+  width: 9.25rem;
+  min-width: 9.25rem;
+  max-width: 9.25rem;
+  padding-left: .7rem;
+  padding-right: .65rem;
+  border-right: 1px solid rgba(51, 65, 85, .66);
+  text-align: left;
+}
+
+.tq-box-score-table th.tq-box-player { color: #fbbf24; background: #0f172a; }
+.tq-box-score-table td.tq-box-player { background: rgba(2, 6, 23, .97); }
+.tq-box-row--bench td { color: #94a3b8; background-color: rgba(2, 6, 23, .45); }
+.tq-box-row:hover td { background-color: rgba(30, 41, 59, .62); }
+.tq-box-row:hover td.tq-box-player { background-color: #111827; }
+
+.tq-box-player__identity {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: .35rem;
+}
+
+.tq-box-player__name {
+  overflow: hidden;
+  color: #e5e7eb;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: .67rem;
+  font-weight: 780;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tq-box-mobile-statline { display:none; }
+
+.tq-box-role,
+.tq-box-sixth {
+  flex: 0 0 auto;
+  padding: .12rem .28rem;
+  border: 1px solid rgba(245, 158, 11, .34);
+  border-radius: .3rem;
+  color: #fcd34d;
+  background: rgba(245, 158, 11, .12);
+  font-size: .48rem;
+  font-weight: 950;
+}
+
+.tq-box-role--rose { color: #fda4af; border-color: rgba(244,63,94,.35); background: rgba(244,63,94,.12); }
+.tq-box-role--bench { color: #94a3b8; border-color: #334155; background: #1e293b; }
+.tq-box-sixth { color: #fdba74; border-color: rgba(249,115,22,.35); background: rgba(124,45,18,.55); }
+.tq-box-matchup { display:block; overflow:hidden; margin-top:.18rem; color:#67e8f9; font-size:.46rem; text-overflow:ellipsis; white-space:nowrap; }
+.tq-box-substats { display:none; overflow:hidden; margin-top:.2rem; color:#94a3b8; font-size:.5rem; font-weight:750; text-overflow:ellipsis; white-space:nowrap; }
+
+.tq-box-points { color: #f8fafc; font-size: .78rem; font-weight: 950; }
+.tq-box-points--amber { color: #fbbf24; }
+.tq-box-points--rose { color: #fda4af; }
+.tq-box-muted { color: #64748b; }
+.tq-box-strong { color: #e2e8f0; font-weight: 850; }
+.tq-box-assist { color: #a5b4fc; font-weight: 850; }
+.tq-box-turnover,.tq-box-negative { color: #fb7185; }
+.tq-box-positive { color: #34d399; }
+.tq-box-defense b,.tq-box-defense small,.tq-box-shooting b,.tq-box-shooting small { display:block; }
+.tq-box-defense small,.tq-box-shooting small { margin-top:.08rem; color:#64748b; font-size:.45rem; font-weight:700; }
+.tq-box-shooting b { color:#e2e8f0; font-size:.68rem; }
+.tq-box-shooting.tq-box-three b { color:#fcd34d; }
+
+.tq-box-section td {
+  height: 1.65rem;
+  padding: .28rem .7rem;
+  border-top: 1px solid rgba(245, 158, 11, .22);
+  border-bottom: 1px solid rgba(245, 158, 11, .12);
+  color: #fbbf24;
+  background: rgba(15, 23, 42, .97);
+  font-size: .54rem;
+  font-weight: 950;
+  letter-spacing: .08em;
+  text-align: left;
+}
+.tq-box-section--opponent td { color:#fda4af; border-color:rgba(244,63,94,.22); }
+.tq-box-section--bench td { color:#a5b4fc; border-color:rgba(99,102,241,.18); }
+
+.tq-box-score-table[data-stat-view="overview"] .tq-box-shooting,
+.tq-box-score-table[data-stat-view="shooting"] .tq-box-overview {
+  display: none;
+}
+
+/* Explicit contrast for iOS/system light mode. The generic theme bridge turns
+   the modal white, so Box Score text must switch with it instead of retaining
+   dark-mode grays. */
+html[data-system-theme="light"] #gameBoxScoreModal .tq-box-stat-tabs {
+  border-color: #d1d5db;
+  background: #f2f2f7;
+}
+html[data-system-theme="light"] #gameBoxScoreModal .tq-box-stat-tabs button { color:#5b5b61; }
+html[data-system-theme="light"] #gameBoxScoreModal .tq-box-stat-tabs button.is-active {
+  color:#7c4700;
+  background:#fff3d6;
+  box-shadow:inset 0 0 0 1px #e4b24c;
+}
+html[data-system-theme="light"] #gameBoxScoreModal #modalHighlight {
+  border-color:#f2b45f;
+  color:#7c2d12;
+  background:#fff7e8;
+}
+html[data-system-theme="light"] #gameBoxScoreModal #modalMyScore + *,
+html[data-system-theme="light"] #gameBoxScoreModal #modalMyScore { color:#111827; }
+html[data-system-theme="light"] #gameBoxScoreModal #modalMyScore ~ * { color:#5f6368; }
+html[data-system-theme="light"] #gameBoxScoreModal #modalMyScore { font-weight:950; }
+html[data-system-theme="light"] #gameBoxScoreModal #modalBadgeMomentsContainer > div:first-child { color:#7c4700; }
+html[data-system-theme="light"] #gameBoxScoreModal #modalBadgeMomentsList > div {
+  border-color:#d1d5db;
+  color:#1f2937;
+  background:#f5f5f8;
+}
+html[data-system-theme="light"] #gameBoxScoreModal #modalBadgeMomentsList p { color:#374151; }
+html[data-system-theme="light"] #gameBoxScoreModal #modalBoxScoreTabs button[aria-selected="true"] {
+  border-color:#d09a34;
+  color:#713f12;
+  background:#fff3d6;
+}
+html[data-system-theme="light"] #gameBoxScoreModal .tq-box-score-table thead {
+  color:#4b5563;
+  background:#ececf1;
+}
+html[data-system-theme="light"] #gameBoxScoreModal .tq-box-score-table th.tq-box-player {
+  color:#7c4700;
+  background:#ececf1;
+}
+html[data-system-theme="light"] #gameBoxScoreModal .tq-box-score-table td {
+  color:#1f2937;
+  background:#fff;
+}
+html[data-system-theme="light"] #gameBoxScoreModal .tq-box-score-table th:not(.tq-box-player),
+html[data-system-theme="light"] #gameBoxScoreModal .tq-box-score-table .tq-box-row td:not(.tq-box-player) {
+  border-left:1px solid #e5e7eb;
+}
+html[data-system-theme="light"] #gameBoxScoreModal .tq-box-score-table th.tq-box-points { color:#7c4700; }
+html[data-system-theme="light"] #gameBoxScoreModal .tq-box-score-table td.tq-box-player {
+  border-right-color:#d1d5db;
+  background:#fff;
+}
+html[data-system-theme="light"] #gameBoxScoreModal .tq-box-row--bench td,
+html[data-system-theme="light"] #gameBoxScoreModal .tq-box-row--bench td.tq-box-player { background:#f5f5f8; }
+html[data-system-theme="light"] #gameBoxScoreModal .tq-box-row:hover td,
+html[data-system-theme="light"] #gameBoxScoreModal .tq-box-row:hover td.tq-box-player { background:#eeeef3; }
+html[data-system-theme="light"] #gameBoxScoreModal .tq-box-player__name,
+html[data-system-theme="light"] #gameBoxScoreModal .tq-box-points,
+html[data-system-theme="light"] #gameBoxScoreModal .tq-box-strong,
+html[data-system-theme="light"] #gameBoxScoreModal .tq-box-shooting b { color:#111827; }
+html[data-system-theme="light"] #gameBoxScoreModal .tq-box-points--amber,
+html[data-system-theme="light"] #gameBoxScoreModal .tq-box-shooting.tq-box-three b { color:#8a4b00; }
+html[data-system-theme="light"] #gameBoxScoreModal .tq-box-points--rose,
+html[data-system-theme="light"] #gameBoxScoreModal .tq-box-negative,
+html[data-system-theme="light"] #gameBoxScoreModal .tq-box-turnover { color:#b4233c; }
+html[data-system-theme="light"] #gameBoxScoreModal .tq-box-assist { color:#4338a8; }
+html[data-system-theme="light"] #gameBoxScoreModal .tq-box-positive { color:#047857; }
+html[data-system-theme="light"] #gameBoxScoreModal .tq-box-muted,
+html[data-system-theme="light"] #gameBoxScoreModal .tq-box-substats,
+html[data-system-theme="light"] #gameBoxScoreModal .tq-box-defense small,
+html[data-system-theme="light"] #gameBoxScoreModal .tq-box-shooting small { color:#5f6368; }
+html[data-system-theme="light"] #gameBoxScoreModal .tq-box-section td {
+  color:#7c4700;
+  border-color:#d8c18f;
+  background:#ececf1;
+}
+html[data-system-theme="light"] #gameBoxScoreModal .tq-box-section--opponent td { color:#a61b35; }
+html[data-system-theme="light"] #gameBoxScoreModal .tq-box-section--bench td { color:#4338a8; }
+
+@media (max-width: 430px) {
+  #gameBoxScoreModal { padding: .45rem; }
+  #gameBoxScoreModal > div { padding: .9rem; border-radius: 1.2rem; }
+  .tq-box-score-table,
+  .tq-box-score-table tbody { display:block; width:100%; min-width:0; }
+  .tq-box-score-table thead { display:none; }
+  .tq-box-score-table .tq-box-row { display:block; border-bottom:1px solid rgba(100,116,139,.18); }
+  .tq-box-score-table .tq-box-row > td { display:none !important; }
+  .tq-box-score-table .tq-box-row > td.tq-box-player {
+    position:static;
+    display:block !important;
+    width:100%;
+    min-width:0;
+    max-width:none;
+    height:auto;
+    padding:.72rem .75rem .68rem;
+    border-right:0;
+    text-align:left;
+  }
+  .tq-box-score-table .tq-box-section { display:block; }
+  .tq-box-score-table .tq-box-section td { display:block; width:100%; height:auto; padding:.4rem .7rem; }
+  .tq-box-player__name { font-size:.76rem; }
+  .tq-box-substats { display:block; font-size:.52rem; }
+  .tq-box-matchup { display:none; }
+  .tq-box-mobile-statline {
+    grid-template-columns:repeat(4,minmax(0,1fr));
+    gap:.2rem;
+    margin-top:.58rem;
+    padding-top:.55rem;
+    border-top:1px solid rgba(100,116,139,.16);
+  }
+  .tq-box-mobile-statline span { min-width:0; text-align:center; }
+  .tq-box-mobile-statline small,
+  .tq-box-mobile-statline b,
+  .tq-box-mobile-statline em { display:block; }
+  .tq-box-mobile-statline small { color:#64748b; font-size:.48rem; font-weight:900; letter-spacing:.06em; }
+  .tq-box-mobile-statline b { margin-top:.1rem; color:#f8fafc; font-size:.82rem; font-style:normal; font-weight:950; }
+  .tq-box-mobile-statline em { margin-top:.06rem; color:#64748b; font-size:.46rem; font-style:normal; }
+  .tq-box-score-table[data-stat-view="overview"] .tq-box-mobile-statline--overview,
+  .tq-box-score-table[data-stat-view="shooting"] .tq-box-mobile-statline--shooting { display:grid; }
+  .tq-box-score-table[data-stat-view="overview"] .tq-box-mobile-statline--shooting,
+  .tq-box-score-table[data-stat-view="shooting"] .tq-box-mobile-statline--overview { display:none; }
+  html[data-system-theme="light"] #gameBoxScoreModal .tq-box-mobile-statline { border-top-color:#e5e7eb; }
+  html[data-system-theme="light"] #gameBoxScoreModal .tq-box-mobile-statline small,
+  html[data-system-theme="light"] #gameBoxScoreModal .tq-box-mobile-statline em { color:#5f6368; }
+  html[data-system-theme="light"] #gameBoxScoreModal .tq-box-mobile-statline b { color:#111827; }
+}

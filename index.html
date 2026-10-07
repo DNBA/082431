@@ -43,6 +43,7 @@
     <link id="tqThemeLight" rel="stylesheet" href="./css/system-theme-light.css?v=20261005-theme-2" media="not all" disabled>
     <link id="tqThemeDark" rel="stylesheet" href="./css/system-theme-dark.css?v=20261005-theme-2" media="not all" disabled>
     <link rel="stylesheet" href="./css/achievement-backs.css?v=20261006-backs-2">
+    <link rel="stylesheet" href="./css/box-score.css?v=20261007-integrity-2">
     <script src="./js/system-theme.js?v=20261005-theme-2"></script>
 </head>
 <body data-v2-active="home" class="bg-slate-950 text-slate-100 min-h-screen pb-24 font-sans selection:bg-amber-500 selection:text-black">
@@ -1442,7 +1443,8 @@
   <script src="./js/ui-v2/position-utils.js"></script>
   <script src="./js/focus-timer.js?v=20261003-split-focus-2"></script>
   <script src="./js/core/save-backups.js?v=20261005-learning-1"></script>
-  <script src="./js/app.js?v=20261007-endless-source-1"></script>
+  <script src="./js/box-score-integrity.js?v=20261007-integrity-1"></script>
+  <script src="./js/app.js?v=20261007-box-score-1"></script>
 <!-- 🏀 季後賽逐場動態播報彈窗 -->
 <div id="playoffSeriesModal" onclick="if(event.target === this && !document.getElementById('posNextRoundBtn').disabled) closeSeriesAndShowBoxScore()" class="fixed inset-0 bg-slate-950/90 backdrop-blur-md z-50 hidden flex items-end sm:items-center justify-center p-3 sm:p-4 ios-safe-modal">
   <div class="bg-slate-900 border border-amber-500/50 rounded-3xl w-full max-w-lg p-6 shadow-2xl space-y-4 relative animate-modal-in">
@@ -1511,53 +1513,27 @@
             OPPONENT
           </button>
         </div>
-<!-- 🟢 官方 NBA App 規格 17 欄完整戰報表格（直接貼在這裡） 🟢 -->
+        <div class="tq-box-stat-tabs" role="tablist" aria-label="切換數據類型">
+          <button id="modalBoxOverviewBtn" type="button" role="tab" aria-selected="true" class="is-active" onclick="switchGameBoxScoreStats('overview')">重點數據</button>
+          <button id="modalBoxShootingBtn" type="button" role="tab" aria-selected="false" onclick="switchGameBoxScoreStats('shooting')">投籃明細</button>
+        </div>
         <div class="overflow-x-auto rounded-2xl border border-slate-800 bg-slate-950/80 shadow-inner">
-          <table class="w-full text-left text-xs whitespace-nowrap">
-            <thead class="text-[10px] text-slate-400 font-mono bg-slate-900/90 border-b border-slate-800 uppercase select-none">
+          <table id="modalBoxScoreTable" data-stat-view="overview" class="tq-box-score-table w-full text-left text-xs whitespace-nowrap">
+            <thead>
               <tr>
-                <!-- 1. 左側固定球員姓名欄（水平滑動時不被遮住） -->
-                <th class="py-2.5 px-3 sticky left-0 bg-slate-900 z-20 border-r border-slate-800/80 text-amber-300 font-black">球員 (PLAYER)</th>
-                
-                <!-- 2. 出場時間 -->
-                <th class="py-2.5 px-2 text-center text-slate-500">MIN</th>
-                
-                <!-- 3. 總得分（加亮粗體） -->
-                <th class="py-2.5 px-2 text-center text-amber-400 font-black text-xs">PTS</th>
-                
-                <!-- 4. 投籃命中 - 出手 與 命中率 -->
-                <th class="py-2.5 px-2 text-center">FGM-A</th>
-                <th class="py-2.5 px-2 text-center text-slate-400">FG%</th>
-                
-                <!-- 5. 三分球命中 - 出手 與 三分率 -->
-                <th class="py-2.5 px-2 text-center text-amber-300 font-bold">3PM-A</th>
-                <th class="py-2.5 px-2 text-center text-slate-400">3P%</th>
-                
-                <!-- 6. 罰球命中 - 出手 與 罰球率 -->
-                <th class="py-2.5 px-2 text-center">FTM-A</th>
-                <th class="py-2.5 px-2 text-center text-slate-400">FT%</th>
-                
-                <!-- 7. 進攻籃板、防守籃板 與 總籃板 -->
-                <th class="py-2.5 px-2 text-center text-slate-500">OREB</th>
-                <th class="py-2.5 px-2 text-center text-slate-500">DREB</th>
-                <th class="py-2.5 px-2 text-center font-bold text-slate-200">REB</th>
-                
-                <!-- 8. 助攻（亮紫色） -->
-                <th class="py-2.5 px-2 text-center font-bold text-indigo-300">AST</th>
-                
-                <!-- 9. 抄截與阻攻 -->
-                <th class="py-2.5 px-2 text-center">STL</th>
-                <th class="py-2.5 px-2 text-center">BLK</th>
-                
-                <!-- 10. 失誤與犯規 -->
-                <th class="py-2.5 px-2 text-center text-rose-400">TO</th>
-                <th class="py-2.5 px-2 text-center text-slate-400">PF</th>
-                
-                <!-- 11. 正負值 -->
-                <th class="py-2.5 px-3 text-center font-bold text-slate-300">+/-</th>
+                <th class="tq-box-player sticky left-0 z-20">PLAYER</th>
+                <th class="tq-box-overview tq-box-optional">MIN</th>
+                <th class="tq-box-points">PTS</th>
+                <th class="tq-box-overview">REB</th>
+                <th class="tq-box-overview">AST</th>
+                <th class="tq-box-overview tq-box-mobile-hide">DEF</th>
+                <th class="tq-box-overview tq-box-optional tq-box-mobile-hide">TO</th>
+                <th class="tq-box-overview">+/-</th>
+                <th class="tq-box-shooting">FG</th>
+                <th class="tq-box-shooting">3PT</th>
+                <th class="tq-box-shooting">FT</th>
               </tr>
             </thead>
-            <!-- 數據行將由 JavaScript 動態填入先發 5 人與替補 6 人 -->
             <tbody id="modalBoxScoreTbody" class="divide-y divide-slate-800/60 font-mono text-slate-200 text-xs"></tbody>
             <tbody id="modalOpponentBoxScoreTbody" class="hidden divide-y divide-slate-800/60 font-mono text-slate-200 text-xs"></tbody>
           </table>

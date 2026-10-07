@@ -26833,45 +26833,57 @@ function analyzeLineupBadges() {
 /* =====================================================
    📊 擬真 NBA Box Score 全局通用渲染器 (例行賽 & 季後賽格式完全統一)
 ===================================================== */
+function renderGameBoxScorePlayerRow(player, options = {}) {
+  const p = player || {};
+  const isBench = !!options.isBench;
+  const isOpponent = !!options.isOpponent;
+  const accent = isOpponent ? 'rose' : 'amber';
+  const role = isBench ? (p.benchSlot || 'BENCH') : (p.pos || 'G');
+  const plusMinus = Number(p.plusMinus || 0);
+  return `
+    <tr class="tq-box-row ${isBench ? 'tq-box-row--bench' : ''}">
+      <td class="tq-box-player sticky left-0 z-10">
+        <div class="tq-box-player__identity">
+          <span class="tq-box-role tq-box-role--${isBench ? 'bench' : accent}">${role}</span>
+          <span class="tq-box-player__name">${p.name}</span>
+          ${p.isSixthMan ? '<span class="tq-box-sixth">6TH</span>' : ''}
+        </div>
+        <small class="tq-box-substats">STL ${p.stl} · BLK ${p.blk} · TO ${p.tov}</small>
+        ${p.defendedBy ? `<small class="tq-box-matchup">VS ${p.defendedBy} · DEF ${p.matchupDefense || '--'}</small>` : ''}
+        <div class="tq-box-mobile-statline tq-box-mobile-statline--overview">
+          <span><small>PTS</small><b>${p.pts}</b></span>
+          <span><small>REB</small><b>${p.reb}</b></span>
+          <span><small>AST</small><b>${p.ast}</b></span>
+          <span><small>+/-</small><b class="${plusMinus >= 0 ? 'tq-box-positive' : 'tq-box-negative'}">${plusMinus >= 0 ? '+' + plusMinus : plusMinus}</b></span>
+        </div>
+        <div class="tq-box-mobile-statline tq-box-mobile-statline--shooting">
+          <span><small>PTS</small><b>${p.pts}</b></span>
+          <span><small>FG</small><b>${p.fgM}-${p.fgA}</b><em>${p.fgPct}%</em></span>
+          <span><small>3PT</small><b>${p.threeM}-${p.threeA}</b><em>${p.threePct}%</em></span>
+          <span><small>FT</small><b>${p.ftM}-${p.ftA}</b><em>${p.ftPct}%</em></span>
+        </div>
+      </td>
+      <td class="tq-box-overview tq-box-optional tq-box-muted">${p.min}</td>
+      <td class="tq-box-points ${Number(p.pts || 0) >= 20 ? `tq-box-points--${accent}` : ''}">${p.pts}</td>
+      <td class="tq-box-overview tq-box-strong">${p.reb}</td>
+      <td class="tq-box-overview tq-box-assist">${p.ast}</td>
+      <td class="tq-box-overview tq-box-mobile-hide tq-box-defense"><b>${p.stl}/${p.blk}</b><small>STL/BLK</small></td>
+      <td class="tq-box-overview tq-box-optional tq-box-mobile-hide tq-box-turnover">${p.tov}</td>
+      <td class="tq-box-overview ${plusMinus >= 0 ? 'tq-box-positive' : 'tq-box-negative'}">${plusMinus >= 0 ? '+' + plusMinus : plusMinus}</td>
+      <td class="tq-box-shooting"><b>${p.fgM}-${p.fgA}</b><small>${p.fgPct}%</small></td>
+      <td class="tq-box-shooting tq-box-three"><b>${p.threeM}-${p.threeA}</b><small>${p.threePct}%</small></td>
+      <td class="tq-box-shooting"><b>${p.ftM}-${p.ftA}</b><small>${p.ftPct}%</small></td>
+    </tr>`;
+}
+
 function renderOpponentBoxScoreRows(players, benchPts = 0) {
   const starters = (players || []).filter(p => p.role === 'starter');
   const bench = (players || []).filter(p => p.role === 'bench');
-  const row = (p, isBench = false) => `
-    <tr class="${isBench ? 'bg-slate-950/40 hover:bg-indigo-950/30' : 'hover:bg-slate-800/40'}">
-      <td class="py-2.5 px-3 font-sans sticky left-0 bg-slate-950/95 z-10 border-r border-slate-800/60">
-        <div class="flex items-center gap-1.5">
-          <span class="text-[9px] font-black px-1.5 py-0.5 rounded ${isBench ? 'bg-slate-800 text-slate-400 border border-slate-700' : 'bg-rose-500/20 text-rose-300 border border-rose-500/40'}">${isBench ? (p.benchSlot || 'BENCH') : p.pos}</span>
-          <span class="truncate max-w-[110px] ${isBench ? 'text-slate-300 font-medium' : 'text-white font-bold'}">${p.name}</span>
-        </div>
-        ${p.defendedBy ? `<div class="mt-1 text-[8px] font-bold text-cyan-300">VS ${p.defendedBy} · DEF ${p.matchupDefense || '--'}</div>` : ''}
-      </td>
-      <td class="py-2 px-2 text-center text-slate-400 font-mono">${p.min}</td>
-      <td class="py-2 px-2 text-center font-bold font-mono ${p.pts >= 20 ? 'text-rose-300 text-sm' : 'text-slate-100'}">${p.pts}</td>
-      <td class="py-2 px-2 text-center text-slate-300 font-mono">${p.fgM}-${p.fgA}</td>
-      <td class="py-2 px-2 text-center text-slate-400 font-mono">${p.fgPct}%</td>
-      <td class="py-2 px-2 text-center text-amber-300 font-mono">${p.threeM}-${p.threeA}</td>
-      <td class="py-2 px-2 text-center text-slate-400 font-mono">${p.threePct}%</td>
-      <td class="py-2 px-2 text-center text-slate-300 font-mono">${p.ftM}-${p.ftA}</td>
-      <td class="py-2 px-2 text-center text-slate-400 font-mono">${p.ftPct}%</td>
-      <td class="py-2 px-2 text-center text-slate-400 font-mono">${p.oReb}</td>
-      <td class="py-2 px-2 text-center text-slate-400 font-mono">${p.dReb}</td>
-      <td class="py-2 px-2 text-center font-bold text-slate-200 font-mono">${p.reb}</td>
-      <td class="py-2 px-2 text-center font-bold text-indigo-300 font-mono">${p.ast}</td>
-      <td class="py-2 px-2 text-center text-slate-300 font-mono">${p.stl}</td>
-      <td class="py-2 px-2 text-center text-slate-300 font-mono">${p.blk}</td>
-      <td class="py-2 px-2 text-center text-rose-400 font-mono">${p.tov}</td>
-      <td class="py-2 px-2 text-center text-slate-400 font-mono">${p.pf}</td>
-      <td class="py-2 px-2.5 text-center font-mono font-bold ${p.plusMinus >= 0 ? 'text-emerald-400' : 'text-rose-400'}">${p.plusMinus >= 0 ? '+' + p.plusMinus : p.plusMinus}</td>
-    </tr>`;
   return `
-    <tr class="bg-slate-900/90 text-rose-300 text-[10px] font-mono font-bold border-y border-rose-500/30">
-      <td colspan="18" class="py-1 px-3">🎯 對手先發與我方主防對位 (Opponent Starters)</td>
-    </tr>
-    ${starters.map(p => row(p, false)).join('')}
-    <tr class="bg-slate-900/90 text-indigo-300 text-[10px] font-mono font-bold border-y border-indigo-500/30">
-      <td colspan="18" class="py-1 px-3">🪑 對手板凳陣容 (Bench) ｜ 合計攻下 ${benchPts || 0} 分</td>
-    </tr>
-    ${bench.map(p => row(p, true)).join('')}`;
+    <tr class="tq-box-section tq-box-section--opponent"><td colspan="11">對手先發 · ${starters.length} PLAYERS</td></tr>
+    ${starters.map(p => renderGameBoxScorePlayerRow(p, { isOpponent: true })).join('')}
+    <tr class="tq-box-section tq-box-section--bench"><td colspan="11">對手替補 · ${bench.length} PLAYERS · ${benchPts || 0} PTS</td></tr>
+    ${bench.map(p => renderGameBoxScorePlayerRow(p, { isBench: true, isOpponent: true })).join('')}`;
 }
 
 function switchGameBoxScoreSide(side = 'user') {
@@ -26899,6 +26911,22 @@ function switchGameBoxScoreSide(side = 'user') {
 }
 window.switchGameBoxScoreSide = switchGameBoxScoreSide;
 
+function switchGameBoxScoreStats(view = 'overview') {
+  const safeView = view === 'shooting' ? 'shooting' : 'overview';
+  const table = document.getElementById('modalBoxScoreTable');
+  const overviewButton = document.getElementById('modalBoxOverviewBtn');
+  const shootingButton = document.getElementById('modalBoxShootingBtn');
+  if (table) table.dataset.statView = safeView;
+  if (table?.parentElement) table.parentElement.scrollLeft = 0;
+  [overviewButton, shootingButton].forEach((button, index) => {
+    if (!button) return;
+    const selected = (index === 0 && safeView === 'overview') || (index === 1 && safeView === 'shooting');
+    button.setAttribute('aria-selected', String(selected));
+    button.classList.toggle('is-active', selected);
+  });
+}
+window.switchGameBoxScoreStats = switchGameBoxScoreStats;
+
 function openGameBoxScoreModal(gameData, subTitle = '收官戰') {
   if (!gameData) return;
   const bestPlayer = gameData.bestPlayer || [...(gameData.boxScore || [])].sort((a, b) => (b.pts + (b.reb || 0) * 1.2 + (b.ast || 0) * 1.5) - (a.pts + (a.reb || 0) * 1.2 + (a.ast || 0) * 1.5))[0] || { name: '主力核心', pos: 'SG', pts: 25, reb: 5, ast: 5, trait: { badge: '🔥核心' }, plusMinus: 10 };
@@ -26923,67 +26951,13 @@ function openGameBoxScoreModal(gameData, subTitle = '收官戰') {
     const starters = (gameData.boxScore || []).filter(p => p.role === 'starter');
     const bench = (gameData.boxScore || []).filter(p => p.role === 'bench');
 
-    const starterRows = starters.map(p => `
-      <tr class="hover:bg-slate-800/40">
-        <td class="py-2.5 px-3 font-sans font-bold flex items-center gap-1.5 sticky left-0 bg-slate-950/95 z-10 border-r border-slate-800/60">
-          <span class="text-[9px] font-black px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40">${p.pos}</span>
-          <span class="truncate max-w-[110px] text-white">${p.name}</span>
-        </td>
-        <td class="py-2 px-2 text-center text-slate-400 font-mono">${p.min}</td>
-        <td class="py-2 px-2 text-center font-bold font-mono ${p.pts >= 20 ? 'text-amber-400 font-black text-sm' : 'text-slate-100'}">${p.pts}</td>
-        <td class="py-2 px-2 text-center text-slate-300 font-mono">${p.fgM}-${p.fgA}</td>
-        <td class="py-2 px-2 text-center text-slate-400 font-mono">${p.fgPct}%</td>
-        <td class="py-2 px-2 text-center text-amber-300 font-mono">${p.threeM}-${p.threeA}</td>
-        <td class="py-2 px-2 text-center text-slate-400 font-mono">${p.threePct}%</td>
-        <td class="py-2 px-2 text-center text-slate-300 font-mono">${p.ftM}-${p.ftA}</td>
-        <td class="py-2 px-2 text-center text-slate-400 font-mono">${p.ftPct}%</td>
-        <td class="py-2 px-2 text-center text-slate-400 font-mono">${p.oReb}</td>
-        <td class="py-2 px-2 text-center text-slate-400 font-mono">${p.dReb}</td>
-        <td class="py-2 px-2 text-center font-bold text-slate-200 font-mono">${p.reb}</td>
-        <td class="py-2 px-2 text-center font-bold text-indigo-300 font-mono">${p.ast}</td>
-        <td class="py-2 px-2 text-center text-slate-300 font-mono">${p.stl}</td>
-        <td class="py-2 px-2 text-center text-slate-300 font-mono">${p.blk}</td>
-        <td class="py-2 px-2 text-center text-rose-400 font-mono">${p.tov}</td>
-        <td class="py-2 px-2 text-center text-slate-400 font-mono">${p.pf}</td>
-        <td class="py-2 px-2.5 text-center font-mono font-bold ${p.plusMinus >= 0 ? 'text-emerald-400' : 'text-rose-400'}">${p.plusMinus >= 0 ? '+' + p.plusMinus : p.plusMinus}</td>
-      </tr>
-    `).join('');
-
-    const benchRows = bench.map(p => `
-      <tr class="hover:bg-indigo-950/30 bg-slate-950/40">
-        <td class="py-2 px-3 font-sans font-medium flex items-center gap-1.5 sticky left-0 bg-slate-950/95 z-10 border-r border-slate-800/60">
-          <span class="text-[8px] font-mono px-1 py-0.2 rounded bg-slate-800 text-slate-400 border border-slate-700">${p.benchSlot || 'BENCH'}</span>
-          <span class="truncate max-w-[110px] text-slate-300">${p.name}</span>
-          ${p.isSixthMan ? '<span class="text-[8px] font-black text-orange-400 bg-orange-950 px-1 rounded border border-orange-500/40">6TH</span>' : ''}
-        </td>
-        <td class="py-2 px-2 text-center text-slate-500 font-mono">${p.min}</td>
-        <td class="py-2 px-2 text-center font-bold font-mono ${p.pts >= 12 ? 'text-orange-400 font-bold' : 'text-slate-300'}">${p.pts}</td>
-        <td class="py-2 px-2 text-center text-slate-400 font-mono">${p.fgM}-${p.fgA}</td>
-        <td class="py-2 px-2 text-center text-slate-500 font-mono">${p.fgPct}%</td>
-        <td class="py-2 px-2 text-center text-slate-400 font-mono">${p.threeM}-${p.threeA}</td>
-        <td class="py-2 px-2 text-center text-slate-500 font-mono">${p.threePct}%</td>
-        <td class="py-2 px-2 text-center text-slate-400 font-mono">${p.ftM}-${p.ftA}</td>
-        <td class="py-2 px-2 text-center text-slate-500 font-mono">${p.ftPct}%</td>
-        <td class="py-2 px-2 text-center text-slate-500 font-mono">${p.oReb}</td>
-        <td class="py-2 px-2 text-center text-slate-500 font-mono">${p.dReb}</td>
-        <td class="py-2 px-2 text-center text-slate-300 font-mono">${p.reb}</td>
-        <td class="py-2 px-2 text-center text-indigo-300 font-mono">${p.ast}</td>
-        <td class="py-2 px-2 text-center text-slate-400 font-mono">${p.stl}</td>
-        <td class="py-2 px-2 text-center text-slate-400 font-mono">${p.blk}</td>
-        <td class="py-2 px-2 text-center text-rose-400/80 font-mono">${p.tov}</td>
-        <td class="py-2 px-2 text-center text-slate-500 font-mono">${p.pf}</td>
-        <td class="py-2 px-2.5 text-center font-mono font-bold ${p.plusMinus >= 0 ? 'text-emerald-400' : 'text-rose-400'}">${p.plusMinus >= 0 ? '+' + p.plusMinus : p.plusMinus}</td>
-      </tr>
-    `).join('');
+    const starterRows = starters.map(p => renderGameBoxScorePlayerRow(p)).join('');
+    const benchRows = bench.map(p => renderGameBoxScorePlayerRow(p, { isBench: true })).join('');
 
     tbody.innerHTML = `
-      <tr class="bg-slate-900/90 text-amber-400 text-[10px] font-mono font-bold border-y border-amber-500/30">
-        <td colspan="18" class="py-1 px-3">⭐️ 先發五人陣容 (Starters)</td>
-      </tr>
+      <tr class="tq-box-section tq-box-section--user"><td colspan="11">先發五人 · STARTERS</td></tr>
       ${starterRows}
-      <tr class="bg-slate-900/90 text-indigo-300 text-[10px] font-mono font-bold border-y border-indigo-500/30">
-        <td colspan="18" class="py-1 px-3">🛡️ 板凳輪替陣容 (Bench) ｜ 合計攻下 ${gameData.benchPts || 0} 分</td>
-      </tr>
+      <tr class="tq-box-section tq-box-section--bench"><td colspan="11">板凳輪替 · ${gameData.benchPts || 0} PTS</td></tr>
       ${benchRows}
     `;
   }
@@ -27001,6 +26975,7 @@ function openGameBoxScoreModal(gameData, subTitle = '收官戰') {
   }
   if (opponentButton) opponentButton.innerText = hasOpponentBoxScore ? `OPPONENT · ${gameData.oppTeam || ''}` : 'OPPONENT';
   switchGameBoxScoreSide('user');
+  switchGameBoxScoreStats('overview');
 
   // 🏅 渲染徽章高光事件
   const badgeContainer = document.getElementById('modalBadgeMomentsContainer');
@@ -27335,6 +27310,14 @@ function generateGameBoxScoreData({ starters, bench, myScore, oppScore, win, opp
   });
 
   const fullBox = [...startersBox, ...benchBox];
+  // Keep every player's shooting line and the full team total mathematically valid.
+  // PTS must always equal 2PM*2 + 3PM*3 + FTM, and player PTS must sum to myScore.
+  if (window.BoxScoreIntegrity) {
+    window.BoxScoreIntegrity.reconcileTeamPoints(fullBox, myScore);
+  }
+  const reconciledBenchPts = fullBox
+    .filter(player => player.role === 'bench')
+    .reduce((sum, player) => sum + Number(player.pts || 0), 0);
   const bestPlayer = [...fullBox].sort((a, b) => (b.pts + b.reb * 1.2 + b.ast * 1.5) - (a.pts + a.reb * 1.2 + a.ast * 1.5))[0] || startersBox[0];
 
   const highlightText = win
@@ -27343,7 +27326,7 @@ function generateGameBoxScoreData({ starters, bench, myScore, oppScore, win, opp
 
   return {
     win, oppTeam, myScore, oppScore,
-    boxScore: fullBox, benchPts: benchPtsTotal,
+    boxScore: fullBox, benchPts: reconciledBenchPts,
     badgeMoments: gameBadgeMoments,
     highlight: highlightText,
     bestPlayer
