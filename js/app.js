@@ -27035,7 +27035,7 @@ window.openGameBoxScoreModal = openGameBoxScoreModal;
 /* =====================================================
    🏀 完整 11 人 Box Score 戰報數據生成器 (18 欄位真實擬真)
 ===================================================== */
-function generateGameBoxScoreData({ starters, bench, myScore, oppScore, win, oppTeam, badgeEffects, isPlayoff = false, gameNum = 1 }) {
+function generateGameBoxScoreData({ starters, bench, myScore, oppScore, win, oppTeam, badgeEffects, isPlayoff = false, gameNum = 1, simulationScript = null }) {
   if (!badgeEffects) badgeEffects = analyzeLineupBadges();
 
   // 確保 5 位先發
@@ -27139,7 +27139,10 @@ function generateGameBoxScoreData({ starters, bench, myScore, oppScore, win, opp
   const gameMargin = myScore - oppScore;
   const benchBoost = (badgeEffects.sixthMans && badgeEffects.sixthMans.length > 0) ? 1 : 0;
   // 季後賽主力縮減輪替，板凳得分約佔 20%~25%
-  const benchShare = isPlayoff ? 0.20 : 0.24;
+  const scriptedBenchShare = Number(simulationScript?.benchShare);
+  const benchShare = Number.isFinite(scriptedBenchShare)
+    ? Math.max(0.18, Math.min(0.38, scriptedBenchShare))
+    : (isPlayoff ? 0.20 : 0.24);
   const benchPtsTotal = Math.min(45, Math.max(16, Math.round(myScore * (benchShare + (benchBoost > 0 ? 0.05 : 0)) + (Math.random() * 4 - 2))));
   const startersPtsTotal = myScore - benchPtsTotal;
 
@@ -27151,6 +27154,8 @@ function generateGameBoxScoreData({ starters, bench, myScore, oppScore, win, opp
     else if (t.trait.type === 'playmaker') w *= 1.20;
     else if (t.trait.type === 'big_rebound') w *= 0.90;
     else w *= 0.75;
+    if (simulationScript?.featuredPlayerName === t.player.name) w *= Math.max(1, Number(simulationScript.featuredBoost) || 1);
+    if (simulationScript?.coldPlayerName === t.player.name) w *= Math.max(.55, Number(simulationScript.coldMultiplier) || .75);
     return w * (0.85 + Math.random() * 0.3);
   });
   const totalStarterW = starterWeights.reduce((a, b) => a + b, 0) || 1;
@@ -27249,6 +27254,9 @@ function generateGameBoxScoreData({ starters, bench, myScore, oppScore, win, opp
     let w = t.ovr * 0.1 * t.alphaMultiplier;
     if (t.isSixthMan) w *= 1.6;
     if (t.trait.type === 'shooter' || t.trait.type === 'slasher') w *= 1.3;
+    if (simulationScript?.benchSurge && t.benchSlot === 1) w *= 1.75;
+    if (simulationScript?.featuredPlayerName === t.player.name) w *= Math.max(1, Number(simulationScript.featuredBoost) || 1);
+    if (simulationScript?.coldPlayerName === t.player.name) w *= Math.max(.55, Number(simulationScript.coldMultiplier) || .75);
     return w * (0.8 + Math.random() * 0.4);
   });
   const totalBenchW = benchWeights.reduce((a, b) => a + b, 0) || 1;

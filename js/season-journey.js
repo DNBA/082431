@@ -149,6 +149,84 @@
     return copy;
   }
 
+  function seasonSimulation() { return window.SeasonSimulation || null; }
+
+  function scriptRoll(script, label) {
+    const simulation = seasonSimulation();
+    return simulation && script ? simulation.roll(script.seed, label) : Math.random();
+  }
+
+  function scriptRandomInt(script, label, min, max) {
+    return Math.floor(scriptRoll(script, label) * (max - min + 1)) + min;
+  }
+
+  function recordPlayerScore(card, stat) {
+    if (!card) return -Infinity;
+    const ovr = playerOvr(card);
+    if (stat === 'ast') return statNumber(card, 'AST') * 9 + ovr;
+    if (stat === 'reb') return statNumber(card, 'REB') * 7 + statNumber(card, 'BLK') * 4 + ovr;
+    if (stat === 'blk') return statNumber(card, 'BLK') * 12 + statNumber(card, 'REB') * 2 + ovr;
+    if (stat === 'stl') return statNumber(card, 'STL') * 12 + ovr;
+    if (stat === 'threeM') return statNumber(card, '3PA') * 7 + statNumber(card, 'PTS') * 2 + ovr;
+    return statNumber(card, 'PTS') * 4 + ovr;
+  }
+
+  function ensureGameScript(game, teamOvr, starters) {
+    if (!game) return null;
+    const simulation = seasonSimulation();
+    if (!simulation) return null;
+    if (!game.gameScript || Number(game.gameScript.version) !== 1) {
+      game.gameScript = simulation.createGameScript({
+        seasonNo: state.seasonJourney?.seasonNo || 1,
+        seasonStartedAt: state.seasonJourney?.seasonStartedAt || '',
+        game: game.game,
+        opponent: game.opponent,
+        teamOvr,
+        opponentOvr: game.opponentOvr,
+        special: dynamicSpecial(game) || game.special
+      });
+    }
+    const script = game.gameScript;
+    const lineup = (starters || []).filter(Boolean);
+    if (lineup.length) {
+      const currentFeatured = lineup.find(card => String(card.cardId) === String(script.featuredPlayerCardId))
+        || lineup.find(card => card.name === script.featuredPlayerName);
+      let featured = currentFeatured;
+      if (!featured) {
+        if (script.profile === 'historic') {
+          featured = [...lineup].sort((a, b) => recordPlayerScore(b, script.recordStat) - recordPlayerScore(a, script.recordStat))[0];
+        } else if (script.profile === 'takeover') {
+          featured = [...lineup].sort((a, b) => playerOvr(b) - playerOvr(a))[0];
+        } else {
+          featured = lineup[Number(script.featuredSlot) % lineup.length];
+        }
+      }
+      const cold = lineup.find(card => card.name === script.coldPlayerName)
+        || lineup[Number(script.coldSlot) % lineup.length];
+      script.featuredPlayerName = featured?.name || '';
+      script.featuredPlayerCardId = featured?.cardId || '';
+      script.coldPlayerName = cold && cold.name !== script.featuredPlayerName ? cold.name : '';
+    }
+    return script;
+  }
+
+  function simulationScriptForSide(script, side, roster) {
+    if (!script) return null;
+    const lineup = (roster || []).filter(Boolean);
+    const result = { ...script };
+    if (side === 'opponent') {
+      const featured = script.profile === 'historic' && script.recordTeam === 'opponent'
+        ? [...lineup].sort((a, b) => recordPlayerScore(b, script.recordStat) - recordPlayerScore(a, script.recordStat))[0]
+        : [...lineup].sort((a, b) => playerOvr(b) - playerOvr(a))[0];
+      result.featuredPlayerName = featured?.name || '';
+      const cold = lineup[Number(script.coldSlot) % Math.max(1, lineup.length)];
+      result.coldPlayerName = cold && cold.name !== result.featuredPlayerName ? cold.name : '';
+    }
+    if (script.hotTeam !== side && script.recordTeam !== side) result.featuredBoost = 1.04;
+    if (script.profile === 'historic' && script.recordTeam === side) result.featuredBoost = Math.max(1.82, Number(script.featuredBoost) || 1);
+    return result;
+  }
+
   function buildInteractionPlan() {
     const types = shuffled(['shoot', 'defense', 'offense']);
     return { 1: types[0], 2: types[1], 3: types[2] };
@@ -563,6 +641,7 @@
       if (!Array.isArray(game.moments)) game.moments = [];
       if (game.played && !game.analysis) game.analysis = null;
     });
+    if (seasonSimulation()) journey.recordBook = seasonSimulation().ensureRecordBook(journey.recordBook);
     window.SeasonStandings?.ensure(journey, typeof NBA_PLAYERS !== 'undefined' ? NBA_PLAYERS : []);
     syncLeagueState();
 
@@ -1063,7 +1142,7 @@
                   <div class="sj-score-center"><span>VS</span><em id="sjDramaBanner"></em></div>
                   <div id="sjAwayScoreWrap" class="sj-score-team sj-score-team--away"><b id="sjGameAway"></b><strong id="sjAwayScore">0</strong><i id="sjAwayDelta"></i></div>
                 </div>
-                <div class="sj-momentum-labels"><span>MY TEAM</span><b>GAME FLOW</b><span>OPPONENT</span></div>
+                <div class="sj-momentum-labels"><span>MY TEAM</span><b id="sjGameFlowLabel">GAME FLOW</b><span>OPPONENT</span></div>
                 <div id="sjMomentumTrack" class="sj-momentum-track" style="--momentum:0">
                   <div class="sj-momentum-zone sj-momentum-zone--home"></div>
                   <div class="sj-momentum-center"></div>
@@ -1238,15 +1317,18 @@
     const averageMorale = starters.reduce((sum, card) => sum + moraleValue(card), 0) / Math.max(1, starters.length);
     const teamOvr = baseTeamOvr + averageMorale;
     const opponentRoster = getOpponentRoster(scheduleGame);
+    const gameScript = ensureGameScript(scheduleGame, teamOvr, starters);
     activeGame = {
       scheduleGame, starters, bench: (state.benchLineup || []).filter(Boolean), teamOvr,
+      gameScript,
       quarter: 0, homeScore: 0, awayScore: 0, homeQuarters: [], awayQuarters: [],
       feed: [], moments: [], pendingMoments: [], finalized: false, boxScore: null,
       pregameStrategy: 'balanced', secondHalfStrategy: null, awaitingHalftime: false, halftimeReport: null,
       opponentRoster, scouting: scoutOpponent(scheduleGame), matchups: [0, 1, 2, 3, 4], matchupResults: [], matchupBonus: 0, matchupConfirmed: false,
       manualShots: {}, manualShotCount: 0, defenseDecisions: {}, offenseDecisions: {},
       manualScoreAdjustments: {}, interactiveEventCount: 0, interactionPlan: buildInteractionPlan(), clutchDecision: null, awaitingClutch: false,
-      featuredStar: [...starters].sort((a, b) => (Number(b.ovr || b.baseOvr || 0) + moraleValue(b)) - (Number(a.ovr || a.baseOvr || 0) + moraleValue(a)))[0] || null,
+      featuredStar: starters.find(card => card.name === gameScript?.featuredPlayerName)
+        || [...starters].sort((a, b) => (Number(b.ovr || b.baseOvr || 0) + moraleValue(b)) - (Number(a.ovr || a.baseOvr || 0) + moraleValue(a)))[0] || null,
       visual: null
     };
     if (autoMode.running) confirmJourneyMatchup();
@@ -1475,16 +1557,19 @@
   function applyQuarterStrategy(strategyId, q, home, away) {
     let adjustedHome = home;
     let adjustedAway = away;
+    const script = activeGame?.gameScript;
     if (strategyId === 'feature-star') {
-      adjustedHome += randomInt(0, 2);
-      if (q >= 4 && Math.random() < .28) adjustedHome -= 2;
+      adjustedHome += scriptRandomInt(script, `${q}|feature-star|boost`, 0, 2);
+      if (q >= 4 && scriptRoll(script, `${q}|feature-star|fatigue`) < .28) adjustedHome -= 2;
     } else if (strategyId === 'shoot-threes') {
-      adjustedHome += randomInt(-3, 4);
+      adjustedHome += scriptRandomInt(script, `${q}|shoot-threes`, -3, 4);
     } else if (strategyId === 'defense' || strategyId === 'lock-down') {
       adjustedHome -= 1;
-      adjustedAway -= strategyId === 'lock-down' ? randomInt(1, 3) : randomInt(1, 2);
+      adjustedAway -= strategyId === 'lock-down'
+        ? scriptRandomInt(script, `${q}|lock-down`, 1, 3)
+        : scriptRandomInt(script, `${q}|defense`, 1, 2);
     } else if (strategyId === 'attack-paint') {
-      adjustedHome += randomInt(1, 3);
+      adjustedHome += scriptRandomInt(script, `${q}|attack-paint`, 1, 3);
     }
     const floor = q > 4 ? 5 : 15;
     const ceiling = q > 4 ? 15 : 40;
@@ -1875,9 +1960,16 @@
     if (!activeGame || !activeGame.matchupConfirmed || activeGame.finalized || activeGame.awaitingHalftime || activeGame.awaitingClutch || activeGame.visual?.busy || activeGame.visual?.awaitingBadge || shootingChallenge || defenseChallenge || offenseChallenge) return;
     const q = activeGame.quarter + 1;
     const diff = activeGame.teamOvr - activeGame.scheduleGame.opponentOvr;
-    let home = clamp(randomInt(20, 32) + Math.round(diff * .12), 15, 40);
-    let away = clamp(randomInt(20, 32) - Math.round(diff * .08), 15, 40);
-    if (q > 4) { home = randomInt(5, 13); away = randomInt(5, 13); }
+    const scriptedScore = seasonSimulation()?.quarterScore(activeGame.gameScript, {
+      quarter: q,
+      teamOvr: activeGame.teamOvr,
+      opponentOvr: activeGame.scheduleGame.opponentOvr,
+      homeScore: activeGame.homeScore,
+      awayScore: activeGame.awayScore
+    });
+    let home = scriptedScore?.home ?? clamp(randomInt(20, 32) + Math.round(diff * .12), 15, 40);
+    let away = scriptedScore?.away ?? clamp(randomInt(20, 32) - Math.round(diff * .08), 15, 40);
+    if (!scriptedScore && q > 4) { home = randomInt(5, 13); away = randomInt(5, 13); }
     const adjusted = applyQuarterStrategy(activeStrategyForQuarter(q), q, home, away);
     home = adjusted.home;
     away = adjusted.away;
@@ -1896,7 +1988,10 @@
     activeGame.homeScore += home;
     activeGame.awayScore += away;
     activeGame.homeQuarters.push(home + manualScore.home); activeGame.awayQuarters.push(away + manualScore.away);
-    if (q === 1) activeGame.feed.push(`🎯 GAME PLAN：${GAME_STRATEGIES[activeGame.pregameStrategy].short}`);
+    if (q === 1) {
+      activeGame.feed.push(`🎯 GAME PLAN：${GAME_STRATEGIES[activeGame.pregameStrategy].short}`);
+      if (activeGame.gameScript) activeGame.feed.push(`🎬 GAME FLOW：${activeGame.gameScript.label} · ${activeGame.gameScript.labelZh}`);
+    }
     if (q === 1 && (badgeImpact.home || badgeImpact.away)) activeGame.feed.push(`✨ 徽章陣容加成：進攻 +${badgeImpact.home}／防守 ${badgeImpact.away}`);
     activeGame.feed.push(`${quarterName(q)}：本節比分 ${home + manualScore.home}-${away + manualScore.away}`);
     const moment = selectBadgeMoment(q);
@@ -2029,6 +2124,7 @@
     set('sjAwayScore', visual ? visual.displayAwayScore : activeGame.awayScore);
     set('sjVisualQuarter', activeGame.quarter ? quarterName(activeGame.quarter) : 'PREGAME');
     set('sjVisualClock', formatGameClock(visual?.clock ?? (activeGame.quarter > 4 ? 300 : 720)));
+    set('sjGameFlowLabel', activeGame.gameScript ? activeGame.gameScript.label : 'GAME FLOW');
     const stage = document.getElementById('sjVisualStage');
     if (stage) stage.classList.toggle('is-clutch', !!visual?.isClutchTime);
     const momentumTrack = document.getElementById('sjMomentumTrack');
@@ -2384,7 +2480,78 @@
     ];
   }
 
-  function generateOpponentGameData(scheduleGame, homeScore, awayScore, matchupResults = []) {
+  function refreshGameDataSummary(gameData) {
+    if (!gameData || !Array.isArray(gameData.boxScore)) return;
+    gameData.benchPts = gameData.boxScore.filter(row => row.role === 'bench').reduce((sum, row) => sum + Number(row.pts || 0), 0);
+    gameData.bestPlayer = [...gameData.boxScore].sort((a, b) =>
+      (Number(b.pts || 0) + Number(b.reb || 0) * 1.2 + Number(b.ast || 0) * 1.5)
+      - (Number(a.pts || 0) + Number(a.reb || 0) * 1.2 + Number(a.ast || 0) * 1.5)
+    )[0] || gameData.bestPlayer;
+    if (gameData.bestPlayer) {
+      const player = gameData.bestPlayer;
+      gameData.highlight = `${gameData.win ? '🔥 勝利焦點' : '💔 本場焦點'}：【${player.name}】攻下 ${player.pts}分 ${player.reb || 0}籃板 ${player.ast || 0}助攻。`;
+    }
+  }
+
+  function applyHistoricGameData(gameData, gameScript, side, preferredName) {
+    if (!gameData || gameScript?.profile !== 'historic' || gameScript.recordTeam !== side) return null;
+    const historic = seasonSimulation()?.applyHistoricLine(gameData.boxScore, gameData.myScore, gameScript, preferredName);
+    if (historic) refreshGameDataSummary(gameData);
+    return historic;
+  }
+
+  function evaluateJourneyRecords(gameData, scheduleGame) {
+    const journey = state.seasonJourney;
+    const simulation = seasonSimulation();
+    if (!simulation || !journey || !gameData) return { records: [], personalBests: [] };
+    (gameData.boxScore || []).forEach(row => {
+      const card = findActiveCardByName(row.name);
+      if (card) row.cardId = card.cardId;
+    });
+    const result = simulation.evaluateRecordBook(journey.recordBook, gameData.boxScore, {
+      seasonNo: journey.seasonNo,
+      game: scheduleGame.game,
+      opponent: scheduleGame.opponent,
+      createdAt: new Date().toISOString()
+    });
+    journey.recordBook = result.book;
+    result.records.forEach(record => {
+      const card = (state.inventory || []).find(item => String(item.cardId) === String(record.cardId))
+        || findActiveCardByName(record.player);
+      if (!card) return;
+      ensureCardJourney(card);
+      card.legacy.records = (card.legacy.records || 0) + 1;
+      unlockBack(card, 'record', `${record.value} ${record.short} · NEW FRANCHISE RECORD`);
+    });
+    return result;
+  }
+
+  function recordMomentCards(result, opponentHistoric) {
+    const recordIds = new Set((result.records || []).map(record => `${record.cardId}:${record.stat}`));
+    const records = (result.records || []).map(record => ({
+      badge: 'RECORD BREAKER', icon: '⚡', player: record.player,
+      color: 'text-red-300 bg-red-950/70 border-red-500/50',
+      desc: `${record.value} ${record.short} · NEW FRANCHISE RECORD（原紀錄 ${record.oldValue}）`
+    }));
+    const personal = (result.personalBests || [])
+      .filter(best => !recordIds.has(`${best.cardId}:${best.stat}`))
+      .slice(0, 2)
+      .map(best => ({
+        badge: 'CAREER HIGH', icon: '📈', player: best.player,
+        color: 'text-amber-300 bg-amber-950/60 border-amber-500/40',
+        desc: `${best.value} ${best.short} · 個人生涯新高${best.oldValue ? `（原 ${best.oldValue}）` : ''}`
+      }));
+    if (opponentHistoric) {
+      records.push({
+        badge: 'OPPONENT HISTORY', icon: '🌪️', player: opponentHistoric.player,
+        color: 'text-rose-300 bg-rose-950/60 border-rose-500/40',
+        desc: `對手打出紀錄之夜：${opponentHistoric.value} ${opponentHistoric.short}`
+      });
+    }
+    return records.concat(personal);
+  }
+
+  function generateOpponentGameData(scheduleGame, homeScore, awayScore, matchupResults = [], gameScript = null) {
     const opponentRoster = getOpponentRoster(scheduleGame).map(player => ({
       ...player, positions: Array.isArray(player.positions) && player.positions.length ? player.positions : [player.position || 'G'],
       baseOvr: Number(player.ovr || scheduleGame.opponentOvr || 78), realOvr: Number(player.ovr || scheduleGame.opponentOvr || 78)
@@ -2396,10 +2563,11 @@
       baseOvr: clamp(Number(scheduleGame.opponentOvr || 80) - 5 - index, 68, 88)
     }));
     const emptyBadges = { starters: [], bench: [], mambaPlayers: [], sharpshooters: [], floorGenerals: [], rimProtectors: [], perimeterLocks: [], pickpockets: [], sixthMans: [], hasMamba: false, hasFloorGeneral: false };
+    const opponentSimulationScript = simulationScriptForSide(gameScript, 'opponent', opponentRoster);
     const opponentData = generateGameBoxScoreData({
       starters: opponentRoster, bench, myScore: awayScore, oppScore: homeScore,
       win: awayScore > homeScore, oppTeam: state.seasonJourney.teamName,
-      badgeEffects: emptyBadges, gameNum: scheduleGame.game
+      badgeEffects: emptyBadges, gameNum: scheduleGame.game, simulationScript: opponentSimulationScript
     });
     opponentData.boxScore.forEach(row => {
       const matchup = matchupResults.find(result => result.opponent === row.name);
@@ -2419,15 +2587,31 @@
     playJourneySound('whistle');
     const win = activeGame.homeScore > activeGame.awayScore;
     const badgeEffects = typeof analyzeLineupBadges === 'function' ? analyzeLineupBadges() : null;
+    const playerSimulationScript = simulationScriptForSide(activeGame.gameScript, 'user', activeGame.starters);
     const gameData = generateGameBoxScoreData({
       starters: activeGame.starters.map(moraleAdjustedCard), bench: activeGame.bench.map(moraleAdjustedCard),
       myScore: activeGame.homeScore, oppScore: activeGame.awayScore, win,
-      oppTeam: activeGame.scheduleGame.opponent, badgeEffects, gameNum: activeGame.scheduleGame.game
+      oppTeam: activeGame.scheduleGame.opponent, badgeEffects, gameNum: activeGame.scheduleGame.game,
+      simulationScript: playerSimulationScript
     });
-    const opponentGameData = generateOpponentGameData(activeGame.scheduleGame, activeGame.homeScore, activeGame.awayScore, activeGame.matchupResults);
+    const opponentGameData = generateOpponentGameData(activeGame.scheduleGame, activeGame.homeScore, activeGame.awayScore, activeGame.matchupResults, activeGame.gameScript);
+    const userHistoric = applyHistoricGameData(gameData, activeGame.gameScript, 'user', playerSimulationScript?.featuredPlayerName);
+    const opponentScript = simulationScriptForSide(activeGame.gameScript, 'opponent', activeGame.opponentRoster);
+    const opponentHistoric = applyHistoricGameData(opponentGameData, activeGame.gameScript, 'opponent', opponentScript?.featuredPlayerName);
     gameData.opponentBoxScore = opponentGameData.boxScore;
     gameData.opponentBenchPts = opponentGameData.benchPts;
-    gameData.badgeMoments = activeGame.moments.map(m => ({ badge: m.badge, icon: m.icon, player: m.player, color: 'text-amber-300 bg-amber-950/50 border-amber-500/40', desc: `${m.title} 漫畫時刻已收錄。` }));
+    const generatedMoments = Array.isArray(gameData.badgeMoments) ? gameData.badgeMoments : [];
+    gameData.badgeMoments = generatedMoments.concat(activeGame.moments.map(m => ({ badge: m.badge, icon: m.icon, player: m.player, color: 'text-amber-300 bg-amber-950/50 border-amber-500/40', desc: `${m.title} 漫畫時刻已收錄。` })));
+    const recordResult = evaluateJourneyRecords(gameData, activeGame.scheduleGame);
+    gameData.badgeMoments.push(...recordMomentCards(recordResult, opponentHistoric));
+    gameData.records = recordResult.records;
+    gameData.personalBests = recordResult.personalBests;
+    gameData.historicLine = userHistoric || opponentHistoric || null;
+    gameData.gameScript = activeGame.gameScript ? { ...activeGame.gameScript } : null;
+    if (recordResult.records.length) {
+      const record = recordResult.records[0];
+      gameData.highlight = `⚡ NEW FRANCHISE RECORD：${record.player} · ${record.value} ${record.short}！`;
+    }
     gameData.analysis = buildGameAnalysis(gameData, activeGame);
     activeGame.boxScore = gameData;
     const item = activeGame.scheduleGame;
@@ -2437,7 +2621,9 @@
       moments: gameData.badgeMoments, analysis: gameData.analysis, manualShots: activeGame.manualShots,
       defensiveMatchups: activeGame.matchupResults, defenseDecisions: activeGame.defenseDecisions,
       offenseDecisions: activeGame.offenseDecisions, clutchDecision: activeGame.clutchDecision,
-      interactionPlan: activeGame.interactionPlan, interactiveEventCount: activeGame.interactiveEventCount
+      interactionPlan: activeGame.interactionPlan, interactiveEventCount: activeGame.interactiveEventCount,
+      gameScript: activeGame.gameScript ? { ...activeGame.gameScript } : null,
+      records: recordResult.records, personalBests: recordResult.personalBests
     });
     const j = state.seasonJourney;
     j.gameIndex += 1; j.wins += win ? 1 : 0; j.losses += win ? 0 : 1;
@@ -2452,8 +2638,6 @@
       card.legacy.pts = (card.legacy.pts || 0) + (stat.pts || 0);
       card.legacy.reb = (card.legacy.reb || 0) + (stat.reb || 0);
       card.legacy.ast = (card.legacy.ast || 0) + (stat.ast || 0);
-      const record = stat.pts >= 60 || stat.ast >= 20 || stat.blk >= 10;
-      if (record) { card.legacy.records = (card.legacy.records || 0) + 1; unlockBack(card, 'record', `Game ${item.game}: ${stat.pts} PTS / ${stat.ast} AST / ${stat.blk} BLK`); }
     });
     triggerSpecialGameEvent(item, gameData, autoMode.running);
     if (j.gameIndex >= SEASON_LENGTH) completeRegularSeason();
@@ -2527,17 +2711,44 @@
       const item = j.schedule[j.gameIndex];
       const teamOvr = Number(calculateTeamOverall().overall || 80)
         + starters.reduce((sum, card) => sum + moraleValue(card), 0) / Math.max(1, starters.length);
-      const probability = clamp(.50 + (teamOvr - item.opponentOvr) * .028, .18, .84);
-      const win = Math.random() < probability;
-      let mine = randomInt(101, 124), theirs = randomInt(101, 124);
-      if (win && mine <= theirs) mine = theirs + randomInt(1, 10);
-      if (!win && mine >= theirs) theirs = mine + randomInt(1, 10);
-      const gameData = generateGameBoxScoreData({ starters: starters.map(moraleAdjustedCard), bench: bench.map(moraleAdjustedCard), myScore: mine, oppScore: theirs, win, oppTeam: item.opponent, badgeEffects: analyzeLineupBadges(), gameNum: item.game });
-      const opponentGameData = generateOpponentGameData(item, mine, theirs, []);
+      const gameScript = ensureGameScript(item, teamOvr, starters);
+      const scriptedResult = seasonSimulation()?.simulateGame(gameScript, {
+        teamOvr,
+        opponentOvr: item.opponentOvr
+      });
+      let mine = scriptedResult?.home ?? randomInt(92, 132);
+      let theirs = scriptedResult?.away ?? randomInt(92, 132);
+      if (mine === theirs) mine += scriptRoll(gameScript, 'admin-tiebreak') < .5 ? 1 : -1;
+      const win = mine > theirs;
+      const playerSimulationScript = simulationScriptForSide(gameScript, 'user', starters);
+      const gameData = generateGameBoxScoreData({
+        starters: starters.map(moraleAdjustedCard), bench: bench.map(moraleAdjustedCard),
+        myScore: mine, oppScore: theirs, win, oppTeam: item.opponent,
+        badgeEffects: analyzeLineupBadges(), gameNum: item.game,
+        simulationScript: playerSimulationScript
+      });
+      const opponentRoster = getOpponentRoster(item);
+      const opponentGameData = generateOpponentGameData(item, mine, theirs, [], gameScript);
+      const userHistoric = applyHistoricGameData(gameData, gameScript, 'user', playerSimulationScript?.featuredPlayerName);
+      const opponentScript = simulationScriptForSide(gameScript, 'opponent', opponentRoster);
+      const opponentHistoric = applyHistoricGameData(opponentGameData, gameScript, 'opponent', opponentScript?.featuredPlayerName);
+      gameData.opponentBoxScore = opponentGameData.boxScore;
+      gameData.opponentBenchPts = opponentGameData.benchPts;
+      const recordResult = evaluateJourneyRecords(gameData, item);
+      gameData.badgeMoments = (gameData.badgeMoments || []).concat(recordMomentCards(recordResult, opponentHistoric));
+      gameData.records = recordResult.records;
+      gameData.personalBests = recordResult.personalBests;
+      gameData.historicLine = userHistoric || opponentHistoric || null;
+      gameData.gameScript = gameScript ? { ...gameScript } : null;
+      if (recordResult.records.length) {
+        const record = recordResult.records[0];
+        gameData.highlight = `⚡ NEW FRANCHISE RECORD：${record.player} · ${record.value} ${record.short}！`;
+      }
       Object.assign(item, {
         played: true, win, myScore: mine, oppScore: theirs, boxScore: gameData.boxScore,
         opponentBoxScore: opponentGameData.boxScore, opponentBenchPts: opponentGameData.benchPts,
-        moments: gameData.badgeMoments || []
+        moments: gameData.badgeMoments || [], gameScript: gameScript ? { ...gameScript } : null,
+        records: recordResult.records, personalBests: recordResult.personalBests
       });
       j.gameIndex += 1; j.wins += win ? 1 : 0; j.losses += win ? 0 : 1;
       j.streak = win ? j.streak + 1 : 0; j.bestStreak = Math.max(j.bestStreak, j.streak);
@@ -2551,10 +2762,6 @@
         card.legacy.pts = (card.legacy.pts || 0) + (stat.pts || 0);
         card.legacy.reb = (card.legacy.reb || 0) + (stat.reb || 0);
         card.legacy.ast = (card.legacy.ast || 0) + (stat.ast || 0);
-        if (stat.pts >= 60 || stat.ast >= 20 || stat.blk >= 10) {
-          card.legacy.records = (card.legacy.records || 0) + 1;
-          unlockBack(card, 'record', `Game ${item.game} 紀錄之夜`);
-        }
       });
       triggerSpecialGameEvent(item, gameData, true);
     }
@@ -2648,7 +2855,8 @@
       gameIndex: 0, wins: 0, losses: 0, streak: 0, bestStreak: 0,
       schedule: buildSchedule(), recent: [],
       history: Array.isArray(old.history) ? old.history : [],
-      awards: [], completed: false, seasonStartedAt: new Date().toISOString()
+      awards: [], completed: false, seasonStartedAt: new Date().toISOString(),
+      recordBook: seasonSimulation()?.ensureRecordBook(old.recordBook) || old.recordBook || null
     };
     state.season.hasPlayedPlayoffs = false;
     state.season.threePtContestPlayed = false;
