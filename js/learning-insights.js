@@ -18,11 +18,17 @@
     const correct = sessions.reduce((sum, item) => sum + (Number(item.score) || 0), 0);
     return total ? Math.round(correct / total * 100) : null;
   }
+  function sessionLabel(item) {
+    if (item.mode !== 'endless') return item.mode === 'all' ? '單字測驗' : '單字複習';
+    if (item.sourceMode === 'manual') return '無盡挑戰 · 自建單字';
+    if (item.sourceMode === 'all') return '無盡挑戰 · 全部單字';
+    return '無盡挑戰';
+  }
   function recordSession(payload) {
     const sessions = history();
     if (!payload?.id || sessions.some(item => item.id === payload.id)) return sessions.find(item => item.id === payload.id);
     const session = {
-      id: payload.id, mode: payload.mode || 'all', status: payload.status || 'completed',
+      id: payload.id, mode: payload.mode || 'all', sourceMode: payload.sourceMode || '', status: payload.status || 'completed',
       score: Math.max(0, Number(payload.score) || 0), totalQuestions: Math.max(0, Number(payload.totalQuestions) || 0),
       completedAt: payload.completedAt || new Date().toISOString(), taskId: payload.taskId || null,
       actualMinutes: Math.max(0, Number(payload.actualMinutes) || 0),
@@ -83,7 +89,7 @@
       else confused.get(key).count = Math.max(confused.get(key).count, Number(item.wrongCount) || 1);
     });
     document.getElementById('learningConfusedWords').innerHTML = [...confused.values()].sort((a, b) => b.count - a.count).slice(0, 8).map(item => `<div class="learning-history-row"><span><strong>${escape(item.word)} · ${escape(item.meaning)}</strong><small>曾選「${escape(item.chosen || '未作答')}」</small></span><small>${item.count} 次</small></div>`).join('') || '<p class="learning-note">目前沒有容易混淆的單字。</p>';
-    document.getElementById('learningQuizHistory').innerHTML = sessions.slice(-20).reverse().map(item => `<div class="learning-history-row"><span><strong>${item.mode === 'endless' ? '無盡挑戰' : item.mode === 'all' ? '單字測驗' : '單字複習'}${item.status === 'quit' ? ' · 中途退出' : ''}</strong><small>${escape(new Date(item.completedAt).toLocaleString('zh-TW'))}</small></span><strong>${item.score}/${item.totalQuestions}</strong></div>`).join('') || '<p class="learning-note">完成第一次測驗後，紀錄會顯示在這裡。</p>';
+    document.getElementById('learningQuizHistory').innerHTML = sessions.slice(-20).reverse().map(item => `<div class="learning-history-row"><span><strong>${sessionLabel(item)}${item.status === 'quit' ? ' · 中途退出' : ''}</strong><small>${escape(new Date(item.completedAt).toLocaleString('zh-TW'))}</small></span><strong>${item.score}/${item.totalQuestions}</strong></div>`).join('') || '<p class="learning-note">完成第一次測驗後，紀錄會顯示在這裡。</p>';
     document.getElementById('learningProgressBackdrop').classList.remove('hidden');
     document.body.style.overflow = 'hidden';
   }

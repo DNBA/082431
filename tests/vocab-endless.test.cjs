@@ -8,7 +8,11 @@ const index = read('index.html');
 const app = read('js/app.js');
 const css = read('css/vocab-endless.css');
 
-assert.match(index, /onclick="startEndlessVocabChallenge\(\)"/);
+assert.match(index, /onclick="openEndlessVocabSourcePicker\(\)"/);
+assert.match(index, /id="endlessSourcePicker"/);
+assert.match(index, /id="endlessManualSourceBtn"/);
+assert.match(index, /startEndlessVocabChallenge\('all'\)/);
+assert.match(index, /startEndlessVocabChallenge\('manual'\)/);
 assert.match(index, /id="endlessQuizHud"/);
 assert.match(index, /id="endlessResultOverlay"/);
 assert.match(index, /vocab-endless\.css/);
@@ -22,6 +26,10 @@ assert.match(app, /state\.scoutPoints = \(Number\(state\.scoutPoints\) \|\| 0\) 
 assert.match(app, /if \(quizScore % 10 === 0\)/);
 assert.match(app, /const milestoneTickets = quizScore \/ 10/);
 assert.match(app, /endlessBest/);
+assert.match(app, /function buildManualVocabQuizPool\(playerSource = null\)/);
+assert.match(app, /function getEndlessVocabPool\(sourceMode = 'all'\)/);
+assert.match(app, /function startEndlessVocabChallenge\(sourceMode = 'all'\)/);
+assert.match(app, /function restartEndlessVocabChallenge\(\)/);
 
 function expectedTickets(cleared) {
   let tickets = 0;
@@ -37,5 +45,6 @@ assert.equal(expectedTickets(50), 15);
 
 assert.equal((css.match(/{/g) || []).length, (css.match(/}/g) || []).length, 'Endless CSS braces must be balanced');
 assert.match(css, /\.endless-quiz-hud\.hidden \{ display: none; \}/);
+assert.match(css, /\.endless-source-picker\.hidden \{ display: none; \}/);
 
 console.log('Endless vocab challenge UI, deadline protection, and cumulative reward checks passed.');

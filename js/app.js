@@ -31409,7 +31409,8 @@ function checkSpellingAnswer() {
         pos,
         meaning,
         example,
-        box: 1
+        box: 1,
+        sourceType: 'manual'
       });
 
       // 2. 鼓勵手動學習：新增 1 個單字獎勵 1 點選秀碎片 (scoutPoints)
@@ -31512,7 +31513,8 @@ function checkSpellingAnswer() {
           pos: item.pos,
           meaning: item.meaning,
           example: item.example,
-          box: 1
+          box: 1,
+          sourceType: 'official'
         });
       });
 
@@ -31546,6 +31548,7 @@ function checkSpellingAnswer() {
     let quizQuestionShownAt = 0;
     let quizElapsedMs = 0;
     let endlessStartingBest = 0;
+    let endlessSourceMode = 'all';
 
     function beginQuizLearningSession(taskId = null) {
       quizPlannerTaskId = taskId;
@@ -31561,6 +31564,7 @@ function checkSpellingAnswer() {
       return window.VocabLearning?.recordSession({
         id: quizSessionId, mode: quizSessionMode, status, score: quizScore,
         totalQuestions: quizAnswers.length, answers: quizAnswers, taskId: quizPlannerTaskId,
+        sourceMode: quizSessionMode === 'endless' ? endlessSourceMode : '',
         actualMinutes: quizElapsedMs / 60000
       }) || null;
     }
@@ -31612,7 +31616,7 @@ function checkSpellingAnswer() {
 
     function refillEndlessQuizPool() {
       const previousWord = activeQuizList[currentQuizStep - 1]?.word || '';
-      activeQuizList = shuffleVocabItems(buildCombinedVocabQuizPool()).map(normalizeQuizItem);
+      activeQuizList = shuffleVocabItems(getEndlessVocabPool(endlessSourceMode)).map(normalizeQuizItem);
       if (activeQuizList.length > 1 && activeQuizList[0].word === previousWord) {
         [activeQuizList[0], activeQuizList[1]] = [activeQuizList[1], activeQuizList[0]];
       }
@@ -31647,6 +31651,45 @@ function checkSpellingAnswer() {
         deduplicated.set(key, item);
       });
       return [...deduplicated.values()];
+    }
+
+    function buildManualVocabQuizPool(playerSource = null) {
+      const playerWords = playerSource == null ? (state.toeic.vocabList || []) : playerSource;
+      const deduplicated = new Map();
+      playerWords.forEach(rawItem => {
+        const item = normalizeQuizItem(rawItem);
+        const key = item.word.toLocaleLowerCase('en-US');
+        if (!key || !item.meaning || deduplicated.has(key)) return;
+        deduplicated.set(key, item);
+      });
+      return [...deduplicated.values()];
+    }
+
+    function getEndlessVocabPool(sourceMode = 'all') {
+      return sourceMode === 'manual' ? buildManualVocabQuizPool() : buildCombinedVocabQuizPool();
+    }
+
+    function openEndlessVocabSourcePicker() {
+      const allCount = getEndlessVocabPool('all').length;
+      const manualCount = getEndlessVocabPool('manual').length;
+      const allCountEl = document.getElementById('endlessAllWordCount');
+      const manualCountEl = document.getElementById('endlessManualWordCount');
+      const manualButton = document.getElementById('endlessManualSourceBtn');
+      const manualNote = document.getElementById('endlessManualSourceNote');
+      if (allCountEl) allCountEl.innerText = `${allCount} 字`;
+      if (manualCountEl) manualCountEl.innerText = `${manualCount} 字`;
+      if (manualButton) {
+        manualButton.disabled = manualCount < 4;
+        manualButton.classList.toggle('is-disabled', manualCount < 4);
+      }
+      if (manualNote) manualNote.innerText = manualCount < 4 ? `自建單字需要至少 4 個，目前 ${manualCount} 個。` : '';
+      document.getElementById('endlessSourcePicker')?.classList.remove('hidden');
+      document.body.style.overflow = 'hidden';
+    }
+
+    function closeEndlessVocabSourcePicker() {
+      document.getElementById('endlessSourcePicker')?.classList.add('hidden');
+      document.body.style.overflow = '';
     }
 
     function ensureWrongAnswerStore() {
@@ -31749,12 +31792,16 @@ function checkSpellingAnswer() {
       renderQuizStep();
     }
 
-    function startEndlessVocabChallenge() {
-      const db = buildCombinedVocabQuizPool();
+    function startEndlessVocabChallenge(sourceMode = 'all') {
+      endlessSourceMode = sourceMode === 'manual' ? 'manual' : 'all';
+      const db = getEndlessVocabPool(endlessSourceMode);
       if (db.length < 4) {
-        showToast('⚠️ 無盡挑戰至少需要 4 個不同單字。', 'warning');
+        showToast(endlessSourceMode === 'manual'
+          ? `⚠️ 自建單字至少需要 4 個，目前只有 ${db.length} 個。`
+          : '⚠️ 無盡挑戰至少需要 4 個不同單字。', 'warning');
         return;
       }
+      closeEndlessVocabSourcePicker();
       clearEndlessQuizTimers();
       if (!quizSessionFinished && quizAnswers.length) recordQuizLearningResult('quit');
       quizSessionMode = 'endless';
@@ -31770,10 +31817,14 @@ function checkSpellingAnswer() {
       document.getElementById('vocabQuizModal').classList.remove('hidden');
       document.getElementById('endlessResultOverlay')?.classList.add('hidden');
       const modeLabel = document.getElementById('quizModeLabel');
-      if (modeLabel) modeLabel.innerText = '⚡ ENDLESS · 5 秒生存戰';
+      if (modeLabel) modeLabel.innerText = `⚡ ENDLESS · ${endlessSourceMode === 'manual' ? '自建單字' : '全部單字'} · 5 秒`;
       setEndlessUiVisible(true);
       updateEndlessRewardHud();
       renderQuizStep();
+    }
+
+    function restartEndlessVocabChallenge() {
+      startEndlessVocabChallenge(endlessSourceMode);
     }
 
     function speakQuizWord(e) {
@@ -31822,7 +31873,7 @@ function renderQuizStep() {
   }
 
   // 產生 3 個干擾中文選項
-  const allDb = buildCombinedVocabQuizPool();
+  const allDb = quizSessionMode === 'endless' ? getEndlessVocabPool(endlessSourceMode) : buildCombinedVocabQuizPool();
 
   const otherMeanings = allDb
     .map(x => x.meaning)
@@ -31991,7 +32042,7 @@ function finishEndlessChallenge(reason) {
   }
   if (typeof window.recordPlannerQuizLog === 'function') {
     window.recordPlannerQuizLog({
-      title: '無盡單字挑戰',
+      title: `無盡單字挑戰${endlessSourceMode === 'manual' ? ' · 自建單字' : ''}`,
       type: 'vocab',
       score: quizScore,
       totalQuestions: quizScore + 1,

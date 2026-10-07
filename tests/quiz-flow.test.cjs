@@ -9,7 +9,7 @@ const quizSource = app.slice(app.indexOf('    let activeQuizList = []'), app.ind
 function createHarness() {
   let now = Date.parse('2026-10-05T12:00:00+08:00');
   let nextId = 0;
-  const intervals = new Map(), timeouts = new Map(), elements = new Map(), logs = [];
+  const intervals = new Map(), timeouts = new Map(), elements = new Map(), logs = [], toasts = [];
   function element() {
     const classes = new Set();
     return {
@@ -34,7 +34,7 @@ function createHarness() {
     setInterval(fn) { const id = ++nextId; intervals.set(id, fn); return id; }, clearInterval: id => intervals.delete(id),
     setTimeout(fn) { const id = ++nextId; timeouts.set(id, fn); return id; }, clearTimeout: id => timeouts.delete(id),
     shuffleVocabItems: items => [...items], escapeHtmlText: String,
-    lucide: { createIcons() {} }, playSound() {}, saveGame() {}, renderAll() {}, showToast() {}, addNotification() {}, showRewardModal() {}, checkAndResetDailyQuests() {},
+    lucide: { createIcons() {} }, playSound() {}, saveGame() {}, renderAll() {}, showToast(message, type) { toasts.push({ message, type }); }, addNotification() {}, showRewardModal() {}, checkAndResetDailyQuests() {},
     recordPlannerQuizLog(payload) { logs.push(payload); }
   };
   context.window = context; vm.createContext(context);
@@ -46,7 +46,7 @@ function createHarness() {
     context.handleQuizAnswer(element(), encodeURIComponent(correct ? item.meaning : 'wrong'), encodeURIComponent(item.meaning));
   }
   function flush() { const pending = [...timeouts.values()]; timeouts.clear(); pending.forEach(fn => fn()); }
-  return { context, run, answer, flush, elements, intervals, timeouts, logs, tick: ms => { now += ms; } };
+  return { context, run, answer, flush, elements, intervals, timeouts, logs, toasts, tick: ms => { now += ms; } };
 }
 
 {
@@ -74,6 +74,32 @@ function createHarness() {
   assert.equal(qa.context.state.scoutPoints, 0, 'A correct click after the real deadline must lose');
   assert.equal(qa.context.state.toeic.quizHistory[0].status, 'timeout');
   assert.equal(qa.context.state.toeic.wrongAnswers[0].lastChosen, '逾時');
+}
+{
+  const qa = createHarness();
+  qa.context.state.toeic.vocabList = [
+    { word: 'manual-a', meaning: '自建 A' },
+    { word: 'manual-b', meaning: '自建 B' },
+    { word: 'manual-c', meaning: '自建 C' },
+    { word: 'manual-d', meaning: '自建 D' },
+    { word: 'MANUAL-A', meaning: '重複項目' }
+  ];
+  qa.context.startEndlessVocabChallenge('manual');
+  assert.equal(qa.run('endlessSourceMode'), 'manual');
+  assert.deepEqual(JSON.parse(JSON.stringify(qa.run('activeQuizList.map(item => item.word)'))), ['manual-a', 'manual-b', 'manual-c', 'manual-d']);
+  assert.match(qa.elements.get('quizModeLabel').innerText, /自建單字/);
+  qa.answer(false); qa.flush();
+  assert.equal(qa.context.state.toeic.quizHistory[0].sourceMode, 'manual');
+  qa.context.restartEndlessVocabChallenge();
+  assert.equal(qa.run('endlessSourceMode'), 'manual');
+  assert.equal(qa.run('activeQuizList.length'), 4);
+}
+{
+  const qa = createHarness();
+  qa.context.state.toeic.vocabList = [{ word: 'one', meaning: '一' }, { word: 'two', meaning: '二' }, { word: 'three', meaning: '三' }];
+  qa.context.startEndlessVocabChallenge('manual');
+  assert.equal(qa.run('activeQuizList.length'), 0, 'Custom mode must not silently fall back to official words');
+  assert.match(qa.toasts.at(-1).message, /至少需要 4 個/);
 }
 {
   const qa = createHarness(); qa.context.startVocabQuizModal();
@@ -106,4 +132,4 @@ function createHarness() {
   assert.equal(qa.context.state.toeic.quizHistory[0].status, 'quit');
   assert.equal(qa.context.VocabLearning.recentAccuracy(), null);
 }
-console.log('Quiz execution: 30-level rewards, double taps, deadline expiry, normal rewards, targeted reviews, history deduplication, and quit cleanup passed.');
+console.log('Quiz execution: rewards, deadlines, source selection, restart persistence, normal rewards, targeted reviews, history deduplication, and quit cleanup passed.');

@@ -34,7 +34,7 @@
     <link rel="stylesheet" href="./css/gacha-v2.css?v=20261003-mobile-flip-1">
     <link rel="stylesheet" href="./css/season-v2.css?v=20261005-badge-cinema-1">
     <link rel="stylesheet" href="./css/study-planner.css?v=20261003-planner-3">
-    <link rel="stylesheet" href="./css/vocab-endless.css?v=20261005-endless-1">
+    <link rel="stylesheet" href="./css/vocab-endless.css?v=20261007-source-1">
     <link rel="stylesheet" href="./css/learning-tools.css?v=20261005-learning-1">
     <link rel="stylesheet" href="./css/season-standings.css?v=20261005-standings-1">
     <link rel="stylesheet" href="./css/theme-controls.css?v=20261005-theme-2">
@@ -698,7 +698,7 @@
 <button onclick="startVocabQuizModal()" type="button" class="flex items-center gap-1.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 text-slate-950 text-xs font-black px-3.5 py-1.5 rounded-xl shadow transition cursor-pointer">
   <i data-lucide="award" class="w-3.5 h-3.5"></i> 單字測驗
 </button>
-<button onclick="startEndlessVocabChallenge()" type="button" class="endless-quiz-launch flex items-center gap-1.5 text-xs font-black px-3.5 py-1.5 rounded-xl shadow transition cursor-pointer">
+<button onclick="openEndlessVocabSourcePicker()" type="button" class="endless-quiz-launch flex items-center gap-1.5 text-xs font-black px-3.5 py-1.5 rounded-xl shadow transition cursor-pointer">
   <span aria-hidden="true">⚡</span> 無盡挑戰
 </button>
         </div>
@@ -1311,6 +1311,35 @@
   </div>
 
   <!-- 底部固定 Tab 導航欄 -->
+<!-- ⚡ 無盡挑戰題庫選擇 -->
+<div id="endlessSourcePicker" class="endless-source-picker hidden" role="dialog" aria-modal="true" aria-labelledby="endlessSourcePickerTitle">
+  <button type="button" class="endless-source-picker__backdrop" onclick="closeEndlessVocabSourcePicker()" aria-label="關閉題庫選擇"></button>
+  <section class="endless-source-picker__sheet">
+    <div class="endless-source-picker__handle" aria-hidden="true"></div>
+    <div class="endless-source-picker__header">
+      <div>
+        <span>ENDLESS CHALLENGE</span>
+        <h3 id="endlessSourcePickerTitle">選擇挑戰題庫</h3>
+      </div>
+      <button type="button" onclick="closeEndlessVocabSourcePicker()" aria-label="關閉">×</button>
+    </div>
+    <p class="endless-source-picker__hint">每題限時 5 秒；答錯或逾時就結束。</p>
+    <div class="endless-source-picker__options">
+      <button type="button" onclick="startEndlessVocabChallenge('all')" class="endless-source-option">
+        <span class="endless-source-option__icon" aria-hidden="true">◎</span>
+        <span><strong>全部單字</strong><small>官方題庫＋你的自建單字</small></span>
+        <b id="endlessAllWordCount">0 字</b>
+      </button>
+      <button id="endlessManualSourceBtn" type="button" onclick="startEndlessVocabChallenge('manual')" class="endless-source-option endless-source-option--manual">
+        <span class="endless-source-option__icon" aria-hidden="true">✎</span>
+        <span><strong>自建單字</strong><small>只考目前單字庫列表裡的字</small></span>
+        <b id="endlessManualWordCount">0 字</b>
+      </button>
+    </div>
+    <p id="endlessManualSourceNote" class="endless-source-picker__note"></p>
+  </section>
+</div>
+
 <!-- 📝 10題四選一單字測驗 Modal -->
 <div id="vocabQuizModal" onclick="if(event.target === this) closeVocabQuizModal()" class="fixed inset-0 bg-slate-950/95 backdrop-blur-md z-50 flex items-center justify-center p-3 sm:p-4 hidden ios-safe-modal overflow-y-auto">
   <div class="bg-slate-900 border border-amber-500/50 rounded-3xl p-5 sm:p-6 max-w-md w-full shadow-2xl relative text-center max-h-[calc(100dvh-2rem)] overflow-y-auto">
@@ -1358,7 +1387,7 @@
       <p id="endlessResultReason"></p>
       <div id="endlessResultRewards" class="endless-result__rewards"></div>
       <div id="endlessResultStudyActions" class="hidden"></div>
-      <button onclick="startEndlessVocabChallenge()" type="button" class="endless-result__restart">再挑戰一次</button>
+      <button onclick="restartEndlessVocabChallenge()" type="button" class="endless-result__restart">再挑戰一次</button>
       <button onclick="closeVocabQuizModal()" type="button" class="endless-result__quit">返回單字庫</button>
     </div>
 
@@ -1412,7 +1441,7 @@
   <script src="./js/ui-v2/position-utils.js"></script>
   <script src="./js/focus-timer.js?v=20261003-split-focus-2"></script>
   <script src="./js/core/save-backups.js?v=20261005-learning-1"></script>
-  <script src="./js/app.js?v=20261005-learning-1"></script>
+  <script src="./js/app.js?v=20261007-endless-source-1"></script>
 <!-- 🏀 季後賽逐場動態播報彈窗 -->
 <div id="playoffSeriesModal" onclick="if(event.target === this && !document.getElementById('posNextRoundBtn').disabled) closeSeriesAndShowBoxScore()" class="fixed inset-0 bg-slate-950/90 backdrop-blur-md z-50 hidden flex items-end sm:items-center justify-center p-3 sm:p-4 ios-safe-modal">
   <div class="bg-slate-900 border border-amber-500/50 rounded-3xl w-full max-w-lg p-6 shadow-2xl space-y-4 relative animate-modal-in">
@@ -2125,7 +2154,7 @@
 <script src="./js/ui-v2/home-v2.js?v=20261003-train-vocab-1"></script>
 <script src="./js/study-planner.js?v=20261005-learning-1"></script>
 <script src="./js/core/save-tools.js?v=20261005-learning-1"></script>
-<script src="./js/learning-insights.js?v=20261005-learning-1"></script>
+<script src="./js/learning-insights.js?v=20261007-endless-source-1"></script>
 <script src="./js/ui-v2/team-v2.js"></script>
 <script src="./js/ui-v2/normal-card-v2.js?v=20261003-mobile-hydrate-2"></script>
 <script src="./js/ui-v2/card-themes.js"></script>
