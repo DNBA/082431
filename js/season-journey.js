@@ -789,11 +789,15 @@
     }
     const button = document.getElementById('btnOpenThreePtFromAllStar');
     if (button) {
-      const canPlay = invites.length > 0 && !state.season?.threePtContestPlayed;
+      const remaining = typeof getRemainingThreePointShooters === 'function' ? getRemainingThreePointShooters() : invites;
+      const completedCount = Array.isArray(state.season?.threePtContestPlayedShooters) ? state.season.threePtContestPlayedShooters.length : 0;
+      const canPlay = state.isAdmin ? invites.length > 0 : remaining.length > 0;
       button.disabled = !canPlay;
-      button.innerText = state.season?.threePtContestPlayed
-        ? `🎯 三分大賽已完成 · ${state.season.threePtContestScore || 0}分`
-        : (canPlay ? `🎯 ${invites[0].name} · ACCEPTED` : '🎯 本季未獲三分大賽邀請');
+      button.innerText = state.isAdmin
+        ? '🎯 ADMIN · 無限挑戰'
+        : (remaining.length
+          ? `🎯 ${remaining[0].name} · ${completedCount + 1}/${invites.length}`
+          : (invites.length ? `🎯 三分大賽已完成 · ${completedCount}/${invites.length}` : '🎯 本季未獲三分大賽邀請'));
       button.classList.toggle('opacity-50', !canPlay);
       button.classList.toggle('cursor-not-allowed', !canPlay);
     }
@@ -807,12 +811,18 @@
     const card = findActiveCardByName(playerName);
     if (!card) return false;
     const weekend = state.seasonJourney?.allStarWeekend;
-    if (weekend?.threePointBackAwarded) return false;
+    if (weekend && !Array.isArray(weekend.threePointBackAwardedPlayers)) {
+      weekend.threePointBackAwardedPlayers = weekend.threePointBackAwarded && weekend.threePointChampionName
+        ? [weekend.threePointChampionName]
+        : [];
+    }
+    if (weekend?.threePointBackAwardedPlayers?.includes(playerName)) return false;
     ensureCardJourney(card);
     card.legacy.threePtTitles = (Number(card.legacy.threePtTitles) || 0) + 1;
     unlockBack(card, 'threepoint', `Season ${state.seasonJourney.seasonNo} · ${score} PTS · CONTEST WINNER`);
     if (weekend) {
       weekend.threePointBackAwarded = true;
+      weekend.threePointBackAwardedPlayers.push(playerName);
       weekend.threePointChampionName = playerName;
       const participant = weekend.threePointParticipants?.find(player => player.name === playerName);
       weekend.threePointChampionKey = participant?.key || null;
@@ -3098,6 +3108,9 @@
     state.season.threePtContestPlayed = false;
     state.season.threePtContestShooter = null;
     state.season.threePtContestScore = null;
+    state.season.threePtContestActiveShooter = null;
+    state.season.threePtContestPlayedShooters = [];
+    state.season.threePtContestResultsByShooter = {};
     window.SeasonStandings?.ensure(state.seasonJourney, typeof NBA_PLAYERS !== 'undefined' ? NBA_PLAYERS : []);
     syncLeagueState();
     saveGame();

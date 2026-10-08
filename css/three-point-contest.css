@@ -97,6 +97,44 @@
   font-size: 9px;
 }
 
+.tpc-live-board {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 5px;
+  min-height: 39px;
+}
+.tpc-live-placeholder {
+  grid-column: 1 / -1;
+  display: grid;
+  place-items: center;
+  min-height: 36px;
+  color: #64748b;
+  border: 1px dashed rgba(100, 116, 139, .3);
+  border-radius: 11px;
+  font-size: 9px;
+  font-weight: 800;
+}
+.tpc-live-entry {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  padding: 7px;
+  color: #cbd5e1;
+  background: rgba(15, 23, 42, .72);
+  border: 1px solid rgba(51, 65, 85, .75);
+  border-radius: 10px;
+}
+.tpc-live-entry span { color: #60a5fa; font: 900 8px/1 ui-monospace, monospace; }
+.tpc-live-entry b { overflow: hidden; font-size: 9px; white-space: nowrap; text-overflow: ellipsis; }
+.tpc-live-entry strong { color: #f8fafc; font-size: 15px; }
+.tpc-live-entry.is-player { color: #fef3c7; background: rgba(245, 158, 11, .12); border-color: rgba(245, 158, 11, .48); }
+.tpc-live-entry.is-player span,
+.tpc-live-entry.is-player strong { color: #fbbf24; }
+.tpc-cutline .is-qualified,
+#threePtCutLine.is-qualified { color: #34d399; }
+
 .tpc-setup {
   gap: 12px;
   padding: 10px 12px;
@@ -207,6 +245,7 @@
 .tpc-results p { margin: 6px auto 0; max-width: 360px; color: #94a3b8; font-size: 12px; line-height: 1.5; }
 .tpc-ranking { display: grid; gap: 6px; width: min(100%, 390px); margin: 16px auto 0; text-align: left; }
 .tpc-ranking > div { min-height: 40px; padding: 8px 10px !important; border-radius: 11px !important; font-size: 11px !important; }
+.tpc-ranking-cut { min-height: 0 !important; padding: 2px 4px !important; color: #60a5fa; background: transparent !important; border: 0 !important; border-top: 1px dashed rgba(96, 165, 250, .4) !important; border-radius: 0 !important; font: 900 8px/1.4 ui-monospace, monospace !important; letter-spacing: .14em; text-align: center; }
 .tpc-results-action {
   flex: 0 0 auto;
   padding: 12px 18px max(14px, env(safe-area-inset-bottom));
@@ -249,6 +288,8 @@
 @media (max-height: 720px) {
   .tpc-shell { gap: 7px; padding-top: 11px; }
   .tpc-participants { display: none; }
+  .tpc-live-board { min-height: 34px; }
+  .tpc-live-entry { padding: 5px; }
   .tpc-court { padding-block: 6px; }
   .tpc-rack { min-height: 40px; }
   .tpc-feedback { min-height: 17px; line-height: 17px; }

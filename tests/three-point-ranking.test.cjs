@@ -9,7 +9,10 @@ const journey = fs.readFileSync(path.join(root, 'js', 'season-journey.js'), 'utf
 assert.match(app, /function renderThreePointContestRanking\(results/);
 assert.match(app, /state\.season\.threePtContestRanking\s*=/);
 assert.match(app, /allStarWeekend\?\.contestResult \|\| state\.season\?\.threePtContestRanking/);
-assert.match(app, /renderThreePointContestRanking\(state\.season\.threePtContestRanking\)/);
+assert.match(app, /renderThreePointContestRanking\(compactRanking\)/);
+assert.match(app, /threePtContestPlayedShooters/);
+assert.match(app, /threePtContestResultsByShooter\[playerName\]/);
+assert.match(app, /getRemainingThreePointShooters\(\)/);
 assert.match(journey, /3PT CONTEST · FINAL RANKING/);
 assert.match(journey, /whitespace-nowrap[^>]*>\$\{index \+ 1\}\. \$\{safeText\(player\.name\)\}/);
 assert.doesNotMatch(journey, /weekend\.west\.starters\.map\([^\n]+\.join\(' · '\)/, 'All-Star starters should not be compressed into one line');

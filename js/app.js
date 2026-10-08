@@ -27370,6 +27370,9 @@ function start82GamesSimulation() {
   state.season.threePtContestPlayed = false;
   state.season.threePtContestShooter = null;
   state.season.threePtContestScore = null;
+  state.season.threePtContestActiveShooter = null;
+  state.season.threePtContestPlayedShooters = [];
+  state.season.threePtContestResultsByShooter = {};
   games = [];
   let simulatedWins = 0, maxS = 0, curS = 0;
 
@@ -28587,7 +28590,10 @@ dailyQuests: {
         lastBoxScores: [],
         threePtContestPlayed: false,
         threePtContestShooter: null,
-        threePtContestScore: null
+        threePtContestScore: null,
+        threePtContestActiveShooter: null,
+        threePtContestPlayedShooters: [],
+        threePtContestResultsByShooter: {}
       },
       toeic: {
         totalListening: 0,
@@ -28676,6 +28682,13 @@ function saveGame() {
       if (typeof s.season.threePtContestPlayed === 'undefined') s.season.threePtContestPlayed = false;
       if (typeof s.season.threePtContestShooter === 'undefined') s.season.threePtContestShooter = null;
       if (typeof s.season.threePtContestScore === 'undefined') s.season.threePtContestScore = null;
+      if (!Array.isArray(s.season.threePtContestPlayedShooters)) {
+        s.season.threePtContestPlayedShooters = s.season.threePtContestPlayed && s.season.threePtContestShooter
+          ? [s.season.threePtContestShooter]
+          : [];
+      }
+      if (!s.season.threePtContestResultsByShooter || typeof s.season.threePtContestResultsByShooter !== 'object') s.season.threePtContestResultsByShooter = {};
+      if (typeof s.season.threePtContestActiveShooter === 'undefined') s.season.threePtContestActiveShooter = null;
       if (typeof s.season.hasPlayedPlayoffs === 'undefined') s.season.hasPlayedPlayoffs = false;
       if (!Array.isArray(s.championshipRings)) s.championshipRings = [];
       if (!s.playoffStats || typeof s.playoffStats !== 'object') s.playoffStats = { wins: 0, losses: 0, finalsPlayerStats: {} };
@@ -32555,6 +32568,9 @@ const threePtState = {
   moneyRackIndex: 4,
   roundOneResults: [],
   finalists: [],
+  cpuRoundResults: [],
+  advanceCutoff: 0,
+  finalTarget: 0,
   score: 0,
   meterProgress: 0, // 0 ~ 100
   meterDirection: 1,
@@ -32616,7 +32632,45 @@ function startThreePointClock() {
 
 function handleThreePointResultAction() {
   if (threePtState.pendingResultAction === 'final') startThreePointFinal();
+  else if (threePtState.pendingResultAction === 'restart') openThreePointContest();
   else closeThreePointContest();
+}
+
+function prepareThreePointOpponentResults() {
+  const pool = threePtState.round === 'final' ? threePtState.finalists : getThreePointParticipants();
+  threePtState.cpuRoundResults = pool
+    .filter(player => player.name !== threePtState.shooter?.name)
+    .map((player, index) => simulateCpuThreePointRound(player, threePtState.round, index));
+  const scores = threePtState.cpuRoundResults.map(player => player.score).sort((a, b) => b - a);
+  threePtState.advanceCutoff = threePtState.round === 'round1' ? Number(scores[2] || 0) : 0;
+  threePtState.finalTarget = threePtState.round === 'final' ? Number(scores[0] || 0) : 0;
+  renderThreePointLiveStatus();
+}
+
+function renderThreePointLiveStatus() {
+  const board = document.getElementById('threePtLiveBoard');
+  const cut = document.getElementById('threePtCutLine');
+  const playerName = threePtState.shooter?.name || 'YOU';
+  const playerLive = { key: 'live-player', name: playerName, score: threePtState.score, isPlayer: true };
+  const ranking = rankThreePointRound([...threePtState.cpuRoundResults, playerLive]);
+  const playerRank = ranking.findIndex(player => player.isPlayer) + 1;
+  const safeTarget = threePtState.round === 'final' ? threePtState.finalTarget + 1 : threePtState.advanceCutoff + 1;
+  const pointsNeeded = Math.max(0, safeTarget - threePtState.score);
+  const qualified = threePtState.round === 'final' ? threePtState.score > threePtState.finalTarget : playerRank > 0 && playerRank <= 3;
+
+  if (cut) {
+    cut.innerText = threePtState.round === 'final'
+      ? `冠軍目標 ${safeTarget} 分 · ${qualified ? '目前領先' : `還差 ${pointsNeeded} 分`}`
+      : `晉級線 ${threePtState.advanceCutoff} 分 · ${qualified ? `目前第 ${playerRank} 名` : `還差 ${pointsNeeded} 分`}`;
+    cut.classList.toggle('is-qualified', qualified);
+  }
+  if (!board) return;
+  const leaders = ranking.slice(0, 3);
+  const playerOutside = playerRank > 3 ? [playerLive] : [];
+  board.innerHTML = leaders.concat(playerOutside).map((player, index) => {
+    const actualRank = player.isPlayer ? playerRank : ranking.findIndex(item => (item.key || item.name) === (player.key || player.name)) + 1;
+    return `<div class="tpc-live-entry${player.isPlayer ? ' is-player' : ''}"><span>${player.isPlayer ? 'YOU' : `#${actualRank}`}</span><b>${player.name}</b><strong>${player.score}</strong></div>`;
+  }).join('');
 }
 
 function getThreePointParticipants() {
@@ -32702,6 +32756,30 @@ function getAllMyPlayers() {
     }
   });
   return unique;
+}
+
+function getPlayedThreePointShooterNames() {
+  if (!state.season) state.season = {};
+  if (!Array.isArray(state.season.threePtContestPlayedShooters)) {
+    state.season.threePtContestPlayedShooters = state.season.threePtContestPlayed && state.season.threePtContestShooter
+      ? [state.season.threePtContestShooter]
+      : [];
+  }
+  return new Set(state.season.threePtContestPlayedShooters.map(String));
+}
+
+function getOwnedThreePointInvitees() {
+  const weekend = state.seasonJourney?.allStarWeekend;
+  const invitedNames = weekend?.announced && window.SeasonAllStar
+    ? new Set(window.SeasonAllStar.playerThreePointInvites(weekend).map(player => player.name))
+    : null;
+  return getAllMyPlayers().filter(player => !invitedNames || invitedNames.has(player.name));
+}
+
+function getRemainingThreePointShooters() {
+  if (state.isAdmin) return getOwnedThreePointInvitees();
+  const played = getPlayedThreePointShooterNames();
+  return getOwnedThreePointInvitees().filter(player => !played.has(player.name));
 }
 
 // 🔍 100% 純粹參考球員真實「三分命中率 (3P%)」
@@ -32854,15 +32932,18 @@ function renderThreePointContestRanking(results, options = {}) {
       <div class="flex justify-between items-center p-2 rounded-lg ${player.isPlayer ? 'bg-amber-500/20 border border-amber-500/60 text-amber-300' : 'bg-slate-800/80 text-slate-300'}">
         <span class="min-w-0 truncate"><b class="mr-2">${index === 0 ? '👑 1' : index + 1}</b>${player.name}${player.isPlayer ? '（你）' : ''}</span>
         <span class="font-black text-amber-400 shrink-0 ml-2">${player.finalScore != null ? `決賽 ${player.finalScore}` : player.score} 分${player.finalScore != null && player.round1Score != null ? `<small class="block text-[9px] font-medium text-slate-500">首輪 ${player.round1Score}</small>` : ''}</span>
-      </div>
+      </div>${index === 2 && ranking.length > 3 ? '<div class="tpc-ranking-cut">TOP 3 · ADVANCE LINE</div>' : ''}
     `).join('');
   }
   const leaderboard = document.getElementById('contestLeaderboard');
   if (leaderboard) leaderboard.style.display = 'flex';
   const action = document.getElementById('contestResultAction');
   if (action && !options.keepAction) {
-    threePtState.pendingResultAction = 'close';
-    action.innerText = '完成 · 返回賽季';
+    const remainingShooters = state.isAdmin ? [] : getRemainingThreePointShooters();
+    threePtState.pendingResultAction = state.isAdmin || remainingShooters.length ? 'restart' : 'close';
+    action.innerText = state.isAdmin
+      ? 'ADMIN · 再挑戰一場 ↻'
+      : (remainingShooters.length ? `下一位：${remainingShooters[0].name} →` : '完成 · 返回賽季');
   }
   return ranking;
 }
@@ -32872,15 +32953,15 @@ function openThreePointContest() {
   const modal = document.getElementById('threePtModal');
   if (!modal) return;
 
-  const isSeasonPlayed = !!(state.season && state.season.threePtContestPlayed);
-  const lockedShooterName = state.season?.threePtContestShooter || null;
-
-  const allStarWeekend = state.seasonJourney?.allStarWeekend;
-  const invitedNames = allStarWeekend?.announced && window.SeasonAllStar
-    ? new Set(window.SeasonAllStar.playerThreePointInvites(allStarWeekend).map(player => player.name))
-    : null;
-  const myPlayers = getAllMyPlayers().filter(player => !invitedNames || invitedNames.has(player.name));
-  if (invitedNames && myPlayers.length === 0 && !isSeasonPlayed) {
+  const isAdminChallenge = !!state.isAdmin;
+  const allInvitedPlayers = getOwnedThreePointInvitees();
+  const remainingPlayers = isAdminChallenge ? allInvitedPlayers : getRemainingThreePointShooters();
+  const lockedShooterName = isAdminChallenge ? null : (state.season?.threePtContestActiveShooter || null);
+  const myPlayers = lockedShooterName
+    ? remainingPlayers.filter(player => player.name === lockedShooterName)
+    : remainingPlayers;
+  const isSeasonPlayed = !isAdminChallenge && allInvitedPlayers.length > 0 && remainingPlayers.length === 0;
+  if (allInvitedPlayers.length === 0 && !isSeasonPlayed) {
     showToast('本季沒有你的球員接受三分大賽邀請。', 'warning');
     return;
   }
@@ -32889,6 +32970,9 @@ function openThreePointContest() {
   threePtState.round = 'round1';
   threePtState.roundOneResults = [];
   threePtState.finalists = [];
+  threePtState.cpuRoundResults = [];
+  threePtState.advanceCutoff = 0;
+  threePtState.finalTarget = 0;
   threePtState.roundFinishing = false;
   threePtState.pendingResultAction = 'close';
   document.querySelector('.tpc-actions')?.classList.remove('is-playing');
@@ -32897,7 +32981,7 @@ function openThreePointContest() {
   if (selectElem) selectElem.innerHTML = '';
 
   if (myPlayers.length > 0) {
-    // 公布名單後只顯示已接受邀請的隊內射手。
+    // 每位受邀射手各有一次資格；已出賽者不再出現在選單。
     myPlayers.sort((a, b) => getShooter3PtPercent(b) - getShooter3PtPercent(a));
     myPlayers.forEach(p => {
       const pct = getShooter3PtPercent(p);
@@ -32928,7 +33012,7 @@ function openThreePointContest() {
 
   // 🔒 選好球員（或已鎖定、已挑戰）後就不能換了
   if (selectElem) {
-    if (lockedShooterName || isSeasonPlayed) {
+    if (!isAdminChallenge && (lockedShooterName || isSeasonPlayed)) {
       selectElem.disabled = true;
       selectElem.classList.add('opacity-60', 'cursor-not-allowed');
       if (lockedBadge) {
@@ -32938,7 +33022,12 @@ function openThreePointContest() {
     } else {
       selectElem.disabled = false;
       selectElem.classList.remove('opacity-60', 'cursor-not-allowed');
-      if (lockedBadge) lockedBadge.classList.add('hidden');
+      if (lockedBadge) {
+        if (isAdminChallenge) {
+          lockedBadge.classList.remove('hidden');
+          lockedBadge.innerText = 'ADMIN · ∞';
+        } else lockedBadge.classList.add('hidden');
+      }
     }
   }
 
@@ -32958,13 +33047,13 @@ function openThreePointContest() {
   if (btnStart) {
     btnStart.style.display = 'block';
     if (isSeasonPlayed) {
-      // 只能一個賽季只能玩一次
       btnStart.disabled = true;
-      btnStart.innerText = `🔒 本賽季已完成挑戰 (${state.season.threePtContestScore ?? 0}分)`;
+      btnStart.innerText = `🔒 受邀球員皆已完成 (${getPlayedThreePointShooterNames().size}/${allInvitedPlayers.length})`;
       btnStart.className = "flex-1 bg-slate-800 text-slate-500 border border-slate-700 font-bold py-3 rounded-xl cursor-not-allowed text-xs sm:text-sm";
     } else {
       btnStart.disabled = false;
-      btnStart.innerText = '開始第一輪 (ROUND 1)';
+      const completedCount = getPlayedThreePointShooterNames().size;
+      btnStart.innerText = isAdminChallenge ? 'ADMIN · 開始測試' : `開始第一輪 · ${completedCount + 1}/${allInvitedPlayers.length}`;
       btnStart.className = 'flex-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black py-3 rounded-xl shadow-lg transition-transform active:scale-95 text-base';
     }
   }
@@ -32973,13 +33062,18 @@ function openThreePointContest() {
   if (cursor) cursor.style.left = '0%';
   const timer = document.getElementById('threePtTimer');
   if (timer) timer.innerText = '50';
+  const liveBoard = document.getElementById('threePtLiveBoard');
+  if (liveBoard) liveBoard.innerHTML = '<span class="tpc-live-placeholder">開始後顯示對手成績與晉級線</span>';
 
   renderRacksInitial();
 
   const fb = document.getElementById('shotFeedback');
   if (fb) {
-    if (isSeasonPlayed) {
-      fb.innerText = `⚠️ 本賽季三分大賽已出戰（得分: ${state.season.threePtContestScore ?? 0} 分）！每賽季限玩一次`;
+    if (isAdminChallenge) {
+      fb.innerText = 'ADMIN 測試模式：可無限挑戰，不重複發放獎勵';
+      fb.className = 'tpc-feedback is-deep';
+    } else if (isSeasonPlayed) {
+      fb.innerText = `本季 ${allInvitedPlayers.length} 位受邀球員都已完成挑戰`;
       fb.className = 'tpc-feedback is-money';
     } else if (lockedShooterName) {
       fb.innerText = `🔒 已選定 ${lockedShooterName} 出戰，準備就緒！`;
@@ -32993,14 +33087,10 @@ function openThreePointContest() {
 
 // 下拉選單切換射手 (選定開打後不可更換)
 function onShooterSelectChange(selectedName) {
-  if (state.season?.threePtContestPlayed || state.season?.threePtContestShooter) {
+  if (!state.isAdmin && state.season?.threePtContestActiveShooter) {
     return; // 已鎖定球員，不可更換
   }
-  const weekend = state.seasonJourney?.allStarWeekend;
-  const invitedNames = weekend?.announced && window.SeasonAllStar
-    ? new Set(window.SeasonAllStar.playerThreePointInvites(weekend).map(player => player.name))
-    : null;
-  const myPlayers = getAllMyPlayers().filter(player => !invitedNames || invitedNames.has(player.name));
+  const myPlayers = state.isAdmin ? getOwnedThreePointInvitees() : getRemainingThreePointShooters();
   const found = myPlayers.find(p => p.name === selectedName);
   if (found) {
     threePtState.shooter = found;
@@ -33061,8 +33151,8 @@ function renderRacksInitial() {
 }
 // 3. 點擊「開始挑戰」按鈕 (選定球員後立即鎖定不可更換，每賽季限玩一次)
 function startThreePointRound() {
-  if (state.season && state.season.threePtContestPlayed) {
-    showToast("⚠️ 本賽季三分球大賽已經參加過囉！每賽季限參加一次，新賽季將再次開放！", "warning");
+  if (!state.isAdmin && getPlayedThreePointShooterNames().has(threePtState.shooter?.name)) {
+    showToast('這位球員本季已經出賽，請選擇另一位尚未出賽的受邀球員。', 'warning');
     return;
   }
 
@@ -33078,7 +33168,8 @@ function startThreePointFinal() {
 function startThreePointManualRound(round) {
   // 選好球員開打後立即鎖定，本賽季不能再更換球員。
   if (!state.season) state.season = {};
-  state.season.threePtContestShooter = threePtState.shooter.name;
+  if (state.isAdmin) state.season.adminThreePtContestShooter = threePtState.shooter.name;
+  else state.season.threePtContestActiveShooter = threePtState.shooter.name;
   saveGame();
 
   const selectElem = document.getElementById('threePtShooterSelect');
@@ -33089,7 +33180,7 @@ function startThreePointManualRound(round) {
   const lockedBadge = document.getElementById('threePtShooterLockedBadge');
   if (lockedBadge) {
     lockedBadge.classList.remove('hidden');
-    lockedBadge.innerText = '🔒 已鎖定';
+    lockedBadge.innerText = state.isAdmin ? 'ADMIN · ∞' : '🔒 已鎖定';
   }
 
   const lb = document.getElementById('contestLeaderboard');
@@ -33112,8 +33203,10 @@ function startThreePointManualRound(round) {
   threePtState.meterProgress = 0;
   document.querySelector('.tpc-actions')?.classList.add('is-playing');
   renderRacksInitial();
-  renderThreePointParticipantStrip(threePtState.round === 'final' ? null : []);
   updateThreePointRoundUi();
+  prepareThreePointOpponentResults();
+  const livePlayer = getThreePointParticipants().find(player => player.name === threePtState.shooter?.name) || { key: 'live-player', name: threePtState.shooter?.name };
+  renderThreePointParticipantStrip([...threePtState.cpuRoundResults, { ...livePlayer, score: 0 }]);
   startThreePointClock();
   startMeterLoop();
 }
@@ -33177,6 +33270,9 @@ function triggerShotRelease() {
 
   const scoreEl = document.getElementById('threePtScore');
   if (scoreEl) scoreEl.innerText = threePtState.score;
+  renderThreePointLiveStatus();
+  const livePlayer = getThreePointParticipants().find(player => player.name === threePtState.shooter?.name) || { key: 'live-player', name: threePtState.shooter?.name };
+  renderThreePointParticipantStrip([...threePtState.cpuRoundResults, { ...livePlayer, score: threePtState.score }]);
 
   const fb = document.getElementById('shotFeedback');
   if (fb) {
@@ -33267,10 +33363,7 @@ function finishThreePointRound() {
 
   const playerResult = makePlayerThreePointResult(threePtState.round);
   if (threePtState.round === 'round1') {
-    const participants = getThreePointParticipants();
-    const results = participants.map((player, index) => player.name === playerResult.name
-      ? playerResult
-      : simulateCpuThreePointRound(player, 'round1', index));
+    const results = [...threePtState.cpuRoundResults, playerResult];
     threePtState.roundOneResults = rankThreePointRound(results);
     // 決賽依第一輪名次反向出場：第三名先投，第一名最後投。
     threePtState.finalists = threePtState.roundOneResults.slice(0, 3).reverse();
@@ -33288,9 +33381,7 @@ function finishThreePointRound() {
     return;
   }
 
-  const finalResults = threePtState.finalists.map((player, index) => player.name === playerResult.name
-    ? playerResult
-    : simulateCpuThreePointRound(player, 'final', index));
+  const finalResults = [...threePtState.cpuRoundResults, playerResult];
   finalizeThreePointContest(rankThreePointRound(finalResults));
 }
 
@@ -33306,7 +33397,7 @@ function showThreePointFinalists(playerRank) {
   if (board) board.innerHTML = threePtState.roundOneResults.map((player, index) => `
     <div class="flex items-center justify-between rounded-lg p-2 ${player.isPlayer ? 'border border-amber-500/60 bg-amber-500/20 text-amber-300' : 'bg-slate-800/80 text-slate-300'}">
       <span><b class="mr-2">${index + 1}</b>${player.name}${player.isPlayer ? '（你）' : ''}${index < 3 ? ' ✓' : ''}</span><strong>${player.score} 分</strong>
-    </div>`).join('');
+    </div>${index === 2 ? '<div class="tpc-ranking-cut">TOP 3 · ADVANCE LINE</div>' : ''}`).join('');
   if (action) {
     threePtState.pendingResultAction = 'final';
     action.innerText = '進入決賽 · FINAL ROUND →';
@@ -33344,37 +33435,56 @@ function finalizeThreePointContest(finalResults) {
   const isChamp = !!champion?.isPlayer;
 
   if (!state.season) state.season = {};
-  state.season.threePtContestPlayed = true;
-  state.season.threePtContestScore = playerScore;
-  state.season.threePtContestShooter = playerName;
-  state.season.threePtContestRanking = ranking.map(player => ({
+  const compactRanking = ranking.map(player => ({
     key: player.key || '', name: player.name, score: player.score, rank: player.rank,
     round1Score: player.round1Score, finalScore: player.finalScore,
     tieBreakScore: player.tieBreakScore || 0, isPlayer: !!player.isPlayer
   }));
+  if (state.isAdmin) {
+    state.season.adminThreePtContestScore = playerScore;
+    state.season.adminThreePtContestShooter = playerName;
+    state.season.adminThreePtContestRanking = compactRanking;
+  } else {
+    if (!Array.isArray(state.season.threePtContestPlayedShooters)) state.season.threePtContestPlayedShooters = [];
+    if (!state.season.threePtContestPlayedShooters.includes(playerName)) state.season.threePtContestPlayedShooters.push(playerName);
+    if (!state.season.threePtContestResultsByShooter || typeof state.season.threePtContestResultsByShooter !== 'object') state.season.threePtContestResultsByShooter = {};
+    state.season.threePtContestResultsByShooter[playerName] = { score: playerScore, ranking: compactRanking, completedAt: new Date().toISOString() };
+    state.season.threePtContestActiveShooter = null;
+    state.season.threePtContestPlayed = getRemainingThreePointShooters().length === 0;
+    state.season.threePtContestScore = playerScore;
+    state.season.threePtContestShooter = playerName;
+    state.season.threePtContestRanking = compactRanking;
+  }
 
   const weekend = state.seasonJourney?.allStarWeekend;
-  if (weekend) {
-    weekend.contestResult = state.season.threePtContestRanking;
+  if (weekend && !state.isAdmin) {
+    weekend.contestResult = compactRanking;
+    if (!weekend.contestResultsByShooter || typeof weekend.contestResultsByShooter !== 'object') weekend.contestResultsByShooter = {};
+    weekend.contestResultsByShooter[playerName] = { score: playerScore, ranking: compactRanking };
     weekend.contestProgress = { stage: 'completed', shooterName: playerName, roundOneResults: threePtState.roundOneResults, finalResults };
     weekend.threePointChampionKey = champion?.key || null;
     weekend.threePointChampionName = champion?.name || '';
   }
-  if (isChamp && typeof window.awardThreePointChampion === 'function') window.awardThreePointChampion(playerName, playerScore, ranking);
+  if (!state.isAdmin && isChamp && typeof window.awardThreePointChampion === 'function') window.awardThreePointChampion(playerName, playerScore, ranking);
   saveGame();
 
   const btnStart = document.getElementById('btnStartContest');
   if (btnStart) {
     btnStart.style.display = 'block';
-    btnStart.disabled = true;
-    btnStart.innerText = `🔒 本賽季已完成挑戰 (${playerScore}分)`;
-    btnStart.className = 'flex-1 bg-slate-800 text-slate-500 border border-slate-700 font-bold py-3 rounded-xl cursor-not-allowed text-xs sm:text-sm';
+    const hasRemaining = state.isAdmin || getRemainingThreePointShooters().length > 0;
+    btnStart.disabled = !hasRemaining;
+    btnStart.innerText = state.isAdmin ? 'ADMIN · 再挑戰' : (hasRemaining ? '下一位受邀球員' : `🔒 本季全部完成 (${playerScore}分)`);
+    btnStart.className = hasRemaining ? 'tpc-start' : 'flex-1 bg-slate-800 text-slate-500 border border-slate-700 font-bold py-3 rounded-xl cursor-not-allowed text-xs sm:text-sm';
   }
   const lockedBadge = document.getElementById('threePtShooterLockedBadge');
-  if (lockedBadge) { lockedBadge.classList.remove('hidden'); lockedBadge.innerText = '🔒 本季已出戰'; }
+  if (lockedBadge) {
+    lockedBadge.classList.remove('hidden');
+    lockedBadge.innerText = state.isAdmin ? 'ADMIN · ∞' : `完成 ${getPlayedThreePointShooterNames().size}/${getOwnedThreePointInvitees().length}`;
+  }
   const asgBtn = document.getElementById('btnOpenThreePtFromAllStar');
-  if (asgBtn) {
-    asgBtn.innerText = `🎯 三分大賽 (已出戰: ${playerScore}分)`;
+  if (asgBtn && !state.isAdmin) {
+    const remaining = getRemainingThreePointShooters();
+    asgBtn.innerText = remaining.length ? `🎯 下一位：${remaining[0].name}` : `🎯 三分大賽已完成 · ${getPlayedThreePointShooterNames().size}/${getOwnedThreePointInvitees().length}`;
     asgBtn.className = 'px-3 py-1.5 bg-slate-800 text-amber-400/80 border border-slate-700 font-bold rounded-lg text-xs shadow-md cursor-pointer';
   }
   const feedback = document.getElementById('shotFeedback');
@@ -33382,7 +33492,7 @@ function finalizeThreePointContest(finalResults) {
     feedback.innerText = playerResult?.finalScore != null ? `決賽 ${playerScore} 分 · 最終第 ${playerResult.rank} 名` : `第一輪 ${playerScore} 分 · 未晉級決賽`;
     feedback.className = 'tpc-feedback is-money';
   }
-  renderThreePointContestRanking(state.season.threePtContestRanking);
+  renderThreePointContestRanking(compactRanking);
 }
 
 // Kept for compatibility with old inline calls.

@@ -38,7 +38,7 @@
     <link rel="stylesheet" href="./css/learning-tools.css?v=20261005-learning-1">
     <link rel="stylesheet" href="./css/season-standings.css?v=20261005-standings-1">
     <link rel="stylesheet" href="./css/season-league.css?v=20261007-league-1">
-    <link rel="stylesheet" href="./css/three-point-contest.css?v=20261008-mobile-ux-1">
+    <link rel="stylesheet" href="./css/three-point-contest.css?v=20261008-live-status-3">
     <link rel="stylesheet" href="./css/theme-controls.css?v=20261005-theme-2">
     <link id="tqThemeAuto" rel="stylesheet" href="./css/system-theme.css?v=20261005-theme-2">
     <link id="tqThemeLight" rel="stylesheet" href="./css/system-theme-light.css?v=20261005-theme-2" media="not all" disabled>
@@ -1463,7 +1463,7 @@
   <script src="./js/focus-timer.js?v=20261003-split-focus-2"></script>
   <script src="./js/core/save-backups.js?v=20261005-learning-1"></script>
   <script src="./js/box-score-integrity.js?v=20261007-integrity-1"></script>
-  <script src="./js/app.js?v=20261008-three-point-ux-2"></script>
+  <script src="./js/app.js?v=20261008-three-point-live-3"></script>
 <!-- 🏀 季後賽逐場動態播報彈窗 -->
 <div id="playoffSeriesModal" onclick="if(event.target === this && !document.getElementById('posNextRoundBtn').disabled) closeSeriesAndShowBoxScore()" class="fixed inset-0 bg-slate-950/90 backdrop-blur-md z-50 hidden flex items-end sm:items-center justify-center p-3 sm:p-4 ios-safe-modal">
   <div class="bg-slate-900 border border-amber-500/50 rounded-3xl w-full max-w-lg p-6 shadow-2xl space-y-4 relative animate-modal-in">
@@ -1708,6 +1708,9 @@
     <div class="tpc-cutline"><span id="threePtCutLine">TOP 3 ADVANCE</span><span><b id="threePtBallsLeft">27</b> SHOTS LEFT</span></div>
 
     <div id="threePtParticipantStrip" class="tpc-participants" aria-label="三分球大賽參賽名單"></div>
+    <div id="threePtLiveBoard" class="tpc-live-board" aria-live="polite">
+      <span class="tpc-live-placeholder">開始後顯示對手成績與晉級線</span>
+    </div>
 
     <div class="tpc-setup">
       <div><span>CHOOSE MONEY RACK</span><small>整架花球，每球 2 分</small></div>
@@ -2101,7 +2104,7 @@
 <script src="./js/season-all-star.js?v=20261008-three-point-refresh"></script>
 <script src="./js/season-simulation.js?v=20261007-variance-1"></script>
 <script src="./js/ui-v2/achievement-backs.js?v=20261006-backs-1"></script>
-<script src="./js/season-journey.js?v=20261008-allstar-v3-0-1"></script>
+<script src="./js/season-journey.js?v=20261008-three-point-live-3"></script>
 <script src="./js/ui-v2/ui-v2-adapter.js?v=20261005-standings-1"></script>
 <script src="./js/ui-v2/home-v2.js?v=20261003-train-vocab-1"></script>
 <script src="./js/study-planner.js?v=20261005-learning-1"></script>

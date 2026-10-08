@@ -51,6 +51,13 @@ assert.match(app, /roundOneResults\.slice\(0, 3\)/);
 assert.match(app, /roundEndsAt = Date\.now\(\) \+ 50000/);
 assert.match(app, /pendingResultAction = 'final'/);
 assert.match(html, /onclick="handleThreePointResultAction\(\)"/);
+assert.match(html, /id="threePtLiveBoard"/);
 assert.doesNotMatch(app, /action\.onclick = startThreePointFinal/, 'final button uses a stable dispatcher instead of replacing an inline handler');
+assert.match(app, /function prepareThreePointOpponentResults\(/);
+assert.match(app, /晉級線 \$\{threePtState\.advanceCutoff\}/);
+assert.match(app, /threePtContestPlayedShooters/);
+assert.match(app, /threePtContestResultsByShooter/);
+assert.match(app, /ADMIN · 再挑戰一場/);
+assert.match(app, /!state\.isAdmin && isChamp/, 'admin replays do not repeatedly grant champion rewards');
 
 console.log('Authentic two-round three-point contest, legacy 3PT fallback, and hidden UI version checks passed.');
