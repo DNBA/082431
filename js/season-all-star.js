@@ -5,7 +5,7 @@
 })(typeof window !== 'undefined' ? window : globalThis, function () {
   'use strict';
 
-  const VERSION = 1;
+  const VERSION = 2;
   const SELECTION_GAME = 47;
   const WEEKEND_GAME = 50;
   const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
@@ -42,6 +42,17 @@
     return Number(record?.base?.[key] || 0);
   }
 
+  // Older saves can contain played games without the newer 3PM / 3PA totals.
+  // Treat that as missing tracking data, not as a real 0.0% shooting season.
+  function shootingAverage(record, key, monthKey = null) {
+    const source = monthKey ? record?.months?.[monthKey] : record;
+    const totals = monthKey ? source : record?.totals;
+    const games = Number(source?.games ?? record?.games) || 0;
+    const trackedAttempts = Number(totals?.threeA || 0);
+    if (games > 0 && trackedAttempts > 0) return Number(totals?.[key] || 0) / games;
+    return Number(record?.base?.[key] || 0);
+  }
+
   function latestMonthKey(record) {
     const months = Object.entries(record?.months || {}).filter(([, value]) => Number(value?.games) > 0);
     return months.sort(([a], [b]) => b.localeCompare(a))[0]?.[0] || null;
@@ -51,8 +62,8 @@
     const recentKey = latestMonthKey(record);
     const team = league?.teamRecords?.[record.team] || {};
     const games = Number(record?.games) || 0;
-    const threePa = average(record, 'threeA');
-    const threePm = average(record, 'threeM');
+    const threePa = shootingAverage(record, 'threeA');
+    const threePm = shootingAverage(record, 'threeM');
     return {
       key: record.key,
       name: record.name,
@@ -73,8 +84,8 @@
       threePm: round(threePm),
       threePct: round(threePa > 0 ? threePm / threePa * 100 : 0),
       recentPpg: round(average(record, 'pts', recentKey)),
-      recentThreePa: round(average(record, 'threeA', recentKey)),
-      recentThreePm: round(average(record, 'threeM', recentKey)),
+      recentThreePa: round(shootingAverage(record, 'threeA', recentKey)),
+      recentThreePm: round(shootingAverage(record, 'threeM', recentKey)),
       teamWinPct: Number(team.winPct ?? .5),
       teamWins: Number(team.wins || 0)
     };
@@ -165,7 +176,7 @@
 
   function selectThreePoint(players, seed, history) {
     const scored = players
-      .filter(player => player.threePa >= 2.5 || (player.ovr >= 84 && player.group === 'guard'))
+      .filter(player => player.threePct >= 28 && (player.threePa >= 2.5 || (player.ovr >= 84 && player.group === 'guard')))
       .map(player => threePointScore(player, seed, history))
       .sort((a, b) => b.contestScore - a.contestScore || b.threePa - a.threePa);
     const invited = [];
@@ -251,14 +262,78 @@
     return (weekend?.threePointParticipants || []).filter(player => player.isPlayer && player.accepted !== false);
   }
 
+  function contestShotPlan(moneyRackIndex = 4) {
+    const selectedRack = clamp(Math.round(Number(moneyRackIndex) || 0), 0, 4);
+    const shots = [];
+    for (let rackIndex = 0; rackIndex < 5; rackIndex += 1) {
+      for (let ballIndex = 0; ballIndex < 5; ballIndex += 1) {
+        const isMoney = rackIndex === selectedRack || ballIndex === 4;
+        shots.push({
+          id: `rack-${rackIndex}-${ballIndex}`,
+          rackIndex,
+          ballIndex,
+          kind: isMoney ? 'money' : 'regular',
+          value: isMoney ? 2 : 1
+        });
+      }
+      if (rackIndex === 1 || rackIndex === 3) {
+        shots.push({
+          id: `deep-${rackIndex === 1 ? 0 : 1}`,
+          rackIndex,
+          ballIndex: null,
+          kind: 'deep',
+          value: 3
+        });
+      }
+    }
+    return shots;
+  }
+
+  function simulateContestRound(player, options = {}) {
+    const round = options.round === 'final' ? 'final' : 'round1';
+    const moneyRackIndex = clamp(Math.round(Number(options.moneyRackIndex ?? 4)), 0, 4);
+    const seed = hash(`${options.seed || 1}|${round}|${player?.key || player?.name}|${moneyRackIndex}`);
+    const random = seeded(seed);
+    const threePct = clamp(Number(player?.threePct) || 34, 28, 50);
+    const volumeBonus = clamp((Number(player?.threePa) || 3) - 3, 0, 7) * .006;
+    const contestSkill = clamp(.055 + (Number(player?.ovr || 78) - 78) * .0015, .035, .085);
+    const baseChance = clamp(threePct / 100 + volumeBonus + contestSkill, .31, .58);
+    const shots = contestShotPlan(moneyRackIndex).map(shot => {
+      const distancePenalty = shot.kind === 'deep' ? .105 : 0;
+      const pressure = round === 'final' ? .012 : 0;
+      const streakNoise = (random() - .5) * .11;
+      const chance = clamp(baseChance - distancePenalty - pressure + streakNoise, .18, .66);
+      const made = random() < chance;
+      return { ...shot, made, points: made ? shot.value : 0 };
+    });
+    const score = shots.reduce((sum, shot) => sum + shot.points, 0);
+    const tieBreakRandom = seeded(hash(`${seed}|tiebreak`));
+    const tieBreakScore = Array.from({ length: round === 'final' ? 27 : 12 }, (_, index) => {
+      const deep = round === 'final' && (index === 10 || index === 21);
+      const value = deep ? 3 : (index % 5 === 4 ? 2 : 1);
+      const chance = clamp(baseChance - (deep ? .105 : 0) + (tieBreakRandom() - .5) * .1, .18, .66);
+      return tieBreakRandom() < chance ? value : 0;
+    }).reduce((sum, value) => sum + value, 0);
+    return { ...player, round, moneyRackIndex, score, shots, tieBreakScore };
+  }
+
+  function rankContestRound(results) {
+    return [...(results || [])].sort((a, b) =>
+      Number(b.score || 0) - Number(a.score || 0)
+      || Number(b.tieBreakScore || 0) - Number(a.tieBreakScore || 0)
+      || Number(b.contestScore || 0) - Number(a.contestScore || 0)
+      || String(a.name || '').localeCompare(String(b.name || ''), 'en')
+    );
+  }
+
+  // Backwards-compatible one-round board for older saved contests.
   function contestBoard(weekend, playerName, playerScore) {
-    const seed = hash(`${weekend?.seasonNo || 1}|contest-final`);
-    return (weekend?.threePointParticipants || []).map(player => {
+    const results = (weekend?.threePointParticipants || []).map((player, index) => {
       const isPlayer = player.name === playerName;
-      const random = seeded(hash(`${seed}|${player.key}`));
-      const cpuScore = clamp(Math.round(16 + (player.threePct - 30) * .45 + player.threePa * .55 + random() * 8), 14, 32);
-      return { ...player, score: isPlayer ? Number(playerScore || 0) : cpuScore, isUserEntry: isPlayer };
-    }).sort((a, b) => b.score - a.score || b.contestScore - a.contestScore);
+      if (isPlayer) return { ...player, score: Number(playerScore || 0), tieBreakScore: 0, isUserEntry: true };
+      return { ...simulateContestRound(player, { seed: `${weekend?.seasonNo || 1}|legacy|${index}`, round: 'final', moneyRackIndex: index % 5 }), isUserEntry: false };
+    });
+    return rankContestRound(results);
   }
 
   return Object.freeze({
@@ -272,6 +347,9 @@
     playerSelections,
     playerSnubs,
     playerThreePointInvites,
+    contestShotPlan,
+    simulateContestRound,
+    rankContestRound,
     contestBoard,
     leaguePlayers
   });

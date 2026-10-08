@@ -32546,12 +32546,22 @@ function submitStudyLog() {
 const threePtState = {
   active: false,
   shooter: null,
-  currentRack: 0,   // 0~4 架
-  currentBall: 0,   // 0~4 球 (共25球)
+  round: 'round1',
+  currentRack: 0,
+  currentBall: 0,
+  shotPlan: [],
+  shotResults: [],
+  shotIndex: 0,
+  moneyRackIndex: 4,
+  roundOneResults: [],
+  finalists: [],
   score: 0,
   meterProgress: 0, // 0 ~ 100
   meterDirection: 1,
   animFrameId: null,
+  clockIntervalId: null,
+  roundEndsAt: 0,
+  roundFinishing: false,
   greenStart: 85,
   greenEnd: 95,
   yellowStart: 75,
@@ -32559,6 +32569,103 @@ const threePtState = {
   yellowHitRate: 0.5,
   meterSpeed: 2.2
 };
+
+function getThreePointShotPlan(moneyRackIndex = threePtState.moneyRackIndex) {
+  if (window.SeasonAllStar?.contestShotPlan) return window.SeasonAllStar.contestShotPlan(moneyRackIndex);
+  const plan = [];
+  for (let rackIndex = 0; rackIndex < 5; rackIndex++) {
+    for (let ballIndex = 0; ballIndex < 5; ballIndex++) {
+      const isMoney = rackIndex === Number(moneyRackIndex) || ballIndex === 4;
+      plan.push({ id: `rack-${rackIndex}-${ballIndex}`, rackIndex, ballIndex, kind: isMoney ? 'money' : 'regular', value: isMoney ? 2 : 1 });
+    }
+    if (rackIndex === 1 || rackIndex === 3) plan.push({ id: `deep-${rackIndex === 1 ? 0 : 1}`, rackIndex, ballIndex: null, kind: 'deep', value: 3 });
+  }
+  return plan;
+}
+
+function onThreePtMoneyRackChange(value) {
+  if (threePtState.active) return;
+  threePtState.moneyRackIndex = Math.max(0, Math.min(4, Number(value) || 0));
+  renderRacksInitial();
+}
+
+function stopThreePointClock() {
+  if (threePtState.clockIntervalId) clearInterval(threePtState.clockIntervalId);
+  threePtState.clockIntervalId = null;
+}
+
+function startThreePointClock() {
+  stopThreePointClock();
+  threePtState.roundEndsAt = Date.now() + 70000;
+  const updateClock = () => {
+    const seconds = Math.max(0, Math.ceil((threePtState.roundEndsAt - Date.now()) / 1000));
+    const timer = document.getElementById('threePtTimer');
+    if (timer) timer.innerText = String(seconds);
+    if (seconds <= 0 && threePtState.active && !threePtState.roundFinishing) {
+      threePtState.active = false;
+      cancelAnimationFrame(threePtState.animFrameId);
+      stopThreePointClock();
+      finishThreePointRound();
+    }
+  };
+  updateClock();
+  threePtState.clockIntervalId = setInterval(updateClock, 200);
+}
+
+function getThreePointParticipants() {
+  const weekend = state.seasonJourney?.allStarWeekend;
+  const invited = Array.isArray(weekend?.threePointParticipants) ? weekend.threePointParticipants : [];
+  const playerName = threePtState.shooter?.name;
+  const playerEntry = {
+    key: `player:${threePtState.shooter?.cardId || playerName || 'user'}`,
+    name: playerName || '你的球員',
+    threePct: getShooter3PtPercent(threePtState.shooter) || 34,
+    threePa: Number(threePtState.shooter?.basic?.['3PA']) || 5,
+    ovr: Number(threePtState.shooter?.ovr || threePtState.shooter?.realOvr || 84),
+    isPlayer: true,
+    isUserEntry: true
+  };
+  const merged = invited.map(player => player.name === playerName ? { ...player, ...playerEntry, key: player.key || playerEntry.key } : { ...player, isPlayer: false, isUserEntry: false });
+  if (!merged.some(player => player.name === playerName)) merged.push(playerEntry);
+  const fallbacks = [
+    ['Stephen Curry', 42.1, 11.2, 96], ['Damian Lillard', 38.4, 9.4, 91], ['Klay Thompson', 40.2, 8.1, 88],
+    ['Buddy Hield', 39.7, 8.7, 86], ['Devin Booker', 38.1, 6.3, 90], ['Trae Young', 37.2, 9.0, 90],
+    ['Tyrese Haliburton', 39.4, 7.1, 89], ['Desmond Bane', 40.0, 7.4, 87]
+  ];
+  for (const [name, threePct, threePa, ovr] of fallbacks) {
+    if (merged.length >= 8) break;
+    if (name === playerName || merged.some(player => player.name === name)) continue;
+    merged.push({ key: `cpu:${name}`, name, threePct, threePa, ovr, isPlayer: false, isUserEntry: false });
+  }
+  return merged.slice(0, 8);
+}
+
+function renderThreePointParticipantStrip(results = null) {
+  const strip = document.getElementById('threePtParticipantStrip');
+  if (!strip) return;
+  const scoreByKey = new Map((results || []).map(player => [player.key || player.name, player]));
+  const participants = threePtState.round === 'final' && threePtState.finalists.length ? threePtState.finalists : getThreePointParticipants();
+  strip.innerHTML = participants.map((player, index) => {
+    const result = scoreByKey.get(player.key || player.name);
+    const score = result ? `${result.score}分` : '—';
+    const isCurrent = player.name === threePtState.shooter?.name;
+    return `<div class="shrink-0 rounded-lg border px-2 py-1 ${isCurrent ? 'border-amber-400/70 bg-amber-500/15 text-amber-200' : 'border-slate-800 bg-slate-950 text-slate-400'}"><b>${index + 1}</b> ${player.name}<span class="ml-1 font-black">${score}</span></div>`;
+  }).join('');
+}
+
+function updateThreePointRoundUi() {
+  const finalRound = threePtState.round === 'final';
+  const label = document.getElementById('threePtRoundLabel');
+  const cut = document.getElementById('threePtCutLine');
+  if (label) label.innerText = finalRound ? 'FINAL ROUND · 3 SHOOTERS' : 'ROUND 1 · 8 SHOOTERS';
+  if (cut) cut.innerText = finalRound ? 'SCORES RESET · WINNER TAKES ALL' : 'TOP 3 ADVANCE';
+  const moneyRack = document.getElementById('threePtMoneyRackSelect');
+  if (moneyRack) {
+    moneyRack.value = String(threePtState.moneyRackIndex);
+    moneyRack.disabled = threePtState.active;
+    moneyRack.classList.toggle('opacity-50', threePtState.active);
+  }
+}
 
 // 安全獲取玩家陣容名單
 function getAllMyPlayers() {
@@ -32709,9 +32816,13 @@ function renderThreePointContestRanking(results, options = {}) {
       key: player?.key || '',
       name: String(player?.name || `參賽者 ${index + 1}`).replace(' (你)', ''),
       score: Math.max(0, Number(player?.score) || 0),
+      round1Score: player?.round1Score != null && Number.isFinite(Number(player.round1Score)) ? Number(player.round1Score) : null,
+      finalScore: player?.finalScore != null && Number.isFinite(Number(player.finalScore)) ? Number(player.finalScore) : null,
+      tieBreakScore: Number(player?.tieBreakScore || 0),
+      rank: Number(player?.rank || 0),
       isPlayer: !!player?.isPlayer
     }))
-    .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name, 'en'));
+    .sort((a, b) => (a.rank && b.rank ? a.rank - b.rank : b.score - a.score) || b.tieBreakScore - a.tieBreakScore || a.name.localeCompare(b.name, 'en'));
   if (!ranking.length) return [];
 
   const champion = ranking[0];
@@ -32732,12 +32843,17 @@ function renderThreePointContestRanking(results, options = {}) {
     board.innerHTML = ranking.map((player, index) => `
       <div class="flex justify-between items-center p-2 rounded-lg ${player.isPlayer ? 'bg-amber-500/20 border border-amber-500/60 text-amber-300' : 'bg-slate-800/80 text-slate-300'}">
         <span class="min-w-0 truncate"><b class="mr-2">${index === 0 ? '👑 1' : index + 1}</b>${player.name}${player.isPlayer ? '（你）' : ''}</span>
-        <span class="font-black text-amber-400 shrink-0 ml-2">${player.score} 分</span>
+        <span class="font-black text-amber-400 shrink-0 ml-2">${player.finalScore != null ? `決賽 ${player.finalScore}` : player.score} 分${player.finalScore != null && player.round1Score != null ? `<small class="block text-[9px] font-medium text-slate-500">首輪 ${player.round1Score}</small>` : ''}</span>
       </div>
     `).join('');
   }
   const leaderboard = document.getElementById('contestLeaderboard');
   if (leaderboard) leaderboard.style.display = 'flex';
+  const action = document.getElementById('contestResultAction');
+  if (action && !options.keepAction) {
+    action.innerText = '關閉 (Close)';
+    action.onclick = closeThreePointContest;
+  }
   return ranking;
 }
 
@@ -32760,12 +32876,16 @@ function openThreePointContest() {
   }
   modal.classList.remove('hidden');
   modal.style.display = 'flex';
+  threePtState.round = 'round1';
+  threePtState.roundOneResults = [];
+  threePtState.finalists = [];
+  threePtState.roundFinishing = false;
   const selectElem = document.getElementById('threePtShooterSelect');
   const lockedBadge = document.getElementById('threePtShooterLockedBadge');
   if (selectElem) selectElem.innerHTML = '';
 
   if (myPlayers.length > 0) {
-    // V3.0：公布名單後只顯示已接受邀請的隊內射手。
+    // 公布名單後只顯示已接受邀請的隊內射手。
     myPlayers.sort((a, b) => getShooter3PtPercent(b) - getShooter3PtPercent(a));
     myPlayers.forEach(p => {
       const pct = getShooter3PtPercent(p);
@@ -32811,6 +32931,8 @@ function openThreePointContest() {
   }
 
   updateMeterDifficulty(threePtState.shooter);
+  updateThreePointRoundUi();
+  renderThreePointParticipantStrip();
 
   const lb = document.getElementById('contestLeaderboard');
   const savedRanking = state.seasonJourney?.allStarWeekend?.contestResult || state.season?.threePtContestRanking || [];
@@ -32830,13 +32952,15 @@ function openThreePointContest() {
       btnStart.className = "flex-1 bg-slate-800 text-slate-500 border border-slate-700 font-bold py-3 rounded-xl cursor-not-allowed text-xs sm:text-sm";
     } else {
       btnStart.disabled = false;
-      btnStart.innerText = '開始挑戰 (Start Round)';
+      btnStart.innerText = '開始第一輪 (ROUND 1)';
       btnStart.className = 'flex-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black py-3 rounded-xl shadow-lg transition-transform active:scale-95 text-base';
     }
   }
 
   const cursor = document.getElementById('shotMeterCursor');
   if (cursor) cursor.style.left = '0%';
+  const timer = document.getElementById('threePtTimer');
+  if (timer) timer.innerText = '70';
 
   renderRacksInitial();
 
@@ -32869,11 +32993,13 @@ function onShooterSelectChange(selectedName) {
   if (found) {
     threePtState.shooter = found;
     updateMeterDifficulty(found);
+    renderThreePointParticipantStrip();
   }
 }
 
 function closeThreePointContest() {
   cancelAnimationFrame(threePtState.animFrameId);
+  stopThreePointClock();
   threePtState.active = false;
   const lb = document.getElementById('contestLeaderboard');
   if (lb) lb.style.display = 'none';
@@ -32884,20 +33010,19 @@ function closeThreePointContest() {
   }
 }
 
-// 2. 渲染 5 個球架 (響應式 Flex 排列、防擠壓、正圓不變形)
+// 2. 渲染 5 個球架、1 個自選花球架與 2 顆超遠三分球（27 球 / 40 分）
 function renderRacksInitial() {
   const container = document.getElementById('racksContainer');
   if (!container) return;
   container.innerHTML = '';
+  threePtState.shotPlan = getThreePointShotPlan(threePtState.moneyRackIndex);
 
   for (let r = 0; r < 5; r++) {
-    const isMoneyRack = (r === 4);
+    const isMoneyRack = (r === threePtState.moneyRackIndex);
     const rackDiv = document.createElement('div');
-    // 球架本體：flex-1 自適應均勻填滿，移除多餘左右邊距，防擠壓
     rackDiv.className = `flex-1 flex flex-col items-center justify-center py-1 sm:py-1.5 px-0.5 rounded-lg border transition-all duration-200 min-w-0 ${r === 0 ? 'border-amber-400 bg-amber-500/15 shadow-[0_0_8px_rgba(245,158,11,0.2)]' : 'border-slate-800 bg-slate-900/60'}`;
     rackDiv.id = `rackBox_${r}`;
-    
-    // 5 顆球水平緊密置中，aspect-square + rounded-full + flex-shrink-0 確保在手機版永遠正圓
+
     let ballsHtml = '<div class="flex items-center justify-center gap-0.5 sm:gap-1 w-full overflow-hidden">';
     for (let b = 0; b < 5; b++) {
       const isMoneyBall = isMoneyRack || (b === 4);
@@ -32908,20 +33033,22 @@ function renderRacksInitial() {
       ballsHtml += `<div id="ball_${r}_${b}" class="w-2.5 h-2.5 sm:w-3 sm:h-3 min-w-[9px] min-h-[9px] sm:min-w-[12px] sm:min-h-[12px] aspect-square rounded-full ${ballBg} border border-black/60 opacity-40 flex-shrink-0 transition-all duration-150"></div>`;
     }
     ballsHtml += '</div>';
-    
-    rackDiv.innerHTML = ballsHtml;
+    const deepIndex = r === 1 ? 0 : (r === 3 ? 1 : null);
+    const deepBall = deepIndex == null ? '<span class="mt-1 text-[7px] text-transparent">3PT</span>' : `<div class="mt-1 flex items-center gap-0.5"><div id="deep_${deepIndex}" class="w-3 h-3 rounded-full border border-cyan-300/70 bg-cyan-500/50 opacity-40"></div><span class="text-[7px] font-black text-cyan-300">3PT</span></div>`;
+    rackDiv.innerHTML = `${isMoneyRack ? '<span class="mb-1 text-[7px] font-black text-amber-300">MONEY</span>' : '<span class="mb-1 text-[7px] text-slate-600">RACK</span>'}${ballsHtml}${deepBall}`;
     container.appendChild(rackDiv);
   }
 
   const scoreEl = document.getElementById('threePtScore');
   if (scoreEl) scoreEl.innerText = '0';
   const leftEl = document.getElementById('threePtBallsLeft');
-  if (leftEl) leftEl.innerText = '25';
+  if (leftEl) leftEl.innerText = '27';
   const fb = document.getElementById('shotFeedback');
   if (fb) {
-    fb.innerText = '準備就緒！點擊開始挑戰';
+    fb.innerText = threePtState.round === 'final' ? '決賽分數歸零，準備爭冠！' : '準備就緒！前 3 名晉級決賽';
     fb.className = 'text-center font-black text-base text-slate-400 tracking-wider';
   }
+  updateThreePointRoundUi();
 }
 // 3. 點擊「開始挑戰」按鈕 (選定球員後立即鎖定不可更換，每賽季限玩一次)
 function startThreePointRound() {
@@ -32930,7 +33057,17 @@ function startThreePointRound() {
     return;
   }
 
-  // 🔒 選好球員開打後立即鎖定，本賽季不能再更換球員！
+  startThreePointManualRound('round1');
+}
+
+function startThreePointFinal() {
+  const leaderboard = document.getElementById('contestLeaderboard');
+  if (leaderboard) leaderboard.style.display = 'none';
+  startThreePointManualRound('final');
+}
+
+function startThreePointManualRound(round) {
+  // 選好球員開打後立即鎖定，本賽季不能再更換球員。
   if (!state.season) state.season = {};
   state.season.threePtContestShooter = threePtState.shooter.name;
   saveGame();
@@ -32955,13 +33092,19 @@ function startThreePointRound() {
   const btnShoot = document.getElementById('btnReleaseShot');
   if (btnShoot) btnShoot.disabled = false;
 
+  threePtState.round = round === 'final' ? 'final' : 'round1';
   threePtState.active = true;
+  threePtState.roundFinishing = false;
   threePtState.currentRack = 0;
   threePtState.currentBall = 0;
+  threePtState.shotIndex = 0;
+  threePtState.shotResults = [];
   threePtState.score = 0;
   threePtState.meterProgress = 0;
   renderRacksInitial();
-  
+  renderThreePointParticipantStrip(threePtState.round === 'final' ? null : []);
+  updateThreePointRoundUi();
+  startThreePointClock();
   startMeterLoop();
 }
 
@@ -33021,10 +33164,11 @@ function triggerShotRelease() {
     feedbackClass = "text-rose-500";
   }
 
-  // 得分
-  const isMoney = (threePtState.currentRack === 4) || (threePtState.currentBall === 4);
-  const pts = hit ? (isMoney ? 2 : 1) : 0;
+  const shot = threePtState.shotPlan[threePtState.shotIndex];
+  if (!shot) return finishThreePointRound();
+  const pts = hit ? shot.value : 0;
   threePtState.score += pts;
+  threePtState.shotResults.push({ ...shot, made: hit, points: pts, timing: Math.round(val) });
 
   const scoreEl = document.getElementById('threePtScore');
   if (scoreEl) scoreEl.innerText = threePtState.score;
@@ -33035,7 +33179,17 @@ function triggerShotRelease() {
     fb.className = `text-center font-black text-base tracking-wider ${feedbackClass}`;
   }
 
-  const ballDot = document.getElementById(`ball_${threePtState.currentRack}_${threePtState.currentBall}`);
+  if (shot.kind === 'deep') {
+    feedbackText = hit ? '🔵 STARRY RANGE！超遠三分命中（+3）' : '🔵 STARRY RANGE 偏出';
+    if (fb) fb.innerText = feedbackText;
+  } else if (shot.kind === 'money' && hit) {
+    feedbackText = '🔴 MONEY BALL 命中（+2）';
+    if (fb) fb.innerText = feedbackText;
+  }
+
+  const ballDot = shot.kind === 'deep'
+    ? document.getElementById(`deep_${shot.rackIndex === 1 ? 0 : 1}`)
+    : document.getElementById(`ball_${shot.rackIndex}_${shot.ballIndex}`);
   if (ballDot) {
     const ballBase = "w-2.5 h-2.5 sm:w-3 sm:h-3 min-w-[9px] min-h-[9px] sm:min-w-[12px] sm:min-h-[12px] aspect-square rounded-full border border-black/60 flex-shrink-0 transition-all duration-150";
     if (hit) {
@@ -33046,28 +33200,28 @@ function triggerShotRelease() {
   }
 
   // 下一球
-  threePtState.currentBall++;
-  if (threePtState.currentBall >= 5) {
-    threePtState.currentBall = 0;
-    const oldRack = document.getElementById(`rackBox_${threePtState.currentRack}`);
+  const previousRack = shot.rackIndex;
+  threePtState.shotIndex++;
+  const nextShot = threePtState.shotPlan[threePtState.shotIndex];
+  threePtState.currentRack = nextShot?.rackIndex ?? 5;
+  threePtState.currentBall = nextShot?.ballIndex ?? 0;
+  if (nextShot && nextShot.rackIndex !== previousRack) {
+    const oldRack = document.getElementById(`rackBox_${previousRack}`);
     if (oldRack) {
       oldRack.className = 'flex-1 flex flex-col items-center justify-center py-1 sm:py-1.5 px-0.5 rounded-lg border transition-all duration-200 min-w-0 border-slate-800 bg-slate-900/60';
     }
-    threePtState.currentRack++;
-    if (threePtState.currentRack < 5) {
-      const newRack = document.getElementById(`rackBox_${threePtState.currentRack}`);
-      if (newRack) {
-        newRack.className = 'flex-1 flex flex-col items-center justify-center py-1 sm:py-1.5 px-0.5 rounded-lg border transition-all duration-200 min-w-0 border-amber-400 bg-amber-500/15 shadow-[0_0_8px_rgba(245,158,11,0.2)]';
-      }
+    const newRack = document.getElementById(`rackBox_${nextShot.rackIndex}`);
+    if (newRack) {
+      newRack.className = 'flex-1 flex flex-col items-center justify-center py-1 sm:py-1.5 px-0.5 rounded-lg border transition-all duration-200 min-w-0 border-amber-400 bg-amber-500/15 shadow-[0_0_8px_rgba(245,158,11,0.2)]';
     }
   }
 
-  const totalBallsLeft = 25 - (threePtState.currentRack * 5 + threePtState.currentBall);
+  const totalBallsLeft = threePtState.shotPlan.length - threePtState.shotIndex;
   const leftEl = document.getElementById('threePtBallsLeft');
   if (leftEl) leftEl.innerText = Math.max(0, totalBallsLeft);
 
-  if (threePtState.currentRack >= 5) {
-    setTimeout(finishContest, 600);
+  if (threePtState.shotIndex >= threePtState.shotPlan.length) {
+    setTimeout(finishThreePointRound, 600);
   } else {
     setTimeout(() => {
       startMeterLoop();
@@ -33075,101 +33229,166 @@ function triggerShotRelease() {
   }
 }
 
-// 6. 結算畫面 (記錄本賽季已出戰，一季限玩一次)
-function finishContest() {
+function simulateCpuThreePointRound(player, round, index) {
+  const weekend = state.seasonJourney?.allStarWeekend;
+  const seed = `${weekend?.seasonNo || state.seasonJourney?.seasonNo || 1}|${round}|${index}`;
+  if (window.SeasonAllStar?.simulateContestRound) {
+    return window.SeasonAllStar.simulateContestRound(player, { seed, round, moneyRackIndex: (index + Number(weekend?.seasonNo || 1)) % 5 });
+  }
+  const pct = Math.max(28, Number(player.threePct) || 34);
+  const score = Math.max(10, Math.min(32, Math.round(12 + (pct - 28) * .55 + Math.random() * 8)));
+  return { ...player, round, score, tieBreakScore: Math.round(Math.random() * 12), shots: [] };
+}
+
+function rankThreePointRound(results) {
+  if (window.SeasonAllStar?.rankContestRound) return window.SeasonAllStar.rankContestRound(results);
+  return [...results].sort((a, b) => b.score - a.score || (b.tieBreakScore || 0) - (a.tieBreakScore || 0));
+}
+
+function makePlayerThreePointResult(round) {
+  const base = getThreePointParticipants().find(player => player.name === threePtState.shooter?.name) || {};
+  const simulated = simulateCpuThreePointRound(base, round, 99);
+  return {
+    ...base,
+    round,
+    moneyRackIndex: threePtState.moneyRackIndex,
+    score: threePtState.score,
+    shots: [...threePtState.shotResults],
+    tieBreakScore: simulated.tieBreakScore || 0,
+    isPlayer: true,
+    isUserEntry: true
+  };
+}
+
+function finishThreePointRound() {
+  if (threePtState.roundFinishing) return;
+  threePtState.roundFinishing = true;
   threePtState.active = false;
   cancelAnimationFrame(threePtState.animFrameId);
-
+  stopThreePointClock();
   const btnShoot = document.getElementById('btnReleaseShot');
   if (btnShoot) btnShoot.disabled = true;
 
-  const myScore = threePtState.score;
-  const playerName = threePtState.shooter ? threePtState.shooter.name : "你";
+  const playerResult = makePlayerThreePointResult(threePtState.round);
+  if (threePtState.round === 'round1') {
+    const participants = getThreePointParticipants();
+    const results = participants.map((player, index) => player.name === playerResult.name
+      ? playerResult
+      : simulateCpuThreePointRound(player, 'round1', index));
+    threePtState.roundOneResults = rankThreePointRound(results);
+    // 決賽依第一輪名次反向出場：第三名先投，第一名最後投。
+    threePtState.finalists = threePtState.roundOneResults.slice(0, 3).reverse();
+    renderThreePointParticipantStrip(threePtState.roundOneResults);
+    const playerRank = threePtState.roundOneResults.findIndex(player => player.name === playerResult.name) + 1;
+    const weekend = state.seasonJourney?.allStarWeekend;
+    if (weekend) weekend.contestProgress = {
+      stage: playerRank > 0 && playerRank <= 3 ? 'final-ready' : 'completed',
+      shooterName: playerResult.name,
+      roundOneResults: threePtState.roundOneResults.map(player => ({ key: player.key, name: player.name, score: player.score, tieBreakScore: player.tieBreakScore, isPlayer: !!player.isPlayer }))
+    };
+    saveGame();
+    if (playerRank > 0 && playerRank <= 3) showThreePointFinalists(playerRank);
+    else completeCpuThreePointFinal();
+    return;
+  }
 
-  // 📝 儲存本賽季三分大賽挑戰紀錄
+  const finalResults = threePtState.finalists.map((player, index) => player.name === playerResult.name
+    ? playerResult
+    : simulateCpuThreePointRound(player, 'final', index));
+  finalizeThreePointContest(rankThreePointRound(finalResults));
+}
+
+function showThreePointFinalists(playerRank) {
+  const trophy = document.getElementById('contestTrophyIcon');
+  const title = document.getElementById('contestResultTitle');
+  const sub = document.getElementById('contestResultSub');
+  const board = document.getElementById('leaderboardRows');
+  const action = document.getElementById('contestResultAction');
+  if (trophy) trophy.innerText = '🔥';
+  if (title) title.innerText = `第一輪第 ${playerRank} 名 · 晉級決賽`;
+  if (sub) sub.innerText = '決賽 3 人分數歸零，依第一輪排名反向出場。';
+  if (board) board.innerHTML = threePtState.roundOneResults.map((player, index) => `
+    <div class="flex items-center justify-between rounded-lg p-2 ${player.isPlayer ? 'border border-amber-500/60 bg-amber-500/20 text-amber-300' : 'bg-slate-800/80 text-slate-300'}">
+      <span><b class="mr-2">${index + 1}</b>${player.name}${player.isPlayer ? '（你）' : ''}${index < 3 ? ' ✓' : ''}</span><strong>${player.score} 分</strong>
+    </div>`).join('');
+  if (action) {
+    action.innerText = '進入決賽 (FINAL)';
+    action.onclick = startThreePointFinal;
+  }
+  const leaderboard = document.getElementById('contestLeaderboard');
+  if (leaderboard) leaderboard.style.display = 'flex';
+}
+
+function completeCpuThreePointFinal() {
+  const finalResults = threePtState.finalists.map((player, index) => simulateCpuThreePointRound(player, 'final', index));
+  finalizeThreePointContest(rankThreePointRound(finalResults));
+}
+
+function finalizeThreePointContest(finalResults) {
+  const roundOneByKey = new Map(threePtState.roundOneResults.map(player => [player.key || player.name, player]));
+  const finalists = finalResults.map((player, index) => ({
+    ...player,
+    rank: index + 1,
+    round1Score: roundOneByKey.get(player.key || player.name)?.score ?? null,
+    finalScore: player.score,
+    isPlayer: player.name === threePtState.shooter?.name
+  }));
+  const finalistKeys = new Set(finalists.map(player => player.key || player.name));
+  const eliminated = threePtState.roundOneResults
+    .filter(player => !finalistKeys.has(player.key || player.name))
+    .map((player, index) => ({ ...player, rank: index + 4, round1Score: player.score, finalScore: null, isPlayer: player.name === threePtState.shooter?.name }));
+  const ranking = finalists.concat(eliminated);
+  const champion = ranking[0];
+  const playerResult = ranking.find(player => player.isPlayer);
+  const playerScore = playerResult?.finalScore ?? playerResult?.round1Score ?? 0;
+  const playerName = threePtState.shooter?.name || '你的球員';
+  const isChamp = !!champion?.isPlayer;
+
   if (!state.season) state.season = {};
   state.season.threePtContestPlayed = true;
-  state.season.threePtContestScore = myScore;
+  state.season.threePtContestScore = playerScore;
   state.season.threePtContestShooter = playerName;
+  state.season.threePtContestRanking = ranking.map(player => ({
+    key: player.key || '', name: player.name, score: player.score, rank: player.rank,
+    round1Score: player.round1Score, finalScore: player.finalScore,
+    tieBreakScore: player.tieBreakScore || 0, isPlayer: !!player.isPlayer
+  }));
+
+  const weekend = state.seasonJourney?.allStarWeekend;
+  if (weekend) {
+    weekend.contestResult = state.season.threePtContestRanking;
+    weekend.contestProgress = { stage: 'completed', shooterName: playerName, roundOneResults: threePtState.roundOneResults, finalResults };
+    weekend.threePointChampionKey = champion?.key || null;
+    weekend.threePointChampionName = champion?.name || '';
+  }
+  if (isChamp && typeof window.awardThreePointChampion === 'function') window.awardThreePointChampion(playerName, playerScore, ranking);
   saveGame();
 
   const btnStart = document.getElementById('btnStartContest');
   if (btnStart) {
     btnStart.style.display = 'block';
     btnStart.disabled = true;
-    btnStart.innerText = `🔒 本賽季已完成挑戰 (${myScore}分)`;
-    btnStart.className = "flex-1 bg-slate-800 text-slate-500 border border-slate-700 font-bold py-3 rounded-xl cursor-not-allowed text-xs sm:text-sm";
+    btnStart.innerText = `🔒 本賽季已完成挑戰 (${playerScore}分)`;
+    btnStart.className = 'flex-1 bg-slate-800 text-slate-500 border border-slate-700 font-bold py-3 rounded-xl cursor-not-allowed text-xs sm:text-sm';
   }
-
   const lockedBadge = document.getElementById('threePtShooterLockedBadge');
-  if (lockedBadge) {
-    lockedBadge.classList.remove('hidden');
-    lockedBadge.innerText = '🔒 本季已出戰';
-  }
-
+  if (lockedBadge) { lockedBadge.classList.remove('hidden'); lockedBadge.innerText = '🔒 本季已出戰'; }
   const asgBtn = document.getElementById('btnOpenThreePtFromAllStar');
   if (asgBtn) {
-    asgBtn.innerText = `🎯 三分大賽 (已出戰: ${myScore}分)`;
-    asgBtn.className = "px-3 py-1.5 bg-slate-800 text-amber-400/80 border border-slate-700 font-bold rounded-lg text-xs shadow-md cursor-pointer";
+    asgBtn.innerText = `🎯 三分大賽 (已出戰: ${playerScore}分)`;
+    asgBtn.className = 'px-3 py-1.5 bg-slate-800 text-amber-400/80 border border-slate-700 font-bold rounded-lg text-xs shadow-md cursor-pointer';
   }
-
-  const weekend = state.seasonJourney?.allStarWeekend;
-  const aiShooters = window.SeasonAllStar && weekend
-    ? window.SeasonAllStar.contestBoard(weekend, playerName, myScore).map(player => ({ ...player, isPlayer: !!player.isUserEntry, name: player.isUserEntry ? `${player.name} (你)` : player.name }))
-    : [
-        { name: playerName.includes("Curry") ? "Buddy Hield" : "Stephen Curry", score: 27 },
-        { name: playerName.includes("Lillard") ? "Tyrese Haliburton" : "Damian Lillard", score: 25 },
-        { name: playerName.includes("Thompson") ? "Devin Booker" : "Klay Thompson", score: 23 },
-        { name: `${playerName} (你)`, score: myScore, isPlayer: true }
-      ].sort((a, b) => b.score - a.score);
-
-  const isChamp = aiShooters[0].isPlayer;
-  if (weekend) {
-    weekend.contestResult = aiShooters.map(player => ({ key: player.key || '', name: player.name.replace(' (你)', ''), score: player.score, isPlayer: !!player.isPlayer }));
-    weekend.threePointChampionKey = aiShooters[0].key || null;
-    weekend.threePointChampionName = aiShooters[0].name.replace(' (你)', '');
+  const feedback = document.getElementById('shotFeedback');
+  if (feedback) {
+    feedback.innerText = playerResult?.finalScore != null ? `決賽 ${playerScore} 分 · 最終第 ${playerResult.rank} 名` : `第一輪 ${playerScore} 分 · 未晉級決賽`;
+    feedback.className = 'text-center font-bold text-xs sm:text-sm text-amber-400 tracking-wide';
   }
-  state.season.threePtContestRanking = aiShooters.map(player => ({
-    key: player.key || '',
-    name: String(player.name || '').replace(' (你)', ''),
-    score: Number(player.score || 0),
-    isPlayer: !!player.isPlayer
-  })).sort((a, b) => b.score - a.score || a.name.localeCompare(b.name, 'en'));
-  if (isChamp && typeof window.awardThreePointChampion === 'function') window.awardThreePointChampion(playerName, myScore, aiShooters);
-  saveGame();
-
-  const trophyEl = document.getElementById('contestTrophyIcon');
-  if (trophyEl) trophyEl.innerText = isChamp ? '🏆' : '🥈';
-
-  const titleEl = document.getElementById('contestResultTitle');
-  if (titleEl) titleEl.innerText = isChamp ? '🎉 勇奪三分球大賽冠軍！' : '大賽結束';
-
-  const subEl = document.getElementById('contestResultSub');
-  if (subEl) {
-    subEl.innerText = isChamp 
-      ? `狂飆 ${myScore} 分稱霸全明星！高舉三分金盃！` 
-      : `拿下 ${myScore} 分，由 ${aiShooters[0].name} 以 ${aiShooters[0].score} 分奪冠！`;
-  }
-
-  const board = document.getElementById('leaderboardRows');
-  if (board) {
-    board.innerHTML = aiShooters.map((c, i) => `
-      <div class="flex justify-between items-center p-2 rounded-lg ${c.isPlayer ? 'bg-amber-500/20 border border-amber-500/60 text-amber-300' : 'bg-slate-800/80 text-slate-300'}">
-        <span>${i === 0 ? '👑 冠軍' : `${i + 1}th`} : ${c.name}</span>
-        <span class="font-black text-amber-400">${c.score} 分</span>
-      </div>
-    `).join('');
-  }
-
-  const fb = document.getElementById('shotFeedback');
-  if (fb) {
-    fb.innerText = `本賽季三分大賽挑戰結束（最終總分: ${myScore} 分）`;
-    fb.className = 'text-center font-bold text-xs sm:text-sm text-amber-400 tracking-wide';
-  }
-
-  const lb = document.getElementById('contestLeaderboard');
-  if (lb) lb.style.display = 'flex';
   renderThreePointContestRanking(state.season.threePtContestRanking);
+}
+
+// Kept for compatibility with old inline calls.
+function finishContest() {
+  finishThreePointRound();
 }
 
 // 7. 空白鍵監聽

@@ -239,8 +239,11 @@
     const statTotals = monthKey ? statSource : record.totals;
     const teamRecord = league.teamRecords[record.team] || { wins: 0, losses: 0, winPct: .5, games: 0, pointsAgainst: 0 };
     const defenseAllowed = teamRecord.games ? teamRecord.pointsAgainst / teamRecord.games : 112;
-    const threePa = round(stat.games ? Number(statTotals?.threeA || 0) / stat.games : Number(record.base?.threeA || 0));
-    const threePm = round(stat.games ? Number(statTotals?.threeM || 0) / stat.games : Number(record.base?.threeM || 0));
+    // Old saves may have games but no tracked 3PM / 3PA. Fall back to the
+    // player's baseline instead of presenting the missing fields as 0.0%.
+    const hasTrackedThrees = stat.games > 0 && Number(statTotals?.threeA || 0) > 0;
+    const threePa = round(hasTrackedThrees ? Number(statTotals.threeA) / stat.games : Number(record.base?.threeA || 0));
+    const threePm = round(hasTrackedThrees ? Number(statTotals.threeM || 0) / stat.games : Number(record.base?.threeM || 0));
     return {
       key: record.key, name: record.name, nbaId: record.nbaId, team: record.team, conference: record.conference,
       ovr: record.ovr, isPlayer: record.isPlayer, projected: stat.games === 0, ...stat,
