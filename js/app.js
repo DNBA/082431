@@ -32703,6 +32703,44 @@ function updateMeterDifficulty(shooter) {
   }
 }
 
+function renderThreePointContestRanking(results, options = {}) {
+  const ranking = (Array.isArray(results) ? results : [])
+    .map((player, index) => ({
+      key: player?.key || '',
+      name: String(player?.name || `參賽者 ${index + 1}`).replace(' (你)', ''),
+      score: Math.max(0, Number(player?.score) || 0),
+      isPlayer: !!player?.isPlayer
+    }))
+    .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name, 'en'));
+  if (!ranking.length) return [];
+
+  const champion = ranking[0];
+  const playerResult = ranking.find(player => player.isPlayer);
+  const playerRank = playerResult ? ranking.indexOf(playerResult) + 1 : 0;
+  const trophyEl = document.getElementById('contestTrophyIcon');
+  if (trophyEl) trophyEl.innerText = champion.isPlayer ? '🏆' : '🏀';
+  const titleEl = document.getElementById('contestResultTitle');
+  if (titleEl) titleEl.innerText = champion.isPlayer ? '🎉 勇奪三分球大賽冠軍！' : '三分球大賽最終排名';
+  const subEl = document.getElementById('contestResultSub');
+  if (subEl) {
+    subEl.innerText = champion.isPlayer
+      ? `${champion.name} 以 ${champion.score} 分奪冠！`
+      : `${champion.name} 以 ${champion.score} 分奪冠${playerResult ? `；你的球員第 ${playerRank} 名（${playerResult.score} 分）` : ''}。`;
+  }
+  const board = document.getElementById('leaderboardRows');
+  if (board) {
+    board.innerHTML = ranking.map((player, index) => `
+      <div class="flex justify-between items-center p-2 rounded-lg ${player.isPlayer ? 'bg-amber-500/20 border border-amber-500/60 text-amber-300' : 'bg-slate-800/80 text-slate-300'}">
+        <span class="min-w-0 truncate"><b class="mr-2">${index === 0 ? '👑 1' : index + 1}</b>${player.name}${player.isPlayer ? '（你）' : ''}</span>
+        <span class="font-black text-amber-400 shrink-0 ml-2">${player.score} 分</span>
+      </div>
+    `).join('');
+  }
+  const leaderboard = document.getElementById('contestLeaderboard');
+  if (leaderboard) leaderboard.style.display = 'flex';
+  return ranking;
+}
+
 // 1. 打開三分大賽 (每賽季限玩一次，選定開打後不可更換球員)
 function openThreePointContest() {
   const modal = document.getElementById('threePtModal');
@@ -32775,7 +32813,9 @@ function openThreePointContest() {
   updateMeterDifficulty(threePtState.shooter);
 
   const lb = document.getElementById('contestLeaderboard');
-  if (lb) lb.style.display = 'none';
+  const savedRanking = state.seasonJourney?.allStarWeekend?.contestResult || state.season?.threePtContestRanking || [];
+  if (isSeasonPlayed && savedRanking.length) renderThreePointContestRanking(savedRanking, { restored: true });
+  else if (lb) lb.style.display = 'none';
 
   const btnStart = document.getElementById('btnStartContest');
   const btnShoot = document.getElementById('btnReleaseShot');
@@ -33089,6 +33129,12 @@ function finishContest() {
     weekend.threePointChampionKey = aiShooters[0].key || null;
     weekend.threePointChampionName = aiShooters[0].name.replace(' (你)', '');
   }
+  state.season.threePtContestRanking = aiShooters.map(player => ({
+    key: player.key || '',
+    name: String(player.name || '').replace(' (你)', ''),
+    score: Number(player.score || 0),
+    isPlayer: !!player.isPlayer
+  })).sort((a, b) => b.score - a.score || a.name.localeCompare(b.name, 'en'));
   if (isChamp && typeof window.awardThreePointChampion === 'function') window.awardThreePointChampion(playerName, myScore, aiShooters);
   saveGame();
 
@@ -33123,6 +33169,7 @@ function finishContest() {
 
   const lb = document.getElementById('contestLeaderboard');
   if (lb) lb.style.display = 'flex';
+  renderThreePointContestRanking(state.season.threePtContestRanking);
 }
 
 // 7. 空白鍵監聽
