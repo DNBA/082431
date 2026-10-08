@@ -38,6 +38,7 @@
     <link rel="stylesheet" href="./css/learning-tools.css?v=20261005-learning-1">
     <link rel="stylesheet" href="./css/season-standings.css?v=20261005-standings-1">
     <link rel="stylesheet" href="./css/season-league.css?v=20261007-league-1">
+    <link rel="stylesheet" href="./css/three-point-contest.css?v=20261008-mobile-ux-1">
     <link rel="stylesheet" href="./css/theme-controls.css?v=20261005-theme-2">
     <link id="tqThemeAuto" rel="stylesheet" href="./css/system-theme.css?v=20261005-theme-2">
     <link id="tqThemeLight" rel="stylesheet" href="./css/system-theme-light.css?v=20261005-theme-2" media="not all" disabled>
@@ -1462,7 +1463,7 @@
   <script src="./js/focus-timer.js?v=20261003-split-focus-2"></script>
   <script src="./js/core/save-backups.js?v=20261005-learning-1"></script>
   <script src="./js/box-score-integrity.js?v=20261007-integrity-1"></script>
-  <script src="./js/app.js?v=20261008-three-point-refresh"></script>
+  <script src="./js/app.js?v=20261008-three-point-ux-2"></script>
 <!-- 🏀 季後賽逐場動態播報彈窗 -->
 <div id="playoffSeriesModal" onclick="if(event.target === this && !document.getElementById('posNextRoundBtn').disabled) closeSeriesAndShowBoxScore()" class="fixed inset-0 bg-slate-950/90 backdrop-blur-md z-50 hidden flex items-end sm:items-center justify-center p-3 sm:p-4 ios-safe-modal">
   <div class="bg-slate-900 border border-amber-500/50 rounded-3xl w-full max-w-lg p-6 shadow-2xl space-y-4 relative animate-modal-in">
@@ -1682,136 +1683,74 @@
     </button>
   </div>
 </div>
-<!-- 🎯 全明星三分球大賽彈窗 (響應式 Flex 版) -->
-<div id="threePtModal" onclick="if(event.target === this) closeThreePointContest()" class="fixed inset-0 z-50 bg-black/85 backdrop-blur-md hidden items-center justify-center p-2.5 sm:p-4 select-none ios-safe-modal overflow-y-auto">
-  <div class="bg-slate-900 border-2 border-amber-500/50 rounded-2xl max-w-lg w-full p-3 sm:p-5 text-white shadow-2xl relative overflow-y-auto flex flex-col items-center max-h-[calc(100dvh-1.5rem)]">
-    
-    <!-- 頂部標題與選手切換下拉選單 -->
-    <div class="w-full flex justify-between items-center border-b border-slate-700/80 pb-3">
-      <div class="flex items-center gap-2">
-        <span class="text-2xl">🎯</span>
-        <div>
-          <div class="flex items-center gap-2">
-            <h3 class="text-lg font-black text-amber-400">NBA 全明星三分球大賽</h3>
-            <span class="text-[10px] bg-amber-500/15 text-amber-300 border border-amber-500/30 px-1.5 py-0.5 rounded font-mono font-bold">每季限玩一次</span>
-          </div>
-          <!-- 允許自選出戰射手 (選定開打即鎖定不可更換) -->
-          <div class="flex items-center gap-1.5 mt-1">
-            <span class="text-xs text-slate-400 whitespace-nowrap">參賽射手:</span>
-            <select id="threePtShooterSelect" onchange="onShooterSelectChange(this.value)" class="bg-slate-800 text-amber-300 text-xs font-bold rounded px-2 py-0.5 border border-slate-700 focus:outline-none transition-all">
-              <!-- JS 動態填入你隊內的球員 -->
-            </select>
-            <span id="threePtShooterLockedBadge" class="hidden text-[10px] text-amber-400 bg-amber-950/80 border border-amber-500/50 px-1.5 py-0.5 rounded font-bold whitespace-nowrap">🔒 已鎖定</span>
-          </div>
-        </div>
+<!-- 🎯 全明星三分球大賽彈窗 -->
+<div id="threePtModal" onclick="if(event.target === this) closeThreePointContest()" class="three-point-contest fixed inset-0 z-50 hidden items-end sm:items-center justify-center select-none ios-safe-modal">
+  <section class="tpc-shell" aria-labelledby="threePtContestTitle">
+    <header class="tpc-header">
+      <div class="tpc-heading">
+        <span class="tpc-kicker">NBA ALL-STAR</span>
+        <h3 id="threePtContestTitle">3-POINT CONTEST</h3>
       </div>
-      <button onclick="closeThreePointContest()" class="text-slate-400 hover:text-white modal-close-btn-touch text-xl font-bold -mr-2 -mt-2">✕</button>
+      <button type="button" onclick="closeThreePointContest()" class="tpc-close" aria-label="關閉三分球大賽">✕</button>
+    </header>
+
+    <div class="tpc-player-row">
+      <label for="threePtShooterSelect">出戰射手</label>
+      <select id="threePtShooterSelect" onchange="onShooterSelectChange(this.value)"></select>
+      <span id="threePtShooterLockedBadge" class="hidden tpc-lock">🔒 已鎖定</span>
     </div>
 
-    <div class="w-full mt-2.5 flex items-center justify-between gap-2 text-[10px] font-black tracking-wide">
-      <span id="threePtRoundLabel" class="text-blue-300">ROUND 1 · 8 SHOOTERS</span>
-      <span id="threePtCutLine" class="text-slate-400">TOP 3 ADVANCE</span>
-      <span class="text-rose-300">⏱ <b id="threePtTimer">70</b>s</span>
+    <div class="tpc-hud">
+      <div><span>STAGE</span><strong id="threePtRoundLabel">ROUND 1 · 8 SHOOTERS</strong></div>
+      <div class="tpc-score"><span>SCORE</span><strong><b id="threePtScore">0</b><small>/40</small></strong></div>
+      <div class="tpc-clock"><span>TIME</span><strong><b id="threePtTimer">50</b><small>s</small></strong></div>
     </div>
+    <div class="tpc-cutline"><span id="threePtCutLine">TOP 3 ADVANCE</span><span><b id="threePtBallsLeft">27</b> SHOTS LEFT</span></div>
 
-    <div id="threePtParticipantStrip" class="w-full mt-2 flex gap-1.5 overflow-x-auto pb-1 text-[10px]" aria-label="三分球大賽參賽名單"></div>
+    <div id="threePtParticipantStrip" class="tpc-participants" aria-label="三分球大賽參賽名單"></div>
 
-    <label class="w-full mt-2 flex items-center justify-between gap-3 rounded-xl border border-slate-800 bg-slate-950/80 px-3 py-2 text-[11px]">
-      <span class="font-bold text-slate-300">花球架位置</span>
-      <select id="threePtMoneyRackSelect" onchange="onThreePtMoneyRackChange(this.value)" class="min-w-0 rounded-lg border border-amber-500/40 bg-slate-900 px-2 py-1 text-right font-black text-amber-300 focus:outline-none">
+    <div class="tpc-setup">
+      <div><span>CHOOSE MONEY RACK</span><small>整架花球，每球 2 分</small></div>
+      <select id="threePtMoneyRackSelect" onchange="onThreePtMoneyRackChange(this.value)">
         <option value="0">左底角</option><option value="1">左 45°</option><option value="2">弧頂</option><option value="3">右 45°</option><option value="4" selected>右底角</option>
       </select>
-    </label>
-
-    <!-- 5 個投籃點球架進度 -->
-    <div class="w-full mt-2.5 bg-slate-950/90 py-2 px-1 sm:px-2.5 rounded-xl border border-slate-800 shadow-inner">
-      <div class="flex w-full justify-between items-center text-center text-[10px] sm:text-[11px] font-bold text-slate-400 mb-1.5 whitespace-nowrap gap-1">
-        <span class="flex-1 text-center">左底角</span>
-        <span class="flex-1 text-center">左45°</span>
-        <span class="flex-1 text-center">弧頂</span>
-        <span class="flex-1 text-center">右45°</span>
-        <span class="flex-1 text-center">右底角</span>
-      </div>
-      <!-- 5 個響應式 Flex 等寬球架 -->
-      <div id="racksContainer" class="flex w-full items-stretch justify-between gap-1 sm:gap-1.5">
-        <!-- JS 動態填入 5 個球架 -->
-      </div>
     </div>
 
-    <!-- 即時得分板與反饋 -->
-    <div class="flex justify-between items-center w-full my-4 px-2">
-      <div>
-        <span class="text-xs text-slate-400">目前總分</span>
-        <div class="text-3xl font-black text-amber-400"><span id="threePtScore">0</span> <span class="text-sm font-normal text-slate-400">/ 40分</span></div>
-      </div>
-      <div id="shotFeedback" class="text-center font-black text-base text-emerald-400 tracking-wider">
-        準備就緒！
-      </div>
-      <div class="text-right">
-        <span class="text-xs text-slate-400">剩餘球數</span>
-        <div class="text-2xl font-bold text-slate-300"><span id="threePtBallsLeft">27</span> 球</div>
-      </div>
+    <div class="tpc-court">
+      <div class="tpc-rack-labels"><span>左底角</span><span>左45°</span><span>弧頂</span><span>右45°</span><span>右底角</span></div>
+      <div id="racksContainer" class="tpc-racks"></div>
     </div>
 
- <!-- 🏀 NBA LIVE 風格投籃條 (分區視覺動態條) -->
-    <div class="w-full bg-slate-950 p-4 rounded-xl border border-slate-800 flex flex-col items-center">
-      <div class="flex justify-between w-full max-w-sm px-1 mb-2 text-xs font-bold">
-        <span class="text-slate-400">投籃時機 (Shot Timing)</span>
-        <span id="shooterTierBadge" class="text-amber-400 bg-amber-950/60 border border-amber-500/40 px-2 py-0.5 rounded text-[11px]">
-          神射手 (綠區極大)
-        </span>
-      </div>
-      
-      <!-- 投籃條本體槽 (底色為紅色死區，右側依評分放置黃區與綠區) -->
-      <div class="w-full max-w-sm h-8 bg-slate-900 rounded-full relative overflow-hidden border-2 border-slate-700 shadow-inner flex items-center">
-        <!-- 🔴 紅色打鐵底色 (預設全底) -->
-        <div class="absolute inset-0 bg-gradient-to-r from-rose-950/60 via-slate-900 to-rose-950/60"></div>
-        
-        <!-- 🟡 黃色機會區 (依三分評分動態改變寬度與位置) -->
-        <div id="shotMeterYellowZone" class="absolute top-0 bottom-0 bg-amber-400/90 shadow-[0_0_10px_#f59e0b] z-1 transition-all duration-300"></div>
+    <div id="shotFeedback" class="tpc-feedback">選擇花球架後開始挑戰</div>
 
-        <!-- 🟢 綠色必進區 (包在黃區正中心頂點，依評分動態縮放) -->
-        <div id="shotMeterGreenZone" class="absolute top-0 bottom-0 bg-emerald-400 shadow-[0_0_14px_#34d399] z-2 transition-all duration-300"></div>
-
-        <!-- ⚪ 充能滑動指針 (白色發光垂直針，精準判定) -->
-        <div id="shotMeterCursor" class="absolute top-0 bottom-0 w-2.5 bg-white rounded-full shadow-[0_0_8px_#ffffff] z-10 -ml-1 transition-none"></div>
+    <div class="tpc-meter-card">
+      <div class="tpc-meter-heading"><span>SHOT TIMING</span><span id="shooterTierBadge">射手狀態</span></div>
+      <div class="tpc-meter">
+        <div class="tpc-meter-base"></div>
+        <div id="shotMeterYellowZone" class="tpc-meter-yellow"></div>
+        <div id="shotMeterGreenZone" class="tpc-meter-green"></div>
+        <div id="shotMeterCursor" class="tpc-meter-cursor"></div>
       </div>
-
-      <!-- 底部圖例標籤 -->
-      <div class="w-full max-w-sm flex justify-between text-[11px] font-bold mt-1.5 px-1">
-        <span class="text-rose-400">🔴 早/晚 (打鐵)</span>
-        <span class="text-amber-400">🟡 機會區 (<span id="yellowChanceText">55%</span>)</span>
-        <span class="text-emerald-400">🟢 完美 (100% 必進)</span>
-      </div>
+      <div class="tpc-meter-legend"><span>MISS</span><span>GOOD <b id="yellowChanceText">55%</b></span><span>PERFECT</span></div>
     </div>
 
-    <!-- 出手控制按鈕 -->
-    <div class="w-full mt-4 flex gap-3">
-      <button id="btnStartContest" onclick="startThreePointRound()" class="flex-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black py-3 rounded-xl shadow-lg transition-transform active:scale-95 text-base">
-        開始挑戰 (Start Round)
-      </button>
-      <button id="btnReleaseShot" onclick="triggerShotRelease()" disabled class="flex-1 bg-emerald-600 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-emerald-500 text-white font-black py-3 rounded-xl shadow-lg transition-transform active:scale-95 text-base">
-        🟢 出手 (SHOOT)!
-      </button>
+    <div class="tpc-actions">
+      <button id="btnStartContest" type="button" onclick="startThreePointRound()" class="tpc-start">開始第一輪</button>
+      <button id="btnReleaseShot" type="button" onclick="triggerShotRelease()" disabled class="tpc-shoot">SHOOT</button>
     </div>
 
-    <!-- 🏆 排行榜結算面板 (加上 z-30 最上層，保證乾淨遮蓋不被黃條阻擋) -->
-    <div id="contestLeaderboard" class="hidden absolute inset-0 z-30 bg-slate-950/95 flex flex-col items-center justify-center p-6 text-center">
-      <div id="contestTrophyIcon" class="text-5xl mb-2">🏆</div>
-      <h2 id="contestResultTitle" class="text-2xl font-black text-amber-400">大賽結算</h2>
-      <p id="contestResultSub" class="text-sm text-slate-300 mt-1">恭喜打破紀錄！</p>
-      
-      <!-- 成績榜單 -->
-      <div class="w-full max-w-xs bg-slate-900 border border-slate-800 rounded-xl p-3 my-4 space-y-2 text-sm text-left font-bold" id="leaderboardRows">
-        <!-- JS 動態插入排名 -->
+    <div id="contestLeaderboard" class="tpc-results hidden" aria-live="polite">
+      <div class="tpc-results-scroll">
+        <div id="contestTrophyIcon" class="tpc-results-icon">🏆</div>
+        <h2 id="contestResultTitle">大賽結算</h2>
+        <p id="contestResultSub">前 3 名晉級決賽</p>
+        <div id="leaderboardRows" class="tpc-ranking"></div>
       </div>
-
-      <button id="contestResultAction" onclick="closeThreePointContest()" class="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 text-slate-950 font-black px-8 py-2.5 rounded-xl shadow-lg cursor-pointer transition-transform active:scale-95 text-sm sm:text-base">
-        關閉 (Close)
-      </button>
+      <div class="tpc-results-action">
+        <button id="contestResultAction" type="button" onclick="handleThreePointResultAction()">關閉</button>
+      </div>
     </div>
-
-  </div>
+  </section>
 </div>
 
 <!-- =====================================================

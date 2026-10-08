@@ -32562,6 +32562,7 @@ const threePtState = {
   clockIntervalId: null,
   roundEndsAt: 0,
   roundFinishing: false,
+  pendingResultAction: 'close',
   greenStart: 85,
   greenEnd: 95,
   yellowStart: 75,
@@ -32596,11 +32597,12 @@ function stopThreePointClock() {
 
 function startThreePointClock() {
   stopThreePointClock();
-  threePtState.roundEndsAt = Date.now() + 70000;
+  threePtState.roundEndsAt = Date.now() + 50000;
   const updateClock = () => {
     const seconds = Math.max(0, Math.ceil((threePtState.roundEndsAt - Date.now()) / 1000));
     const timer = document.getElementById('threePtTimer');
     if (timer) timer.innerText = String(seconds);
+    timer?.closest('.tpc-clock')?.classList.toggle('is-urgent', seconds <= 10);
     if (seconds <= 0 && threePtState.active && !threePtState.roundFinishing) {
       threePtState.active = false;
       cancelAnimationFrame(threePtState.animFrameId);
@@ -32610,6 +32612,11 @@ function startThreePointClock() {
   };
   updateClock();
   threePtState.clockIntervalId = setInterval(updateClock, 200);
+}
+
+function handleThreePointResultAction() {
+  if (threePtState.pendingResultAction === 'final') startThreePointFinal();
+  else closeThreePointContest();
 }
 
 function getThreePointParticipants() {
@@ -32828,15 +32835,18 @@ function renderThreePointContestRanking(results, options = {}) {
   const champion = ranking[0];
   const playerResult = ranking.find(player => player.isPlayer);
   const playerRank = playerResult ? ranking.indexOf(playerResult) + 1 : 0;
+  const playerEliminated = !!playerResult && playerResult.finalScore == null && playerRank > 3;
   const trophyEl = document.getElementById('contestTrophyIcon');
-  if (trophyEl) trophyEl.innerText = champion.isPlayer ? '🏆' : '🏀';
+  if (trophyEl) trophyEl.innerText = champion.isPlayer ? '🏆' : (playerEliminated ? '🏁' : '🥈');
   const titleEl = document.getElementById('contestResultTitle');
-  if (titleEl) titleEl.innerText = champion.isPlayer ? '🎉 勇奪三分球大賽冠軍！' : '三分球大賽最終排名';
+  if (titleEl) titleEl.innerText = champion.isPlayer
+    ? '三分球大賽冠軍！'
+    : (playerEliminated ? `第一輪第 ${playerRank} 名 · 未晉級` : `決賽第 ${playerRank} 名`);
   const subEl = document.getElementById('contestResultSub');
   if (subEl) {
     subEl.innerText = champion.isPlayer
       ? `${champion.name} 以 ${champion.score} 分奪冠！`
-      : `${champion.name} 以 ${champion.score} 分奪冠${playerResult ? `；你的球員第 ${playerRank} 名（${playerResult.score} 分）` : ''}。`;
+      : `${playerEliminated ? '第一輪只有前 3 名晉級。' : ''} ${champion.name} 以決賽 ${champion.finalScore ?? champion.score} 分奪冠。`;
   }
   const board = document.getElementById('leaderboardRows');
   if (board) {
@@ -32851,8 +32861,8 @@ function renderThreePointContestRanking(results, options = {}) {
   if (leaderboard) leaderboard.style.display = 'flex';
   const action = document.getElementById('contestResultAction');
   if (action && !options.keepAction) {
-    action.innerText = '關閉 (Close)';
-    action.onclick = closeThreePointContest;
+    threePtState.pendingResultAction = 'close';
+    action.innerText = '完成 · 返回賽季';
   }
   return ranking;
 }
@@ -32880,6 +32890,8 @@ function openThreePointContest() {
   threePtState.roundOneResults = [];
   threePtState.finalists = [];
   threePtState.roundFinishing = false;
+  threePtState.pendingResultAction = 'close';
+  document.querySelector('.tpc-actions')?.classList.remove('is-playing');
   const selectElem = document.getElementById('threePtShooterSelect');
   const lockedBadge = document.getElementById('threePtShooterLockedBadge');
   if (selectElem) selectElem.innerHTML = '';
@@ -32960,7 +32972,7 @@ function openThreePointContest() {
   const cursor = document.getElementById('shotMeterCursor');
   if (cursor) cursor.style.left = '0%';
   const timer = document.getElementById('threePtTimer');
-  if (timer) timer.innerText = '70';
+  if (timer) timer.innerText = '50';
 
   renderRacksInitial();
 
@@ -32968,13 +32980,13 @@ function openThreePointContest() {
   if (fb) {
     if (isSeasonPlayed) {
       fb.innerText = `⚠️ 本賽季三分大賽已出戰（得分: ${state.season.threePtContestScore ?? 0} 分）！每賽季限玩一次`;
-      fb.className = 'text-center font-bold text-xs sm:text-sm text-amber-400 tracking-wide';
+      fb.className = 'tpc-feedback is-money';
     } else if (lockedShooterName) {
       fb.innerText = `🔒 已選定 ${lockedShooterName} 出戰，準備就緒！`;
-      fb.className = 'text-center font-bold text-xs sm:text-sm text-emerald-400 tracking-wide';
+      fb.className = 'tpc-feedback is-hit';
     } else {
       fb.innerText = '請選定出戰射手（點擊開始後即鎖定不可更換）';
-      fb.className = 'text-center font-black text-xs sm:text-sm text-slate-300 tracking-wide';
+      fb.className = 'tpc-feedback';
     }
   }
 }
@@ -33001,6 +33013,7 @@ function closeThreePointContest() {
   cancelAnimationFrame(threePtState.animFrameId);
   stopThreePointClock();
   threePtState.active = false;
+  threePtState.pendingResultAction = 'close';
   const lb = document.getElementById('contestLeaderboard');
   if (lb) lb.style.display = 'none';
   const modal = document.getElementById('threePtModal');
@@ -33020,22 +33033,18 @@ function renderRacksInitial() {
   for (let r = 0; r < 5; r++) {
     const isMoneyRack = (r === threePtState.moneyRackIndex);
     const rackDiv = document.createElement('div');
-    rackDiv.className = `flex-1 flex flex-col items-center justify-center py-1 sm:py-1.5 px-0.5 rounded-lg border transition-all duration-200 min-w-0 ${r === 0 ? 'border-amber-400 bg-amber-500/15 shadow-[0_0_8px_rgba(245,158,11,0.2)]' : 'border-slate-800 bg-slate-900/60'}`;
+    rackDiv.className = `tpc-rack${r === 0 ? ' is-active' : ''}${isMoneyRack ? ' is-money' : ''}`;
     rackDiv.id = `rackBox_${r}`;
 
-    let ballsHtml = '<div class="flex items-center justify-center gap-0.5 sm:gap-1 w-full overflow-hidden">';
+    let ballsHtml = '<div class="tpc-ball-row">';
     for (let b = 0; b < 5; b++) {
       const isMoneyBall = isMoneyRack || (b === 4);
-      const ballBg = isMoneyBall 
-        ? 'bg-gradient-to-r from-blue-500 via-white to-red-500 shadow-[0_0_4px_rgba(59,130,246,0.5)]' 
-        : 'bg-amber-600';
-
-      ballsHtml += `<div id="ball_${r}_${b}" class="w-2.5 h-2.5 sm:w-3 sm:h-3 min-w-[9px] min-h-[9px] sm:min-w-[12px] sm:min-h-[12px] aspect-square rounded-full ${ballBg} border border-black/60 opacity-40 flex-shrink-0 transition-all duration-150"></div>`;
+      ballsHtml += `<div id="ball_${r}_${b}" class="tpc-ball${isMoneyBall ? ' is-money' : ''}"></div>`;
     }
     ballsHtml += '</div>';
     const deepIndex = r === 1 ? 0 : (r === 3 ? 1 : null);
-    const deepBall = deepIndex == null ? '<span class="mt-1 text-[7px] text-transparent">3PT</span>' : `<div class="mt-1 flex items-center gap-0.5"><div id="deep_${deepIndex}" class="w-3 h-3 rounded-full border border-cyan-300/70 bg-cyan-500/50 opacity-40"></div><span class="text-[7px] font-black text-cyan-300">3PT</span></div>`;
-    rackDiv.innerHTML = `${isMoneyRack ? '<span class="mb-1 text-[7px] font-black text-amber-300">MONEY</span>' : '<span class="mb-1 text-[7px] text-slate-600">RACK</span>'}${ballsHtml}${deepBall}`;
+    const deepBall = deepIndex == null ? '<div class="tpc-deep-spacer"></div>' : `<div class="tpc-deep-wrap"><div id="deep_${deepIndex}" class="tpc-deep-ball"></div><span>3PT</span></div>`;
+    rackDiv.innerHTML = `<span class="tpc-rack-tag">${isMoneyRack ? 'MONEY' : 'RACK'}</span>${ballsHtml}${deepBall}`;
     container.appendChild(rackDiv);
   }
 
@@ -33046,7 +33055,7 @@ function renderRacksInitial() {
   const fb = document.getElementById('shotFeedback');
   if (fb) {
     fb.innerText = threePtState.round === 'final' ? '決賽分數歸零，準備爭冠！' : '準備就緒！前 3 名晉級決賽';
-    fb.className = 'text-center font-black text-base text-slate-400 tracking-wider';
+    fb.className = 'tpc-feedback';
   }
   updateThreePointRoundUi();
 }
@@ -33101,6 +33110,7 @@ function startThreePointManualRound(round) {
   threePtState.shotResults = [];
   threePtState.score = 0;
   threePtState.meterProgress = 0;
+  document.querySelector('.tpc-actions')?.classList.add('is-playing');
   renderRacksInitial();
   renderThreePointParticipantStrip(threePtState.round === 'final' ? null : []);
   updateThreePointRoundUi();
@@ -33146,22 +33156,17 @@ function triggerShotRelease() {
   
   let hit = false;
   let feedbackText = "";
-  let feedbackClass = "";
-
   if (isGreen) {
     hit = true;
     feedbackText = "🟢 PERFECT GREEN! (100% 空心破網!)";
-    feedbackClass = "text-emerald-400 drop-shadow-[0_0_10px_#10b981]";
   } else if (isYellow) {
     hit = Math.random() < threePtState.yellowHitRate;
-    feedbackText = hit 
-      ? `🟡 GOOD RELEASE (命中! 把握黃區機會)` 
+    feedbackText = hit
+      ? `🟡 GOOD RELEASE (命中! 把握黃區機會)`
       : `🟡 SLIGHTLY OFF (黃區涮框打鐵)`;
-    feedbackClass = hit ? "text-amber-300 drop-shadow-[0_0_6px_#f59e0b]" : "text-slate-400";
   } else {
     hit = false;
     feedbackText = "🔴 BAD TIMING (時機偏離，重重打鐵!)";
-    feedbackClass = "text-rose-500";
   }
 
   const shot = threePtState.shotPlan[threePtState.shotIndex];
@@ -33176,27 +33181,22 @@ function triggerShotRelease() {
   const fb = document.getElementById('shotFeedback');
   if (fb) {
     fb.innerText = feedbackText;
-    fb.className = `text-center font-black text-base tracking-wider ${feedbackClass}`;
+    fb.className = `tpc-feedback ${hit ? 'is-hit' : 'is-miss'}`;
   }
 
   if (shot.kind === 'deep') {
     feedbackText = hit ? '🔵 STARRY RANGE！超遠三分命中（+3）' : '🔵 STARRY RANGE 偏出';
-    if (fb) fb.innerText = feedbackText;
+    if (fb) { fb.innerText = feedbackText; fb.className = `tpc-feedback is-deep${hit ? ' is-hit' : ' is-miss'}`; }
   } else if (shot.kind === 'money' && hit) {
     feedbackText = '🔴 MONEY BALL 命中（+2）';
-    if (fb) fb.innerText = feedbackText;
+    if (fb) { fb.innerText = feedbackText; fb.className = 'tpc-feedback is-money'; }
   }
 
   const ballDot = shot.kind === 'deep'
     ? document.getElementById(`deep_${shot.rackIndex === 1 ? 0 : 1}`)
     : document.getElementById(`ball_${shot.rackIndex}_${shot.ballIndex}`);
   if (ballDot) {
-    const ballBase = "w-2.5 h-2.5 sm:w-3 sm:h-3 min-w-[9px] min-h-[9px] sm:min-w-[12px] sm:min-h-[12px] aspect-square rounded-full border border-black/60 flex-shrink-0 transition-all duration-150";
-    if (hit) {
-      ballDot.className = `${ballBase} bg-emerald-400 shadow-[0_0_8px_#34d399] scale-110 opacity-100`;
-    } else {
-      ballDot.className = `${ballBase} bg-slate-700/60 opacity-25`;
-    }
+    ballDot.classList.add(hit ? 'is-hit' : 'is-miss');
   }
 
   // 下一球
@@ -33207,13 +33207,9 @@ function triggerShotRelease() {
   threePtState.currentBall = nextShot?.ballIndex ?? 0;
   if (nextShot && nextShot.rackIndex !== previousRack) {
     const oldRack = document.getElementById(`rackBox_${previousRack}`);
-    if (oldRack) {
-      oldRack.className = 'flex-1 flex flex-col items-center justify-center py-1 sm:py-1.5 px-0.5 rounded-lg border transition-all duration-200 min-w-0 border-slate-800 bg-slate-900/60';
-    }
+    if (oldRack) oldRack.classList.remove('is-active');
     const newRack = document.getElementById(`rackBox_${nextShot.rackIndex}`);
-    if (newRack) {
-      newRack.className = 'flex-1 flex flex-col items-center justify-center py-1 sm:py-1.5 px-0.5 rounded-lg border transition-all duration-200 min-w-0 border-amber-400 bg-amber-500/15 shadow-[0_0_8px_rgba(245,158,11,0.2)]';
-    }
+    if (newRack) newRack.classList.add('is-active');
   }
 
   const totalBallsLeft = threePtState.shotPlan.length - threePtState.shotIndex;
@@ -33306,17 +33302,20 @@ function showThreePointFinalists(playerRank) {
   const action = document.getElementById('contestResultAction');
   if (trophy) trophy.innerText = '🔥';
   if (title) title.innerText = `第一輪第 ${playerRank} 名 · 晉級決賽`;
-  if (sub) sub.innerText = '決賽 3 人分數歸零，依第一輪排名反向出場。';
+  if (sub) sub.innerText = '你已進入 TOP 3。決賽分數歸零，按下方按鈕繼續。';
   if (board) board.innerHTML = threePtState.roundOneResults.map((player, index) => `
     <div class="flex items-center justify-between rounded-lg p-2 ${player.isPlayer ? 'border border-amber-500/60 bg-amber-500/20 text-amber-300' : 'bg-slate-800/80 text-slate-300'}">
       <span><b class="mr-2">${index + 1}</b>${player.name}${player.isPlayer ? '（你）' : ''}${index < 3 ? ' ✓' : ''}</span><strong>${player.score} 分</strong>
     </div>`).join('');
   if (action) {
-    action.innerText = '進入決賽 (FINAL)';
-    action.onclick = startThreePointFinal;
+    threePtState.pendingResultAction = 'final';
+    action.innerText = '進入決賽 · FINAL ROUND →';
   }
   const leaderboard = document.getElementById('contestLeaderboard');
-  if (leaderboard) leaderboard.style.display = 'flex';
+  if (leaderboard) {
+    leaderboard.style.display = 'flex';
+    leaderboard.querySelector('.tpc-results-scroll')?.scrollTo({ top: 0 });
+  }
 }
 
 function completeCpuThreePointFinal() {
@@ -33381,7 +33380,7 @@ function finalizeThreePointContest(finalResults) {
   const feedback = document.getElementById('shotFeedback');
   if (feedback) {
     feedback.innerText = playerResult?.finalScore != null ? `決賽 ${playerScore} 分 · 最終第 ${playerResult.rank} 名` : `第一輪 ${playerScore} 分 · 未晉級決賽`;
-    feedback.className = 'text-center font-bold text-xs sm:text-sm text-amber-400 tracking-wide';
+    feedback.className = 'tpc-feedback is-money';
   }
   renderThreePointContestRanking(state.season.threePtContestRanking);
 }
