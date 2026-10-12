@@ -209,6 +209,7 @@
       script.featuredPlayerCardId = featured?.cardId || '';
       script.coldPlayerName = cold && cold.name !== script.featuredPlayerName ? cold.name : '';
     }
+    window.DynastyEra?.enhanceGame(state, state.seasonJourney, game, script);
     return script;
   }
 
@@ -876,7 +877,10 @@
     state.seasonEnergy.current = Math.max(0, Number(state.seasonEnergy.current));
     state.seasonEnergy.lastRegenAt = Number(state.seasonEnergy.lastRegenAt) || now();
     applyEnergyRegen();
-    (state.inventory || []).forEach(ensureCardJourney);
+    (state.inventory || []).forEach(card => {
+      ensureCardJourney(card);
+      window.PlayerProgression?.ensureCard(card);
+    });
   }
 
   function applyEnergyRegen() {
@@ -1084,6 +1088,8 @@
 
   function renderJourneyGameWindow() {
     const journey = state.seasonJourney;
+    window.PlayerProgression?.ensureState(state);
+    window.DynastyEra?.ensure(state);
     const host = document.getElementById('sjGameWindow');
     if (!host) return;
     const currentIndex = journey.completed ? 81 : clamp(journey.gameIndex, 0, 81);
@@ -1298,6 +1304,36 @@
       <div id="sjMonthlyAwardModal" class="sj-month-modal hidden" role="dialog" aria-modal="true" aria-labelledby="sjMonthlyModalLabel"><section class="sj-month-modal__card"><div class="sj-month-modal__eyebrow">MONTH COMPLETE</div><h3 id="sjMonthlyModalLabel">MONTHLY AWARDS</h3><div id="sjMonthlyModalWinners" class="sj-month-modal__winners"></div><div class="sj-month-modal__actions"><button type="button" onclick="closeMonthlyAwardModal(true)">VIEW AWARDS</button><button type="button" onclick="closeMonthlyAwardModal(false)">CONTINUE SEASON</button></div></section></div>`;
   }
 
+  function renderDynastyAndProject() {
+    const panel = document.querySelector('[data-sj-view-panel="journey"]');
+    if (!panel) return;
+    let host = document.getElementById('sjDynastyProject');
+    if (!host) {
+      host = document.createElement('section');
+      host.id = 'sjDynastyProject';
+      host.className = 'sj-section-card';
+      panel.insertBefore(host, panel.firstChild);
+    }
+    const dynasty = window.DynastyEra?.ensure(state);
+    const game = currentGameInfo();
+    if (dynasty?.active && game) window.DynastyEra.enhanceGame(state, state.seasonJourney, game, null);
+    const project = (state.inventory || []).filter(card => !window.PlayerProgression?.specialCard(card) && card.rarity !== 'UR').sort((a,b) => Number(b.legacy?.games || 0) - Number(a.legacy?.games || 0))[0];
+    const scouting = game?.dynastyScouting;
+    if (!dynasty?.active && !project) { host.classList.add('hidden'); return; }
+    host.classList.remove('hidden');
+    host.innerHTML = `${dynasty?.active ? `<div class="sj-section-heading"><div><h3>THREE-PEAT CHASE</h3><p>THE LEAGUE IS COMING FOR YOU.</p></div><span>DYNASTY ERA</span></div>${scouting ? `<div class="mt-3 rounded-xl border border-rose-500/25 bg-rose-950/20 p-3 text-[10px]"><b class="text-rose-300">OPPONENT SCOUTING · ${safeText(game.opponent)}</b><p class="mt-1 text-slate-300">PRIMARY FOCUS · ${safeText(scouting.primaryFocus || 'YOUR SYSTEM')}</p><p class="text-amber-300">EXPECTED COUNTER · ${safeText(scouting.counter.label)}</p><div class="mt-2 grid grid-cols-3 gap-1">${scouting.counter.response.map(option => `<button type="button" onclick="selectDynastyResponse('${safeText(option)}')" class="rounded-lg border ${scouting.response === option ? 'border-amber-400 bg-amber-500/20 text-amber-200' : 'border-slate-700 bg-slate-900 text-slate-300'} p-2 text-[8px] font-black">${safeText(option)}</button>`).join('')}</div></div>` : ''}` : ''}${project ? `<button type="button" onclick="openPromotionCenter('${safeText(project.cardId)}')" class="mt-3 flex w-full items-center justify-between rounded-xl border border-amber-400/20 bg-amber-500/5 p-3 text-left"><span><small class="block text-[9px] tracking-[.14em] text-amber-400">PLAYER PROJECT</small><b class="text-xs text-white">${safeText(project.name)} · ${safeText(project.rarity)} → ${safeText(window.PlayerProgression.requirement(project)?.next || 'MAX')}</b></span><span class="text-amber-300">VIEW ›</span></button>` : ''}`;
+  }
+
+  function selectDynastyResponse(option) {
+    const game = currentGameInfo();
+    if (!game?.dynastyScouting || !game.dynastyScouting.counter.response.includes(option)) return;
+    game.dynastyScouting.response = option;
+    const script = ensureGameScript(game, calculateTeamOverall().overall, activeSeasonCards());
+    if (script) script.dynastyResponse = option;
+    saveGame();
+    renderDynastyAndProject();
+  }
+
   function renderJourneySeasonTab() {
     ensureJourneyState();
     if (!document.querySelector('.sj-view-tabs')) renderJourneyShell();
@@ -1350,6 +1386,7 @@
     renderLeaguePanel();
     renderAwardsPanel();
     renderSeasonCollections();
+    renderDynastyAndProject();
     renderEnergy();
     showSeasonView(currentSeasonView);
     window.requestAnimationFrame?.(maybeOpenMonthlyAwardModal);
@@ -2878,6 +2915,9 @@
       card.legacy.reb = (card.legacy.reb || 0) + (stat.reb || 0);
       card.legacy.ast = (card.legacy.ast || 0) + (stat.ast || 0);
     });
+    item.promotionRewards = window.PlayerProgression?.awardGame(state, activeSeasonCards(), gameData.boxScore, {
+      type: dynamicSpecial(item)?.key || 'regular', game: item.game
+    }) || [];
     triggerSpecialGameEvent(item, gameData, autoMode.running);
     if (j.gameIndex >= SEASON_LENGTH) completeRegularSeason();
     window.SeasonStandings?.ensure(j, typeof NBA_PLAYERS !== 'undefined' ? NBA_PLAYERS : []);
@@ -3004,6 +3044,9 @@
         card.legacy.reb = (card.legacy.reb || 0) + (stat.reb || 0);
         card.legacy.ast = (card.legacy.ast || 0) + (stat.ast || 0);
       });
+      item.promotionRewards = window.PlayerProgression?.awardGame(state, activeSeasonCards(), gameData.boxScore, {
+        type: dynamicSpecial(item)?.key || 'regular', game: item.game
+      }) || [];
       triggerSpecialGameEvent(item, gameData, true);
     }
     if (j.gameIndex >= SEASON_LENGTH && !j.completed) completeRegularSeason();
@@ -3104,6 +3147,7 @@
         threePointChampionKey: old.allStarWeekend.threePointChampionKey || null
       }] : []).slice(-8)
     };
+    window.DynastyEra?.startNextSeason(state, old, state.seasonJourney, activeSeasonCards(), OPPONENTS);
     state.season.hasPlayedPlayoffs = false;
     state.season.threePtContestPlayed = false;
     state.season.threePtContestShooter = null;
@@ -3360,6 +3404,7 @@
   window.selectJourneyConference = selectJourneyConference;
   window.toggleJourneyStandingsExpansion = toggleJourneyStandingsExpansion;
   window.showSeasonView = showSeasonView;
+  window.selectDynastyResponse = selectDynastyResponse;
   window.selectLeagueLeaderCategory = selectLeagueLeaderCategory;
   window.openLeaguePulse = openLeaguePulse;
   window.closeMonthlyAwardModal = closeMonthlyAwardModal;

@@ -41,16 +41,18 @@ const legacyLeague = {
 const legacyShooter = allStar.leaguePlayers(legacyLeague)[0];
 assert.equal(legacyShooter.threePct, 40, 'missing legacy 3PT totals fall back to baseline instead of 0%');
 
-assert.match(html, /id="threePtTimer">50</);
+assert.match(html, /id="threePtTimer">35</);
 assert.match(html, /id="threePtBallsLeft">27</);
 assert.match(html, /id="threePtScore">0<\/b><small>\/40<\/small>/);
 assert.doesNotMatch(html, /ALL-STAR WEEKEND\s*·\s*V\d/i, 'development version is not shown in the game UI');
 assert.match(app, /function startThreePointFinal\(/);
 assert.match(app, /function finishThreePointRound\(/);
 assert.match(app, /roundOneResults\.slice\(0, 3\)/);
-assert.match(app, /roundEndsAt = Date\.now\(\) \+ 50000/);
+assert.match(app, /roundEndsAt = Date\.now\(\) \+ 35000/);
 assert.match(app, /pendingResultAction = 'final'/);
 assert.match(html, /onclick="handleThreePointResultAction\(\)"/);
+assert.match(app, /function setThreePointResultsVisible\(visible\)/);
+assert.match(app, /leaderboard\.classList\.toggle\('hidden', !visible\)/, 'results overlay must remove the global hidden class before display');
 assert.match(html, /id="threePtLiveBoard"/);
 assert.doesNotMatch(app, /action\.onclick = startThreePointFinal/, 'final button uses a stable dispatcher instead of replacing an inline handler');
 assert.match(app, /function prepareThreePointOpponentResults\(/);

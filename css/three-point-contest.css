@@ -252,7 +252,7 @@
   border-top: 1px solid rgba(148, 163, 184, .14);
   background: rgba(3, 7, 18, .98);
 }
-#contestResultAction { width: min(100%, 390px); min-height: 50px; color: #0f172a; background: linear-gradient(135deg, #fbbf24, #f97316); border: 0; border-radius: 14px; font-size: 13px; font-weight: 950; box-shadow: 0 10px 25px rgba(245, 158, 11, .18); }
+#contestResultAction { width: min(100%, 390px); min-height: 50px; color: #0f172a; background: linear-gradient(135deg, #fbbf24, #f97316); border: 0; border-radius: 14px; font-size: 13px; font-weight: 950; box-shadow: 0 10px 25px rgba(245, 158, 11, .18); pointer-events: auto; touch-action: manipulation; }
 
 @media (max-width: 640px) {
   .three-point-contest { padding: 0; }

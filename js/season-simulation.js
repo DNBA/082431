@@ -138,6 +138,15 @@
     const bell = () => (random() + random() + random() + random() - 2) * (Number(safeScript.variance) || definition.variance);
     let home = base + bell() + edge;
     let away = base + bell() - edge * .72;
+    // Dynasty counters improve opponent execution for this game only. Choosing
+    // a pre-game response reduces the effect; no player OVR is modified.
+    if (safeScript.dynastyCounter) {
+      const quality = clamp(Number(safeScript.opponentStrategyQuality) || 1.04, 1, 1.18);
+      const pressure = (safeScript.dynastyResponse ? .28 : .72) * quality;
+      away += pressure;
+      home -= pressure * .35;
+      if (quarter === 4) away += (Number(safeScript.clutchExecution) || 1.03) - 1;
+    }
 
     if (safeScript.hotTeam === 'user') home += 1.1;
     else away += 1.1;

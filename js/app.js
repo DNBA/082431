@@ -25450,6 +25450,7 @@ function createCard(basePlayer, star = 1) {
   const realOvr = Number(basePlayer.realOvr || basePlayer.real_ovr || baseOvr);
   const name = String(basePlayer.name || '').trim();
   const fmvpBonus = Number(basePlayer.fmvpBonus || basePlayer.legacy?.fmvps || 0);
+  const initialRarity = basePlayer.rarity || determineRarityByOvr(baseOvr);
   
   return {
     cardId: createCardId(),
@@ -25463,7 +25464,12 @@ function createCard(basePlayer, star = 1) {
     fmvpBonus: fmvpBonus,
     isFmvp: !!(basePlayer.isFmvp || fmvpBonus > 0),
     ovr: calculateCardOvr(baseOvr, s, fmvpBonus),
-    rarity: basePlayer.rarity || determineRarityByOvr(baseOvr),
+    rarity: initialRarity,
+    originalRarity: initialRarity,
+    currentRarity: initialRarity,
+    promotionLevel: 0,
+    promotionOvrBonus: 0,
+    promotionStatBonuses: {},
     nbaId: basePlayer.nbaId || basePlayer.id || 0,
     stars: s,
     isLegend: !!basePlayer.isLegend,
@@ -28193,6 +28199,12 @@ function initPlayoffTeams() {
               isPlayoff: true,
               gameNum
             });
+            singleGameData.promotionRewards = window.PlayerProgression?.awardGame(
+              state,
+              starters.concat(bench),
+              singleGameData.boxScore,
+              { type: roundIdx === 3 ? 'finals' : (roundIdx === 2 ? 'conference-finals' : 'playoffs'), game: gameNum }
+            ) || [];
 
             // 🌟 若為總決賽，累計每位球員在總決賽的火燙攻防表現，供 FMVP 評選
             if (roundIdx === 3) {
@@ -28572,6 +28584,15 @@ const defaultState = {
       // 新版逐場賽季資料；由 season-journey.js 初始化。
       seasonEnergy: null,
       seasonJourney: null,
+      playerProgression: {
+        tickets: { basic: 0, advanced: 0, elite: 0, ur: 0 },
+        playerShards: {}, pity: { advanced: 0, elite: 0, ur: 0 }, rewardHistory: []
+      },
+      dynasty: {
+        consecutiveTitles: 0, totalTitles: 0, active: false, dynastyLevel: 0,
+        scoutingMemory: {}, rivals: [], leagueMoves: [], previousSeasonProfile: null,
+        threePeatEstablished: false
+      },
 dailyQuests: {
         date: '',
         lastLoginDate: '', // 追蹤登入日期以計算連續天數
@@ -28701,6 +28722,8 @@ function saveGame() {
       if (!s.toeic || typeof s.toeic !== 'object') s.toeic = { ...defaultState.toeic };
       s.toeic.endlessBest = Math.max(0, Number(s.toeic.endlessBest) || 0);
       s.toeic.endlessBestAt = typeof s.toeic.endlessBestAt === 'string' ? s.toeic.endlessBestAt : '';
+      if (!s.playerProgression || typeof s.playerProgression !== 'object') s.playerProgression = JSON.parse(JSON.stringify(defaultState.playerProgression));
+      if (!s.dynasty || typeof s.dynasty !== 'object') s.dynasty = JSON.parse(JSON.stringify(defaultState.dynasty));
 
       // One-time owner recovery after the legacy deep merge removed dated studyDetails.
       // Only applies to an admin save and never overwrites an existing record.
@@ -28806,6 +28829,14 @@ function saveGame() {
         if (!c.rarity) {
           c.rarity = refPlayer?.rarity || determineRarityByOvr(c.baseOvr);
         }
+        if (!['N','R','SR','SSR','UR'].includes(c.originalRarity)) c.originalRarity = c.rarity;
+        if (!['N','R','SR','SSR','UR'].includes(c.currentRarity)) c.currentRarity = c.rarity;
+        c.rarity = c.currentRarity;
+        c.promotionLevel = Math.max(0, Number(c.promotionLevel) || 0);
+        c.promotionOvrBonus = Math.max(0, Number(c.promotionOvrBonus) || 0);
+        if (!c.promotionStatBonuses || typeof c.promotionStatBonuses !== 'object') c.promotionStatBonuses = {};
+        const promotionCaps = { N: 92, R: 93, SR: 94, SSR: 95, UR: 99 };
+        c.ovr = Math.min(promotionCaps[c.originalRarity] || 99, calculateCardOvr(c.baseOvr, c.stars, fmvpBonus) + c.promotionOvrBonus);
 
         // 既有 ('26) 卡在讀檔時同步最新 2025-26 賽季資料；不影響 OVR、星級或其他年度卡片。
         if (c.edition === '26' && refPlayer?.statsSeason === '2025-26') {
@@ -32613,7 +32644,7 @@ function stopThreePointClock() {
 
 function startThreePointClock() {
   stopThreePointClock();
-  threePtState.roundEndsAt = Date.now() + 50000;
+  threePtState.roundEndsAt = Date.now() + 35000;
   const updateClock = () => {
     const seconds = Math.max(0, Math.ceil((threePtState.roundEndsAt - Date.now()) / 1000));
     const timer = document.getElementById('threePtTimer');
@@ -32634,6 +32665,20 @@ function handleThreePointResultAction() {
   if (threePtState.pendingResultAction === 'final') startThreePointFinal();
   else if (threePtState.pendingResultAction === 'restart') openThreePointContest();
   else closeThreePointContest();
+}
+
+function setThreePointResultsVisible(visible) {
+  const leaderboard = document.getElementById('contestLeaderboard');
+  if (!leaderboard) return;
+  leaderboard.classList.toggle('hidden', !visible);
+  leaderboard.style.display = visible ? 'flex' : 'none';
+  if (visible) {
+    const action = document.getElementById('contestResultAction');
+    if (action) {
+      action.disabled = false;
+      action.style.pointerEvents = 'auto';
+    }
+  }
 }
 
 function prepareThreePointOpponentResults() {
@@ -32935,8 +32980,7 @@ function renderThreePointContestRanking(results, options = {}) {
       </div>${index === 2 && ranking.length > 3 ? '<div class="tpc-ranking-cut">TOP 3 · ADVANCE LINE</div>' : ''}
     `).join('');
   }
-  const leaderboard = document.getElementById('contestLeaderboard');
-  if (leaderboard) leaderboard.style.display = 'flex';
+  setThreePointResultsVisible(true);
   const action = document.getElementById('contestResultAction');
   if (action && !options.keepAction) {
     const remainingShooters = state.isAdmin ? [] : getRemainingThreePointShooters();
@@ -33035,10 +33079,9 @@ function openThreePointContest() {
   updateThreePointRoundUi();
   renderThreePointParticipantStrip();
 
-  const lb = document.getElementById('contestLeaderboard');
   const savedRanking = state.seasonJourney?.allStarWeekend?.contestResult || state.season?.threePtContestRanking || [];
   if (isSeasonPlayed && savedRanking.length) renderThreePointContestRanking(savedRanking, { restored: true });
-  else if (lb) lb.style.display = 'none';
+  else setThreePointResultsVisible(false);
 
   const btnStart = document.getElementById('btnStartContest');
   const btnShoot = document.getElementById('btnReleaseShot');
@@ -33061,7 +33104,7 @@ function openThreePointContest() {
   const cursor = document.getElementById('shotMeterCursor');
   if (cursor) cursor.style.left = '0%';
   const timer = document.getElementById('threePtTimer');
-  if (timer) timer.innerText = '50';
+  if (timer) timer.innerText = '35';
   const liveBoard = document.getElementById('threePtLiveBoard');
   if (liveBoard) liveBoard.innerHTML = '<span class="tpc-live-placeholder">開始後顯示對手成績與晉級線</span>';
 
@@ -33104,8 +33147,7 @@ function closeThreePointContest() {
   stopThreePointClock();
   threePtState.active = false;
   threePtState.pendingResultAction = 'close';
-  const lb = document.getElementById('contestLeaderboard');
-  if (lb) lb.style.display = 'none';
+  setThreePointResultsVisible(false);
   const modal = document.getElementById('threePtModal');
   if (modal) {
     modal.classList.add('hidden');
@@ -33160,8 +33202,7 @@ function startThreePointRound() {
 }
 
 function startThreePointFinal() {
-  const leaderboard = document.getElementById('contestLeaderboard');
-  if (leaderboard) leaderboard.style.display = 'none';
+  setThreePointResultsVisible(false);
   startThreePointManualRound('final');
 }
 
@@ -33183,8 +33224,7 @@ function startThreePointManualRound(round) {
     lockedBadge.innerText = state.isAdmin ? 'ADMIN · ∞' : '🔒 已鎖定';
   }
 
-  const lb = document.getElementById('contestLeaderboard');
-  if (lb) lb.style.display = 'none';
+  setThreePointResultsVisible(false);
 
   const btnStart = document.getElementById('btnStartContest');
   if (btnStart) btnStart.style.display = 'none';
@@ -33402,11 +33442,9 @@ function showThreePointFinalists(playerRank) {
     threePtState.pendingResultAction = 'final';
     action.innerText = '進入決賽 · FINAL ROUND →';
   }
+  setThreePointResultsVisible(true);
   const leaderboard = document.getElementById('contestLeaderboard');
-  if (leaderboard) {
-    leaderboard.style.display = 'flex';
-    leaderboard.querySelector('.tpc-results-scroll')?.scrollTo({ top: 0 });
-  }
+  leaderboard?.querySelector('.tpc-results-scroll')?.scrollTo({ top: 0 });
 }
 
 function completeCpuThreePointFinal() {
