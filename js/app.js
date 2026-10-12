@@ -28836,7 +28836,8 @@ function saveGame() {
         c.promotionOvrBonus = Math.max(0, Number(c.promotionOvrBonus) || 0);
         if (!c.promotionStatBonuses || typeof c.promotionStatBonuses !== 'object') c.promotionStatBonuses = {};
         const promotionCaps = { N: 92, R: 93, SR: 94, SSR: 95, UR: 99 };
-        c.ovr = Math.min(promotionCaps[c.originalRarity] || 99, calculateCardOvr(c.baseOvr, c.stars, fmvpBonus) + c.promotionOvrBonus);
+        const promotionCap = Math.min(99, (promotionCaps[c.originalRarity] || 99) + (c.promotionSpecialTheme === 'silver-black' ? 1 : 0));
+        c.ovr = Math.min(promotionCap, calculateCardOvr(c.baseOvr, c.stars, fmvpBonus) + c.promotionOvrBonus);
 
         // 既有 ('26) 卡在讀檔時同步最新 2025-26 賽季資料；不影響 OVR、星級或其他年度卡片。
         if (c.edition === '26' && refPlayer?.statsSeason === '2025-26') {

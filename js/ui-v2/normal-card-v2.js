@@ -29,6 +29,9 @@
   }
 
   function getTheme(card) {
+    if (card?.promotionSpecialTheme === 'silver-black') {
+      return { frame: `${FRAME_ROOT}/normal-sr-v1.png`, accent: '#e5e7eb', label: 'UR', name: 'SILVER SIGNATURE' };
+    }
     return NORMAL_CARD_THEMES[String(card?.rarity || 'N').toUpperCase()] || NORMAL_CARD_THEMES.N;
   }
 
@@ -108,6 +111,7 @@
     const cardId = card?.cardId || '';
     const interactive = options.interactive !== false;
     const logo = teamLogo(card);
+    const silverBlackClass = card?.promotionSpecialTheme === 'silver-black' ? ' normal-card-v2--silver-black' : '';
     const inLineup = options.inLineup ? '<span class="normal-card-v2__lineup">LINEUP</span>' : '';
     const nameLengthClass = names.last.length > 18
       ? 'normal-card-v2__nameplate--xlong'
@@ -127,11 +131,12 @@
           ${logo ? `<img src="${logo}" alt="${escapeHtml(card?.team)}" onerror="this.hidden=true;this.nextElementSibling.hidden=false"><span hidden>${escapeHtml(card?.team)}</span>` : `<span>${escapeHtml(card?.team || '--')}</span>`}
         </div>
         ${inLineup}
+        ${card?.promotionSpecialTheme === 'silver-black' ? '<span class="normal-card-v2__silver-seal">SILVER SIGNATURE</span>' : ''}
         ${cardId && size !== 'detail' && interactive ? `<button type="button" class="normal-card-v2__detail" aria-label="查看 ${escapeHtml(displayName)} 球員資訊" onclick="showPlayerDetails(event, '${escapeHtml(cardId)}')">i</button>` : ''}`;
 
     if (size === 'detail') {
       return `
-        <article class="normal-card-v2 normal-card-v2--detail normal-card-v2--${escapeHtml(theme.label.toLowerCase())}"
+        <article class="normal-card-v2 normal-card-v2--detail normal-card-v2--${escapeHtml(theme.label.toLowerCase())}${silverBlackClass}"
                  style="--normal-card-accent:${theme.accent}"
                  data-card-id="${escapeHtml(cardId)}"
                  data-player-name="${escapeHtml(card?.name || '')}"
@@ -146,7 +151,7 @@
     }
 
     return `
-      <article class="normal-card-v2 normal-card-v2--${escapeHtml(size)} normal-card-v2--${escapeHtml(theme.label.toLowerCase())}"
+      <article class="normal-card-v2 normal-card-v2--${escapeHtml(size)} normal-card-v2--${escapeHtml(theme.label.toLowerCase())}${silverBlackClass}"
                style="--normal-card-accent:${theme.accent}"
                data-card-id="${escapeHtml(cardId)}"
                draggable="${cardId && interactive ? 'true' : 'false'}"

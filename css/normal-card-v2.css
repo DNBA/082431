@@ -235,6 +235,21 @@
   cursor: pointer;
 }
 
+.normal-card-v2--silver-black {
+  --normal-card-accent:#e5e7eb !important;
+  background:linear-gradient(145deg,#050608 0%,#1f252c 46%,#050608 100%);
+  box-shadow:0 0 0 1px rgba(226,232,240,.78),0 12px 28px rgba(0,0,0,.75),inset 0 0 28px rgba(255,255,255,.08);
+}
+.normal-card-v2--silver-black .normal-card-v2__arena { filter:grayscale(1) brightness(.34) contrast(1.45); }
+.normal-card-v2--silver-black .normal-card-v2__portrait { filter:saturate(.42) contrast(1.08); }
+.normal-card-v2--silver-black .normal-card-v2__vignette { background:radial-gradient(circle at 50% 35%,transparent 26%,rgba(0,0,0,.35) 62%,rgba(0,0,0,.92) 100%),linear-gradient(135deg,rgba(255,255,255,.12),transparent 32%,rgba(148,163,184,.12)); }
+.normal-card-v2--silver-black .normal-card-v2__frame { filter:grayscale(1) brightness(1.35) contrast(1.2) drop-shadow(0 0 5px rgba(226,232,240,.55)); }
+.normal-card-v2--silver-black .normal-card-v2__nameplate { background:linear-gradient(90deg,rgba(2,6,23,.96),rgba(71,85,105,.9),rgba(2,6,23,.96)); border-color:rgba(226,232,240,.72); }
+.normal-card-v2--silver-black .normal-card-v2__rarity { color:#f8fafc; text-shadow:0 0 8px rgba(226,232,240,.72); }
+.normal-card-v2__silver-seal { position:absolute; z-index:6; left:50%; bottom:2.2%; transform:translateX(-50%); width:max-content; padding:1.4% 4%; border:1px solid rgba(226,232,240,.72); border-radius:999px; background:rgba(2,6,23,.88); color:#f8fafc; font-size:3.1cqi; font-weight:900; letter-spacing:.14em; box-shadow:0 0 12px rgba(226,232,240,.26); }
+.normal-card-v2--silver-black .normal-card-v2__front::after { content:""; position:absolute; z-index:4; inset:-30% -80%; pointer-events:none; background:linear-gradient(110deg,transparent 42%,rgba(255,255,255,.24) 49%,transparent 56%); transform:translateX(-45%); animation:silver-signature-sheen 4.8s ease-in-out infinite; }
+@keyframes silver-signature-sheen { 0%,55%{transform:translateX(-45%)} 82%,100%{transform:translateX(45%)} }
+
 @media (hover:hover) {
   .normal-card-v2:hover { transform: translateY(-2px); filter: brightness(1.04); }
 }

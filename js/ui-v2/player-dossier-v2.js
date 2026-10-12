@@ -249,7 +249,7 @@
         <section class="player-dossier-v2__panel" data-dossier-panel="advanced">${statGrid(advancedStats(player), 'player-dossier-v2__stat-grid--advanced')}<p class="player-dossier-v2__note">${seasonStatsSourceNote(player, '只顯示現有比賽資料可可靠提供的指標。')}</p></section>
         <section class="player-dossier-v2__panel" data-dossier-panel="badges">${renderBadges(player)}</section>
         <section class="player-dossier-v2__panel" data-dossier-panel="career">${renderCareer(player)}</section>
-        <section class="player-dossier-v2__panel" data-dossier-panel="growth">${global.PlayerProgression ? global.PlayerProgression.renderGrowth(typeof state !== 'undefined' ? state : {}, player) : '<p class="player-dossier-v2__empty">升階資料載入中。</p>'}<button type="button" class="player-dossier-v2__front-button" onclick="event.stopPropagation();openPromotionCenter('${escapeHtml(player.cardId || '')}')">OPEN PROMOTION CENTER</button></section>
+        <section class="player-dossier-v2__panel" data-dossier-panel="growth">${global.PlayerProgression ? global.PlayerProgression.renderGrowthSummary(typeof state !== 'undefined' ? state : {}, player) : '<p class="player-dossier-v2__empty">升階資料載入中。</p>'}<button type="button" class="player-dossier-v2__front-button" onclick="event.stopPropagation();openPromotionCenter('${escapeHtml(player.cardId || '')}')">前往升階所 ›</button></section>
       </div>
       <button type="button" class="player-dossier-v2__front-button" onclick="flipPlayerDossierToFront(event,this)">↶ CARD FRONT</button>
     </div>`;
