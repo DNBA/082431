@@ -112,6 +112,11 @@
     'attack-paint': { label: '攻擊禁區', short: 'ATTACK PAINT', desc: '下半場增加禁區終結，讓內線球員更常參與進攻。' },
     'lock-down': { label: '鎖死對手', short: 'LOCK DOWN', desc: '下半場犧牲一些節奏，集中壓低對方得分。' }
   };
+  const JOURNEY_GAME_MODES = Object.freeze({
+    play: { label: 'PLAY', detail: 'Full 2D Control' },
+    hybrid: { label: 'HYBRID', detail: 'Sim + Take Control' },
+    sim: { label: 'SIM', detail: 'Current Simulation' }
+  });
 
   let activeGame = null;
   let visualGameState = null;
@@ -1437,6 +1442,8 @@
               <div id="sjGameActions" class="grid grid-cols-2 gap-2 mt-4">
                 <button id="sjContinueBtn" onclick="advanceJourneyQuarter()" class="bg-amber-500 hover:bg-amber-400 text-slate-950 font-black py-3.5 rounded-2xl">開始第一節</button>
                 <button id="sjQuickBtn" onclick="quickSimJourneyGame()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold py-3.5 rounded-2xl border border-slate-700">快速模擬</button>
+                <button id="sjTakeControlBtn" onclick="takeControlJourneyGame()" class="sj-live-take-control hidden">TAKE CONTROL · 3 POSSESSIONS</button>
+                <button id="sjResumeLiveBtn" onclick="resumeJourneyLiveGame()" class="sj-live-resume hidden">RESUME LIVE GAME</button>
               </div>
               <div id="sjFinalActions" class="hidden grid-cols-2 gap-2 mt-4">
                 <button onclick="showJourneyBoxScore()" class="bg-slate-800 hover:bg-slate-700 text-white font-bold py-3.5 rounded-2xl">查看 Box Score</button>
@@ -1529,7 +1536,19 @@
         <div><b>可能弱點</b>${scout.weaknesses.map(item => `<p>• ${safeText(item.key)} <strong>${item.value}</strong></p>`).join('')}</div>
       </div>
       <div class="sj-defensive-matchups"><div><b>DEFENSIVE MATCHUP</b><span>一對一對位；改選時會自動交換防守任務</span></div><div class="sj-matchup-selects">${assignments}</div></div>
-      <button type="button" onclick="confirmJourneyMatchup()" class="sj-confirm-matchup">確認對位並設定戰術</button>`;
+      <div class="sj-live-mode-picker">
+        <div class="sj-live-mode-picker__head"><span>GAME MODE</span><small>SIM 完整保留</small></div>
+        <div class="sj-live-mode-grid">
+          ${Object.entries(JOURNEY_GAME_MODES).map(([id, mode]) => `<button type="button" class="${activeGame.gameMode === id ? 'is-selected' : ''}" onclick="selectJourneyGameMode('${id}')"><b>${mode.label}</b><span>${mode.detail}</span></button>`).join('')}
+        </div>
+      </div>
+      <button type="button" onclick="confirmJourneyMatchup()" class="sj-confirm-matchup">確認對位並${activeGame.gameMode === 'play' ? '進入 LIVE GAME' : activeGame.gameMode === 'hybrid' ? '開始 HYBRID' : '設定戰術'}</button>`;
+  }
+
+  function selectJourneyGameMode(mode) {
+    if (!activeGame || activeGame.matchupConfirmed || !JOURNEY_GAME_MODES[mode]) return;
+    activeGame.gameMode = mode;
+    renderMatchupPanel();
   }
 
   function updateJourneyMatchup(opponentIndex, starterIndex) {
@@ -1567,6 +1586,7 @@
     const bestMatchup = [...matchupResults].sort((a, b) => b.edge - a.edge)[0];
     activeGame.feed.push(`🧠 防守對位完成：${bestMatchup.defender} 主防效果最佳，本場每節壓制 ${activeGame.matchupBonus >= 0 ? activeGame.matchupBonus : 0} 分`);
     renderActiveGame();
+    if (activeGame.gameMode === 'play' && !autoMode.running) setTimeout(() => startJourneyLiveGame('play'), 80);
   }
 
   function openJourneyGame() {
@@ -1597,6 +1617,7 @@
       feed: [], moments: [], pendingMoments: [], finalized: false, boxScore: null,
       pregameStrategy: 'balanced', secondHalfStrategy: null, awaitingHalftime: false, halftimeReport: null,
       opponentRoster, scouting: scoutOpponent(scheduleGame), matchups: [0, 1, 2, 3, 4], matchupResults: [], matchupBonus: 0, matchupConfirmed: false,
+      gameMode: autoMode.running ? 'sim' : 'sim', liveGameResult: null, liveHybridResults: [], liveSnapshot: null,
       manualShots: {}, manualShotCount: 0, defenseDecisions: {}, offenseDecisions: {},
       manualScoreAdjustments: {}, interactiveEventCount: 0, interactionPlan: buildInteractionPlan(), clutchDecision: null, awaitingClutch: false,
       featuredStar: starters.find(card => card.name === gameScript?.featuredPlayerName)
@@ -1619,6 +1640,107 @@
     playJourneySound('whistle');
     scheduleJourneyArenaBeat();
     renderActiveGame(); renderJourneySeasonTab();
+  }
+
+  function liveGameCard(card) {
+    if (!card) return card;
+    const badges = typeof getPlayerBadges === 'function' ? getPlayerBadges(card) : [];
+    return { ...card, _liveBadges: badges.map(badge => ({ name: badge.name, icon: badge.icon })) };
+  }
+
+  function persistLiveSnapshot(snapshot, mode) {
+    if (!activeGame || !state.seasonJourney) return;
+    activeGame.liveSnapshot = snapshot || null;
+    state.seasonJourney.liveGameDraft = snapshot ? {
+      game: activeGame.scheduleGame.game,
+      mode: mode || activeGame.gameMode,
+      savedAt: new Date().toISOString(),
+      snapshot
+    } : null;
+    saveGame();
+  }
+
+  function syncJourneyVisualScore() {
+    if (!activeGame?.visual) return;
+    activeGame.visual.displayHomeScore = activeGame.homeScore;
+    activeGame.visual.displayAwayScore = activeGame.awayScore;
+    activeGame.visual.homeScore = activeGame.homeScore;
+    activeGame.visual.awayScore = activeGame.awayScore;
+  }
+
+  function finishJourneyLiveSession(result, mode) {
+    if (!activeGame || !result) return;
+    activeGame.homeScore = Number(result.homeScore || 0);
+    activeGame.awayScore = Number(result.awayScore || 0);
+    syncJourneyVisualScore();
+    persistLiveSnapshot(null, mode);
+    if (mode === 'play') {
+      activeGame.homeQuarters = Array.isArray(result.quarterScores?.home) ? result.quarterScores.home.slice() : [];
+      activeGame.awayQuarters = Array.isArray(result.quarterScores?.away) ? result.quarterScores.away.slice() : [];
+      activeGame.quarter = 4;
+      activeGame.liveGameResult = result;
+      activeGame.feed.push(`🎮 LIVE GAME FINAL：${activeGame.homeScore}-${activeGame.awayScore}`);
+      finishJourneyGame();
+      return;
+    }
+    activeGame.liveHybridResults.push(result);
+    activeGame.feed.push(`🎮 TAKE CONTROL 完成：目前比分 ${activeGame.homeScore}-${activeGame.awayScore}`);
+    renderActiveGame();
+    if (typeof showToast === 'function') showToast('已完成 3 個 LIVE possessions，返回模擬。', 'success');
+  }
+
+  function startJourneyLiveGame(mode) {
+    if (!activeGame || activeGame.finalized) return;
+    if (!window.LiveGameRenderer || !window.LiveGameEngine) {
+      if (typeof showToast === 'function') showToast('LIVE GAME 模組尚未載入，已保留 SIM 模式。', 'warning');
+      return;
+    }
+    if (window.LiveGameRenderer.hasSession()) {
+      window.LiveGameRenderer.resume();
+      return;
+    }
+    const sessionMode = mode === 'hybrid' ? 'hybrid' : 'play';
+    const awayCards = activeGame.opponentRoster.map(liveGameCard);
+    const homeCards = activeGame.starters.map(liveGameCard);
+    const nextQuarter = sessionMode === 'hybrid' ? clamp(activeGame.quarter || 1, 1, 4) : 1;
+    window.LiveGameRenderer.open({
+      mode: sessionMode,
+      possessions: sessionMode === 'hybrid' ? 3 : null,
+      quarterDuration: sessionMode === 'hybrid' ? 70 : 120,
+      quarter: nextQuarter,
+      homeScore: activeGame.homeScore,
+      awayScore: activeGame.awayScore,
+      possession: 'home',
+      homeName: state.seasonJourney.teamName,
+      awayName: activeGame.scheduleGame.opponent,
+      homePlayers: homeCards,
+      awayPlayers: awayCards,
+      offenseStrategy: activeStrategyForQuarter(Math.max(1, activeGame.quarter || 1)),
+      defenseStrategy: activeGame.pregameStrategy === 'defense' ? 'lock-down' : activeGame.pregameStrategy,
+      opponentStrategy: activeGame.gameScript?.opponentStrategy || null,
+      defensiveAdjustment: activeGame.gameScript?.defensiveAdjustment || null,
+      scoutingCounter: activeGame.gameScript?.scoutingCounter || null,
+      onSnapshot: snapshot => persistLiveSnapshot(snapshot, sessionMode),
+      onExit: snapshot => {
+        persistLiveSnapshot(snapshot, sessionMode);
+        renderActiveGame();
+        if (typeof showToast === 'function') showToast('LIVE GAME 已暫停，可按 RESUME 繼續。', 'info');
+      },
+      onFinish: result => finishJourneyLiveSession(result, sessionMode)
+    });
+  }
+
+  function takeControlJourneyGame() {
+    if (!activeGame || activeGame.gameMode !== 'hybrid' || activeGame.finalized) return;
+    startJourneyLiveGame('hybrid');
+  }
+
+  function resumeJourneyLiveGame() {
+    if (!window.LiveGameRenderer?.resume()) {
+      if (typeof showToast === 'function') showToast('這次 LIVE GAME 已結束，請繼續目前比賽。', 'info');
+      return;
+    }
+    renderActiveGame();
   }
 
   function quarterName(q) { return q <= 4 ? `${q}Q` : 'OT'; }
@@ -2475,12 +2597,19 @@
     const cont = document.getElementById('sjContinueBtn');
     if (cont && !activeGame.finalized) {
       const visualBusy = !!(visual?.busy || visual?.awaitingBadge);
-      cont.disabled = !!activeGame.awaitingHalftime || visualBusy;
+      const liveSession = !!window.LiveGameRenderer?.hasSession();
+      cont.disabled = !!activeGame.awaitingHalftime || visualBusy || liveSession;
       cont.classList.toggle('opacity-45', !!activeGame.awaitingHalftime || visualBusy);
       cont.textContent = visualBusy ? '比賽進行中…' : activeGame.awaitingHalftime ? '先完成中場調整' : (activeGame.quarter === 0 ? '開始第一節' : activeGame.quarter < 4 ? `進入 ${activeGame.quarter + 1}Q` : '進入延長賽');
     }
     const quick = document.getElementById('sjQuickBtn');
-    if (quick) quick.disabled = !!(visual?.busy || visual?.awaitingBadge);
+    if (quick) quick.disabled = !!(visual?.busy || visual?.awaitingBadge || window.LiveGameRenderer?.hasSession());
+    const hasLiveSession = !!window.LiveGameRenderer?.hasSession();
+    const liveVisible = !!window.LiveGameRenderer?.isVisible?.();
+    const takeControl = document.getElementById('sjTakeControlBtn');
+    if (takeControl) takeControl.classList.toggle('hidden', activeGame.gameMode !== 'hybrid' || activeGame.finalized || hasLiveSession || !!(visual?.busy || visual?.awaitingBadge));
+    const resumeLive = document.getElementById('sjResumeLiveBtn');
+    if (resumeLive) resumeLive.classList.toggle('hidden', !hasLiveSession || liveVisible || activeGame.finalized);
     const analysisHost = document.getElementById('sjGameAnalysis');
     const analysis = activeGame.boxScore?.analysis;
     if (analysisHost) {
@@ -2851,6 +2980,32 @@
     return opponentData;
   }
 
+  function emptyLiveBenchRow(card, index) {
+    const name = card?.name || `Rotation ${index + 1}`;
+    const pos = card?.positions?.[0] || card?.position || (index < 2 ? 'G' : index < 4 ? 'F' : 'C');
+    return {
+      name, cardId: card?.cardId || null, role: 'bench', benchSlot: `B${index + 1}`, pos,
+      min: 0, pts: 0, fgM: 0, fgA: 0, fgPct: '0.0', threeM: 0, threeA: 0, threePct: '0.0',
+      ftM: 0, ftA: 0, ftPct: '0.0', oReb: 0, dReb: 0, reb: 0, ast: 0, stl: 0, blk: 0,
+      tov: 0, pf: 0, plusMinus: 0, trait: { type: 'live-bench', badge: 'BENCH' }
+    };
+  }
+
+  function applyLiveBoxScore(gameData, liveRows, benchCards, teamScore, opponentScore) {
+    if (!gameData || !Array.isArray(liveRows)) return gameData;
+    const starters = liveRows.map(row => ({ ...row, role: 'starter' }));
+    const bench = [...(benchCards || [])].slice(0, 6);
+    while (bench.length < 6) bench.push(null);
+    gameData.myScore = Number(teamScore || 0);
+    gameData.oppScore = Number(opponentScore || 0);
+    gameData.win = gameData.myScore > gameData.oppScore;
+    gameData.boxScore = starters.concat(bench.map(emptyLiveBenchRow));
+    gameData.benchPts = 0;
+    gameData.badgeMoments = [];
+    refreshGameDataSummary(gameData);
+    return gameData;
+  }
+
   function finishJourneyGame() {
     if (!activeGame || activeGame.finalized) return;
     activeGame.finalized = true;
@@ -2869,9 +3024,14 @@
       simulationScript: playerSimulationScript
     });
     const opponentGameData = generateOpponentGameData(activeGame.scheduleGame, activeGame.homeScore, activeGame.awayScore, activeGame.matchupResults, activeGame.gameScript);
-    const userHistoric = applyHistoricGameData(gameData, activeGame.gameScript, 'user', playerSimulationScript?.featuredPlayerName);
+    const liveResult = activeGame.liveGameResult;
+    if (liveResult?.mode === 'play') {
+      applyLiveBoxScore(gameData, liveResult.home, activeGame.bench, activeGame.homeScore, activeGame.awayScore);
+      applyLiveBoxScore(opponentGameData, liveResult.away, getOpponentBench(activeGame.scheduleGame), activeGame.awayScore, activeGame.homeScore);
+    }
+    const userHistoric = liveResult?.mode === 'play' ? null : applyHistoricGameData(gameData, activeGame.gameScript, 'user', playerSimulationScript?.featuredPlayerName);
     const opponentScript = simulationScriptForSide(activeGame.gameScript, 'opponent', activeGame.opponentRoster);
-    const opponentHistoric = applyHistoricGameData(opponentGameData, activeGame.gameScript, 'opponent', opponentScript?.featuredPlayerName);
+    const opponentHistoric = liveResult?.mode === 'play' ? null : applyHistoricGameData(opponentGameData, activeGame.gameScript, 'opponent', opponentScript?.featuredPlayerName);
     gameData.opponentBoxScore = opponentGameData.boxScore;
     gameData.opponentBenchPts = opponentGameData.benchPts;
     const generatedMoments = Array.isArray(gameData.badgeMoments) ? gameData.badgeMoments : [];
@@ -2898,6 +3058,7 @@
       defensiveMatchups: activeGame.matchupResults, defenseDecisions: activeGame.defenseDecisions,
       offenseDecisions: activeGame.offenseDecisions, clutchDecision: activeGame.clutchDecision,
       interactionPlan: activeGame.interactionPlan, interactiveEventCount: activeGame.interactiveEventCount,
+      gameMode: activeGame.gameMode || 'sim', livePossessions: liveResult?.possessionsPlayed || 0,
       gameScript: activeGame.gameScript ? { ...activeGame.gameScript } : null,
       records: recordResult.records, personalBests: recordResult.personalBests
     });
@@ -3231,6 +3392,8 @@
     if (activeGame && !activeGame.finalized) {
       if (!window.confirm('比賽尚未結束，離開後本場體力不會退還。確定離開嗎？')) return;
     }
+    if (window.LiveGameRenderer?.hasSession()) window.LiveGameRenderer.close();
+    if (state.seasonJourney?.liveGameDraft) state.seasonJourney.liveGameDraft = null;
     modal.classList.add('hidden');
     stopJourneyArenaMusic();
     if (activeGame && !activeGame.finalized) {
@@ -3241,6 +3404,7 @@
       offenseChallenge = null;
       activeGame = null;
       visualGameState = null;
+      saveGame();
     }
     renderJourneySeasonTab();
   }
@@ -3417,7 +3581,10 @@
   window.advanceJourneyQuarter = advanceJourneyQuarter;
   window.quickSimJourneyGame = quickSimJourneyGame;
   window.updateJourneyMatchup = updateJourneyMatchup;
+  window.selectJourneyGameMode = selectJourneyGameMode;
   window.confirmJourneyMatchup = confirmJourneyMatchup;
+  window.takeControlJourneyGame = takeControlJourneyGame;
+  window.resumeJourneyLiveGame = resumeJourneyLiveGame;
   window.stopJourneyShot = stopJourneyShot;
   window.resolveJourneyDefense = resolveJourneyDefense;
   window.resolveJourneyOffense = resolveJourneyOffense;
