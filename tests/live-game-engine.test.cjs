@@ -30,6 +30,29 @@ test('phase 3 targeted pass transfers ball and control to receiver', () => {
   assert.equal(state.controlledPlayerId, target.id);
 });
 
+test('V4.0.1 off-ball teammates cut or relocate instead of staying on fixed spots', () => {
+  const state = game({ rng: () => .4 });
+  const teammate = Engine.helpers.teamPlayers(state, 'home')[1];
+  const before = { x: teammate.x, y: teammate.y };
+  for (let i = 0; i < 30; i += 1) Engine.step(state, {}, .05);
+  assert.ok(Math.hypot(teammate.x - before.x, teammate.y - before.y) > .5);
+  assert.ok(['cut', 'relocate', 'space', 'give-go'].includes(teammate.routeKind));
+});
+
+test('V4.0.1 tap pass chooses a teammate and starts a visible pass flight', () => {
+  const state = game({ rng: () => .99 });
+  const passer = Engine.helpers.holder(state);
+  const result = Engine.pass(state, null, { x: 1, y: 0 });
+  assert.equal(result.ok, true);
+  assert.ok(result.targetId);
+  assert.equal(state.ball.inFlight, true);
+  assert.equal(state.ball.holderId, null);
+  assert.equal(passer.routeKind, 'give-go');
+  for (let i = 0; i < 10; i += 1) Engine.step(state, {}, .05);
+  assert.equal(state.ball.holderId, result.targetId);
+  assert.equal(state.controlledPlayerId, result.targetId);
+});
+
 test('phase 4 circle shot rating changes green window and success probability', () => {
   const strong = game();
   const weak = game();

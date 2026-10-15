@@ -92,6 +92,10 @@
       card: source,
       x: spot[0], y: spot[1], targetX: spot[0], targetY: spot[1],
       fatigue: 0,
+      routeKind: 'space',
+      routeUntil: 0,
+      nextRouteAt: .7 + index * .18,
+      receiveFlashUntil: 0,
       driveUntil: 0,
       recoveryUntil: 0,
       contestUntil: 0,
@@ -176,6 +180,7 @@
     offense.forEach((player, index) => {
       const spot = OFFENSE_SPOTS[index];
       player.x = spot[0]; player.y = spot[1]; player.targetX = spot[0]; player.targetY = spot[1];
+      player.routeKind = 'space'; player.routeUntil = 0; player.nextRouteAt = state.elapsed + .6 + index * .17;
     });
     defense.forEach((player, index) => {
       const spot = DEFENSE_SPOTS[index];
@@ -241,27 +246,108 @@
     player.y += dy / len * amount;
   }
 
+  function defenderGap(state, player) {
+    const defenders = teamPlayers(state, player.team === 'home' ? 'away' : 'home');
+    const defender = nearestPlayer(defenders, player);
+    return defender ? distance(defender, player) : 99;
+  }
+
+  function baseSpacingTarget(state, player, index, ballHandler) {
+    const spot = OFFENSE_SPOTS[index];
+    const ballX = Number(ballHandler?.x || 50);
+    const strongSide = ballX < 50 ? -1 : 1;
+    const threeBias = state.offenseStrategy === 'shoot-threes' ? 6 : 0;
+    const paintBias = state.offenseStrategy === 'attack-paint' ? -5 : 0;
+    const sideShift = index === 1 ? (strongSide > 0 ? -7 : 3) : index === 2 ? (strongSide < 0 ? 7 : -3) : 0;
+    const breathe = Math.sin(state.elapsed * .72 + index * 1.4) * 2.4;
+    return {
+      x: clamp(spot[0] + sideShift + breathe, 12, 88),
+      y: clamp(spot[1] + threeBias + paintBias + Math.cos(state.elapsed * .58 + index) * 1.8, 23, 82)
+    };
+  }
+
+  function chooseOffBallRoute(state, player, index, ballHandler) {
+    if (player.routeUntil > state.elapsed) return;
+    const guarded = defenderGap(state, player) < 8;
+    const handlerDriving = ballHandler?.driveUntil > state.elapsed || Number(ballHandler?.y || 90) < 48;
+    const canCut = index > 0 && player.y > 31 && !handlerDriving;
+    const roll = state._rng();
+    if (canCut && ((guarded && roll < .58) || state.offenseStrategy === 'attack-paint' && roll < .72)) {
+      player.routeKind = 'cut';
+      player.routeUntil = state.elapsed + 1.25;
+      player.targetX = clamp(45 + (index % 2 ? -6 : 6), 35, 65);
+      player.targetY = 18 + (index % 2) * 4;
+    } else if (handlerDriving || state.offenseStrategy === 'shoot-threes' || roll < .55) {
+      player.routeKind = 'relocate';
+      player.routeUntil = state.elapsed + 1.1;
+      player.targetX = index % 2 ? 15 : 85;
+      player.targetY = index >= 3 ? 34 : 53;
+    } else {
+      player.routeKind = 'space';
+      player.routeUntil = state.elapsed + .9;
+      const target = baseSpacingTarget(state, player, index, ballHandler);
+      player.targetX = target.x; player.targetY = target.y;
+    }
+    player.nextRouteAt = player.routeUntil + .35 + state._rng() * .65;
+    addEvent(state, 'off-ball-route', { playerId: player.id, route: player.routeKind });
+  }
+
+  function passingLaneRisk(state, passer, target) {
+    const defenders = teamPlayers(state, passer.team === 'home' ? 'away' : 'home');
+    const midpoint = { x: (passer.x + target.x) / 2, y: (passer.y + target.y) / 2 };
+    const laneDefender = nearestPlayer(defenders, midpoint);
+    return laneDefender ? clamp((11 - distance(laneDefender, midpoint)) / 23, 0, .24) : 0;
+  }
+
+  function chooseSmartPassTarget(state, passer, direction) {
+    const teammates = teamPlayers(state, passer.team).filter(player => player.id !== passer.id);
+    const inputMagnitude = Math.hypot(Number(direction?.x || 0), Number(direction?.y || 0));
+    return teammates.sort((a, b) => {
+      const score = player => {
+        const gap = defenderGap(state, player);
+        const lane = passingLaneRisk(state, passer, player);
+        const cutBonus = ['cut', 'give-go'].includes(player.routeKind) ? 18 : player.routeKind === 'relocate' ? 8 : 0;
+        const ability = player.ratings.shooting * .08 + player.ratings.dunk * (player.y < 30 ? .1 : .02);
+        const passDistance = distance(passer, player);
+        let directionBonus = 0;
+        if (inputMagnitude > .25) {
+          const dx = (player.x - passer.x) / Math.max(1, passDistance);
+          const dy = (player.y - passer.y) / Math.max(1, passDistance);
+          directionBonus = (dx * Number(direction.x || 0) + dy * Number(direction.y || 0)) * 18;
+        }
+        return gap * 1.45 - lane * 70 + cutBonus + ability + directionBonus - Math.max(0, passDistance - 52) * .22;
+      };
+      return score(b) - score(a);
+    })[0] || null;
+  }
+
   function updateAIPositions(state, dt) {
     const offense = teamPlayers(state, state.possession);
     const defense = teamPlayers(state, state.possession === 'home' ? 'away' : 'home');
     const ballHolder = holder(state);
     offense.forEach((player, index) => {
       if (player.id === state.controlledPlayerId || player.id === ballHolder?.id) return;
-      const spot = OFFENSE_SPOTS[index];
-      const threeBias = state.offenseStrategy === 'shoot-threes' ? 7 : 0;
-      const paintBias = state.offenseStrategy === 'attack-paint' ? -8 : 0;
-      const target = { x: spot[0], y: clamp(spot[1] + threeBias + paintBias, 24, 82) };
-      moveToward(player, target, dt, .48);
+      if (player.nextRouteAt <= state.elapsed || distance(player, { x: player.targetX, y: player.targetY }) < 2.2) chooseOffBallRoute(state, player, index, ballHolder);
+      if (player.routeUntil <= state.elapsed && player.nextRouteAt > state.elapsed) {
+        const reset = baseSpacingTarget(state, player, index, ballHolder);
+        player.targetX = reset.x; player.targetY = reset.y;
+      }
+      const routeSpeed = player.routeKind === 'cut' || player.routeKind === 'give-go' ? .92 : player.routeKind === 'relocate' ? .68 : .52;
+      moveToward(player, { x: player.targetX, y: player.targetY }, dt, routeSpeed);
     });
     defense.forEach((player, index) => {
       if (player.id === state.controlledPlayerId) return;
       const assignment = offense[index] || ballHolder;
       if (!assignment) return;
-      const target = {
-        x: assignment.x + (COURT.hoopX - assignment.x) * .1,
-        y: assignment.y + (COURT.hoopY - assignment.y) * .1
-      };
-      moveToward(player, target, dt, state.defenseStrategy === 'lock-down' ? .82 : .7);
+      const isBall = assignment.id === ballHolder?.id;
+      const helpPaint = ballHolder && ballHolder.y < 31 && index >= 3;
+      const target = helpPaint
+        ? { x: 50 + (index === 3 ? -8 : 8), y: 24 }
+        : {
+            x: assignment.x + (COURT.hoopX - assignment.x) * (isBall ? .07 : .15),
+            y: assignment.y + (COURT.hoopY - assignment.y) * (isBall ? .07 : .15)
+          };
+      moveToward(player, target, dt, state.defenseStrategy === 'lock-down' ? .88 : isBall ? .78 : .68);
     });
   }
 
@@ -273,29 +359,46 @@
     }
   }
 
-  function pass(state, targetId) {
-    if (state.finished || state.paused || state.passFlight || state.shot || state.transitionUntil > state.elapsed) return { ok: false, reason: 'busy' };
-    const passer = holder(state);
-    const target = playerById(state, targetId);
-    if (!passer || !target || passer.team !== 'home' || target.team !== passer.team || passer.id === target.id || state.controlledPlayerId !== passer.id) return { ok: false, reason: 'invalid-target' };
-    const laneDefender = nearestPlayer(teamPlayers(state, 'away'), { x: (passer.x + target.x) / 2, y: (passer.y + target.y) / 2 });
-    const laneRisk = laneDefender ? clamp((10 - distance(laneDefender, { x: (passer.x + target.x) / 2, y: (passer.y + target.y) / 2 })) / 28, 0, .18) : 0;
-    const turnoverChance = clamp(.08 + laneRisk - (passer.ratings.passing - 70) * .0023, .015, .24);
+  function beginPass(state, passer, target, options) {
+    const settings = options || {};
+    const laneRisk = passingLaneRisk(state, passer, target);
+    const turnoverChance = clamp(.055 + laneRisk - (passer.ratings.passing - 70) * .0025, .01, .27);
+    const travelTime = clamp(.14 + distance(passer, target) * .0032, .18, .36);
     state.passFlight = {
-      fromId: passer.id, toId: target.id, startedAt: state.elapsed, endsAt: state.elapsed + .22,
-      fromX: passer.x, fromY: passer.y, turnoverChance
+      fromId: passer.id, toId: target.id, startedAt: state.elapsed, endsAt: state.elapsed + travelTime,
+      fromX: passer.x, fromY: passer.y, turnoverChance, cpu: !!settings.cpu
     };
     state.ball.holderId = null;
     state.ball.inFlight = true;
     state.lastPass = { passerId: passer.id, targetId: target.id, at: state.elapsed };
-    addEvent(state, 'pass-start', { passerId: passer.id, targetId: target.id });
-    return { ok: true };
+    passer.routeKind = 'give-go';
+    passer.routeUntil = state.elapsed + 1.25;
+    passer.nextRouteAt = passer.routeUntil + .5;
+    passer.targetX = clamp(50 + (passer.x < 50 ? -7 : 7), 35, 65);
+    passer.targetY = 20;
+    addEvent(state, settings.cpu ? 'cpu-pass-start' : 'pass-start', { passerId: passer.id, targetId: target.id });
+    return { ok: true, targetId: target.id };
+  }
+
+  function pass(state, targetId, direction) {
+    if (state.finished || state.paused || state.passFlight || state.shot || state.transitionUntil > state.elapsed) return { ok: false, reason: 'busy' };
+    const passer = holder(state);
+    if (!passer) return { ok: false, reason: 'no-ball' };
+    const target = targetId ? playerById(state, targetId) : chooseSmartPassTarget(state, passer, direction);
+    if (!target || passer.team !== 'home' || target.team !== passer.team || passer.id === target.id || state.controlledPlayerId !== passer.id) return { ok: false, reason: 'invalid-target' };
+    return beginPass(state, passer, target);
   }
 
   function updatePass(state) {
     const flight = state.passFlight;
     if (!flight) return;
     const target = playerById(state, flight.toId);
+    if (!target) {
+      state.passFlight = null;
+      state.ball.inFlight = false;
+      changePossession(state, state.possession === 'home' ? 'away' : 'home', 'LOST PASS');
+      return;
+    }
     const progress = clamp((state.elapsed - flight.startedAt) / Math.max(.01, flight.endsAt - flight.startedAt), 0, 1);
     state.ball.x = flight.fromX + (target.x - flight.fromX) * progress;
     state.ball.y = flight.fromY + (target.y - flight.fromY) * progress;
@@ -307,12 +410,17 @@
       const passer = playerById(state, flight.fromId);
       if (passer) passer.stats.tov += 1;
       feedback(state, 'INTERCEPTED', '傳球路線被讀到', 'bad');
-      changePossession(state, 'away', 'TURNOVER');
+      changePossession(state, passer?.team === 'away' ? 'home' : 'away', 'TURNOVER');
       return;
     }
     state.ball.holderId = target.id;
-    state.controlledPlayerId = target.id;
-    feedback(state, 'PASS COMPLETE', `控制切換至 ${target.name}`, 'good', .65);
+    target.receiveFlashUntil = state.elapsed + .48;
+    if (target.team === 'home') state.controlledPlayerId = target.id;
+    else {
+      const autoDefender = nearestPlayer(teamPlayers(state, 'home'), target);
+      if (autoDefender) state.controlledPlayerId = autoDefender.id;
+    }
+    feedback(state, flight.cpu ? 'SWING PASS' : 'PASS COMPLETE', flight.cpu ? `${target.name} 接球` : `控制切換至 ${target.name}`, flight.cpu ? 'neutral' : 'good', .65);
     addEvent(state, 'pass-complete', { targetId: target.id });
   }
 
@@ -520,18 +628,17 @@
     moveToward(ballHandler, towardHoop, dt, .53);
     if (state.elapsed < state._cpuDecisionAt) return;
     state._cpuDecisionAt = state.elapsed + 1.25 + state._rng() * 1.15;
-    if (state.shotClock < 8 || open || ballHandler.y < 34) cpuShoot(state, ballHandler);
-    else {
-      const teammates = teamPlayers(state, 'away').filter(player => player.id !== ballHandler.id);
-      const target = teammates[Math.floor(state._rng() * teammates.length)];
-      if (target) {
-        state.ball.holderId = target.id;
-        state.ball.x = target.x; state.ball.y = target.y;
-        const autoDefender = nearestPlayer(teamPlayers(state, 'home'), target);
-        if (autoDefender) state.controlledPlayerId = autoDefender.id;
-        addEvent(state, 'cpu-pass', { fromId: ballHandler.id, toId: target.id });
-      }
-    }
+    const teammates = teamPlayers(state, 'away').filter(player => player.id !== ballHandler.id);
+    const target = teammates.sort((a, b) => {
+      const value = player => defenderGap(state, player) * 1.5
+        + (player.routeKind === 'cut' ? 17 : player.routeKind === 'relocate' ? 7 : 0)
+        + (player.y < 29 ? player.ratings.dunk : player.ratings.shooting) * .08
+        - passingLaneRisk(state, ballHandler, player) * 75;
+      return value(b) - value(a);
+    })[0];
+    const targetIsBetter = target && defenderGap(state, target) > defenderGap(state, ballHandler) + 3;
+    if (state.shotClock < 8 || (open && !targetIsBetter) || ballHandler.y < 30) cpuShoot(state, ballHandler);
+    else if (target) beginPass(state, ballHandler, target, { cpu: true });
   }
 
   function advanceQuarter(state) {

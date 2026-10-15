@@ -1,4 +1,4 @@
-/* ToeicQuest NBA — LIVE GAME 2D renderer (V4.0, Phase 1-6). */
+/* ToeicQuest NBA — LIVE GAME 2D renderer (V4.0.1 motion/pass update). */
 (function () {
   'use strict';
 
@@ -44,7 +44,7 @@
         <div class="lg2d-joystick" data-lg-joystick><span></span><i data-lg-joystick-knob></i><b>MOVE</b></div>
         <div class="lg2d-actions" data-lg-actions>
           <button type="button" data-lg-action="shoot"><b data-lg-action-label="shoot">SHOOT</b><span>HOLD</span></button>
-          <button type="button" data-lg-action="pass"><b data-lg-action-label="pass">PASS</b><span>SELECT</span></button>
+          <button type="button" data-lg-action="pass"><b data-lg-action-label="pass">PASS</b><span>TAP / HOLD</span></button>
           <button type="button" data-lg-action="drive"><b data-lg-action-label="drive">DRIVE</b><span>MOVE</span></button>
           <button type="button" data-lg-action="screen" class="is-phase-next"><b data-lg-action-label="screen">P&amp;R</b><span>PHASE 7</span></button>
         </div>
@@ -62,7 +62,7 @@
     const element = document.createElement('div');
     element.className = `lg2d-player lg2d-player--${player.team}`;
     element.dataset.playerId = player.id;
-    element.innerHTML = `<span class="lg2d-player__marker">▲</span><div class="lg2d-player__body"><b>${safe(player.number)}</b></div><strong>${safe(player.name.split(' ').slice(-1)[0])}</strong><em>YOU</em><button type="button" aria-label="傳給 ${safe(player.name)}"></button>`;
+    element.innerHTML = `<span class="lg2d-player__marker">▲</span><div class="lg2d-player__body"><b>${safe(player.number)}</b></div><strong>${safe(player.name.split(' ').slice(-1)[0])}</strong><small data-lg-route></small><em>YOU</em><button type="button" aria-label="傳給 ${safe(player.name)}"></button>`;
     return element;
   }
 
@@ -102,7 +102,7 @@
   function updateActionMode(current) {
     const offense = current.state.possession === 'home';
     const values = offense
-      ? [['shoot', 'SHOOT', 'HOLD'], ['pass', 'PASS', 'SELECT'], ['drive', 'DRIVE', 'MOVE'], ['screen', 'P&R', 'PHASE 7']]
+      ? [['shoot', 'SHOOT', 'HOLD'], ['pass', 'PASS', 'TAP / HOLD'], ['drive', 'DRIVE', 'MOVE'], ['screen', 'P&R', 'PHASE 7']]
       : [['shoot', 'CONTEST', 'TIME'], ['pass', 'STEAL', 'RISK'], ['drive', 'SWITCH', 'DEFENDER'], ['screen', 'SPRINT', 'HOLD']];
     current.root.querySelectorAll('[data-lg-action]').forEach((button, index) => {
       const [action, label, hint] = values[index];
@@ -120,7 +120,10 @@
     if (modeAction === 'shoot') return phase === 'start' ? engine.startShot(current.state) : engine.releaseShot(current.state);
     if (modeAction === 'contest' && phase === 'start') return engine.contest(current.state);
     if (phase !== 'start') return null;
-    if (modeAction === 'pass') { current.passMode = !current.passMode; return { ok: true }; }
+    if (modeAction === 'pass') {
+      current.passMode = false;
+      return engine.pass(current.state, null, current.input?.getMovement() || { x: 0, y: 0 });
+    }
     if (modeAction === 'steal') return engine.steal(current.state);
     if (modeAction === 'drive') return engine.drive(current.state, current.input?.getMovement() || { x: 0, y: -1 });
     if (modeAction === 'switch') return engine.switchDefender(current.state);
@@ -150,6 +153,11 @@
       element.classList.toggle('is-controlled', id === controlledId);
       element.classList.toggle('has-ball', id === holderId);
       element.classList.toggle('is-recovering', player.recoveryUntil > state.elapsed);
+      element.classList.toggle('is-cutting', player.routeKind === 'cut' || player.routeKind === 'give-go');
+      element.classList.toggle('is-relocating', player.routeKind === 'relocate');
+      element.classList.toggle('is-receiving', player.receiveFlashUntil > state.elapsed);
+      const route = element.querySelector('[data-lg-route]');
+      if (route) route.textContent = player.routeKind === 'cut' ? 'CUT' : player.routeKind === 'give-go' ? 'GIVE & GO' : player.routeKind === 'relocate' ? 'SPACE' : '';
     });
     const ball = root.querySelector('[data-lg-ball]');
     ball.style.transform = `translate3d(${state.ball.x * width / 100}px, ${state.ball.y * height / 100}px, 0) translate3d(-50%, -50%, 0)`;
@@ -202,6 +210,11 @@
       shootStart: () => action(session, 'shoot', 'start'),
       shootEnd: () => action(session, 'shoot', 'end'),
       pass: () => action(session, 'pass', 'start'),
+      passHold: () => {
+        const mode = session?.root.querySelector('[data-lg-action="pass"]')?.dataset.modeAction;
+        if (mode === 'pass') session.passMode = !session.passMode;
+        else action(session, 'pass', 'start');
+      },
       drive: () => action(session, 'drive', 'start'),
       switch: () => window.LiveGameEngine.switchDefender(session.state),
       screen: () => action(session, 'screen', 'start')

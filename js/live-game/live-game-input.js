@@ -94,6 +94,30 @@
         listen(button, 'pointerup', event => { callbacks.shootEnd?.(event); event.preventDefault(); });
         listen(button, 'pointercancel', event => { callbacks.shootEnd?.(event); event.preventDefault(); });
         listen(button, 'contextmenu', event => event.preventDefault());
+      } else if (action === 'pass') {
+        let passHoldTimer = null;
+        let passHeld = false;
+        listen(button, 'pointerdown', event => {
+          passHeld = false;
+          passHoldTimer = setTimeout(() => {
+            passHeld = true;
+            callbacks.passHold?.(event);
+          }, 280);
+          event.preventDefault();
+        });
+        const finishPass = event => {
+          if (passHoldTimer) clearTimeout(passHoldTimer);
+          passHoldTimer = null;
+          if (!passHeld) callbacks.pass?.(event);
+          event.preventDefault();
+        };
+        listen(button, 'pointerup', finishPass);
+        listen(button, 'pointercancel', event => {
+          if (passHoldTimer) clearTimeout(passHoldTimer);
+          passHoldTimer = null;
+          event.preventDefault();
+        });
+        listen(button, 'contextmenu', event => event.preventDefault());
       } else if (action === 'sprint') {
         listen(button, 'pointerdown', event => { movement.sprint = true; callbacks.sprintStart?.(event); event.preventDefault(); });
         const stopSprint = event => { movement.sprint = false; callbacks.sprintEnd?.(event); event.preventDefault(); };
