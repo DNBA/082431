@@ -11,6 +11,7 @@
     gacha: 'gacha',
     season: 'season',
     vocab: 'train',
+    notes: 'train',
     stats: 'train',
     planner: 'train'
   };
@@ -181,9 +182,11 @@
       { label: 'CALENDAR / FOCUS', tab: 'planner', view: 'planner', anchor: 'plannerMonthTitle' }
     ];
     const vocab = byId('tab-vocab');
+    const notes = byId('tab-notes');
     const stats = byId('tab-stats');
     const planner = byId('tab-planner');
     if (vocab && !byId('v2TrainSwitchVocab')) vocab.prepend(makeSectionSwitch('v2TrainSwitchVocab', trainItems));
+    if (notes && !byId('v2TrainSwitchNotes')) notes.prepend(makeSectionSwitch('v2TrainSwitchNotes', trainItems));
     if (stats && !byId('v2TrainSwitchStats')) stats.prepend(makeSectionSwitch('v2TrainSwitchStats', trainItems));
     if (planner && !byId('v2TrainSwitchPlanner')) planner.prepend(makeSectionSwitch('v2TrainSwitchPlanner', trainItems));
   }

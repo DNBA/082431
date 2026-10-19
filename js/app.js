@@ -28573,6 +28573,11 @@ const defaultState = {
         tasks: [],
         logs: []
       },
+      studyNotes: {
+        notes: [],
+        fontSize: 'normal',
+        draft: null
+      },
       studyStreak: 0,
       studyStreakLastDate: '',
       studyActivityDates: [],
@@ -28717,6 +28722,10 @@ function saveGame() {
       if (!s.studyPlanner || typeof s.studyPlanner !== 'object') s.studyPlanner = { tasks: [], logs: [] };
       if (!Array.isArray(s.studyPlanner.tasks)) s.studyPlanner.tasks = [];
       if (!Array.isArray(s.studyPlanner.logs)) s.studyPlanner.logs = [];
+      if (!s.studyNotes || typeof s.studyNotes !== 'object') s.studyNotes = { notes: [], fontSize: 'normal', draft: null };
+      if (!Array.isArray(s.studyNotes.notes)) s.studyNotes.notes = [];
+      if (!['small', 'normal', 'large'].includes(s.studyNotes.fontSize)) s.studyNotes.fontSize = 'normal';
+      if (!s.studyNotes.draft || typeof s.studyNotes.draft !== 'object') s.studyNotes.draft = null;
       if (!Array.isArray(s.studyActivityDates)) s.studyActivityDates = [];
       s.studyStreak = Math.max(0, Number(s.studyStreak) || 0);
       s.studyStreakLastDate = typeof s.studyStreakLastDate === 'string' ? s.studyStreakLastDate : '';
@@ -28975,6 +28984,14 @@ function saveGame() {
     }
     if (!state.inventorySortOrder) state.inventorySortOrder = 'desc';
     if (!state.inventoryFilters) state.inventoryFilters = { position: 'ALL', team: 'ALL', rarity: 'ALL' };
+    window.getStudyNotesState = () => state.studyNotes;
+    window.updateStudyNotesState = (nextStore) => {
+      state.studyNotes = nextStore && typeof nextStore === 'object'
+        ? nextStore
+        : { notes: [], fontSize: 'normal', draft: null };
+      saveGame();
+      return state.studyNotes;
+    };
 
     let activeSessionCards = [];
     let isSimulating = false;
@@ -30481,6 +30498,7 @@ renderStudyCalendar();
 renderDailyQuests();
 renderScoreTrendChart();
       if (typeof window.renderStudyPlanner === 'function') window.renderStudyPlanner();
+      if (typeof window.StudyNotes?.render === 'function') window.StudyNotes.render();
       lucide.createIcons();
     }
 
@@ -30508,8 +30526,8 @@ renderScoreTrendChart();
     }
 
     function switchTab(tabKey) {
-      if (state.focusMode?.active && !['stats', 'planner', 'vocab'].includes(tabKey)) {
-        showToast('🛡️ 專注模式中，只能使用專注、行事曆與單字學習。', 'warning');
+      if (state.focusMode?.active && !['stats', 'planner', 'vocab', 'notes'].includes(tabKey)) {
+        showToast('🛡️ 專注模式中，只能使用專注、行事曆、單字與便條。', 'warning');
         showFocusModePanel();
         return false;
       }
@@ -30520,6 +30538,7 @@ playSound('click');
         const isCurrent = btn.getAttribute('data-target') === tabKey;
         btn.className = `nav-tab flex flex-col items-center gap-1 text-[10px] ${isCurrent ? 'text-amber-400 font-bold' : 'text-slate-400 hover:text-slate-200'}`;
       });
+      if (tabKey === 'notes' && typeof window.StudyNotes?.render === 'function') window.StudyNotes.render();
       lucide.createIcons();
     }
 

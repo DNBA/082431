@@ -75,7 +75,7 @@ test('project wires editor before app and preserves the existing state and rewar
   assert.match(index, /vocab-editor-v2\.css/);
   assert.match(index, /id="vocabTopAddButton"/);
   assert.match(index, /class="vocab-v2-top-banner"/);
-  assert.match(index, /app\.js\?v=20261019-vocab-mobile-1/);
+  assert.match(index, /app\.js\?v=20261019-notes-1/);
   assert.equal((index.match(/onclick="openAddVocabularyWord\(\)"/g) || []).length, 1);
   assert.match(css, /touch-action:\s*manipulation/);
   assert.match(css, /\.vocab-v2-top-add[\s\S]*min-height:\s*46px/);
