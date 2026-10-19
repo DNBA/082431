@@ -70,8 +70,15 @@ test('existing phrase records are not rewritten by migration', () => {
 test('project wires editor before app and preserves the existing state and reward flow', () => {
   const index = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
   const app = fs.readFileSync(path.join(root, 'js/app.js'), 'utf8');
+  const css = fs.readFileSync(path.join(root, 'css', 'vocab-editor-v2.css'), 'utf8');
   assert.ok(index.indexOf('js/vocab-editor-v2.js') < index.indexOf('js/app.js'));
   assert.match(index, /vocab-editor-v2\.css/);
+  assert.match(index, /id="vocabTopAddButton"/);
+  assert.match(index, /class="vocab-v2-top-banner"/);
+  assert.match(index, /app\.js\?v=20261019-vocab-mobile-1/);
+  assert.equal((index.match(/onclick="openAddVocabularyWord\(\)"/g) || []).length, 1);
+  assert.match(css, /touch-action:\s*manipulation/);
+  assert.match(css, /\.vocab-v2-top-add[\s\S]*min-height:\s*46px/);
   assert.match(index, /startSynonymVocabChallenge/);
   assert.match(index, /搜尋單字、意思、例句或同義詞/);
   assert.match(app, /state\.toeic\.vocabList\.unshift/);

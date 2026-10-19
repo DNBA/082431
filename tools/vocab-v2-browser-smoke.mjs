@@ -9,7 +9,7 @@ const screenshotPath = resolve(process.argv[5] || resolve(project, 'artifacts', 
 const edge = 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe';
 const port = 9337;
 const profile = resolve(project, '.tmp-vocab-v2-edge');
-const pageUrl = pathToFileURL(resolve(project, 'index.html')).href;
+const pageUrl = process.argv[6] || pathToFileURL(resolve(project, 'index.html')).href;
 const processHandle = spawn(edge, [
   '--headless=new', '--disable-gpu', '--no-first-run', '--disable-default-apps',
   '--allow-file-access-from-files', `--remote-debugging-port=${port}`, `--user-data-dir=${profile}`, 'about:blank'
@@ -27,7 +27,8 @@ async function getTarget() {
     try {
       const response = await fetch(`http://127.0.0.1:${port}/json/list`);
       const targets = await response.json();
-      if (targets[0]?.webSocketDebuggerUrl) return targets[0];
+      const page = targets.find(target => target.type === 'page' && !String(target.url || '').startsWith('chrome-extension://'));
+      if (page?.webSocketDebuggerUrl) return page;
     } catch (_) {}
     await wait(100);
   }
@@ -46,6 +47,16 @@ async function evaluate(expression) {
   const response = await command('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true });
   if (response.exceptionDetails) throw new Error(response.exceptionDetails.text || 'Runtime evaluation failed.');
   return response.result?.value;
+}
+
+async function touch(selector) {
+  await evaluate(`(()=>{const element=document.querySelector(${JSON.stringify(selector)}); if(!element) return false; element.scrollIntoView({block:'center'}); return true;})()`);
+  await wait(120);
+  const point = await evaluate(`(()=>{const element=document.querySelector(${JSON.stringify(selector)}); if(!element) return null; const rect=element.getBoundingClientRect(); return {x:rect.left+rect.width/2,y:rect.top+rect.height/2,width:rect.width,height:rect.height};})()`);
+  if (!point || point.width < 1 || point.height < 1) throw new Error(`Touch target unavailable: ${selector}`);
+  await command('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: point.x, y: point.y, radiusX: 3, radiusY: 3, force: 1 }] });
+  await command('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await wait(180);
 }
 
 try {
@@ -97,9 +108,11 @@ try {
     state.toeic.vocabList.unshift(legacy);
     state.toeic.vocabList=window.VocabEditorV2.migrateAllVocabulary(state.toeic.vocabList);
     renderVocabList();
-    editVocabularyWord(legacyId);
   })()`);
-  await wait(250);
+  await touch('#vocabTopAddButton');
+  const topAddOpened = await evaluate("document.getElementById('vocabEditorV2')?.classList.contains('is-open') === true");
+  await evaluate("window.VocabEditorV2.close()");
+  await touch('[data-vocab-action="edit"][data-vocab-key="legacy-edit-smoke"]');
   const legacyDiagnostics = await evaluate(`(()=>{
     const legacy=state.toeic.vocabList.find(item=>String(item?.id)==='legacy-edit-smoke');
     return {
@@ -112,8 +125,8 @@ try {
       senses:legacy?.senses?.length || 0
     };
   })()`);
-  await evaluate("window.VocabEditorV2.close(); openAddVocabularyWord();");
-  await wait(100);
+  await evaluate("window.VocabEditorV2.close()");
+  await touch('#vocabTopAddButton');
   await evaluate("document.querySelector('[data-add-sense]').click(); document.querySelector('[data-add-synonym]').click();");
   await wait(100);
   const diagnostics = await evaluate(`(()=>{
@@ -130,13 +143,15 @@ try {
       sheetInside:!!sheet&&sheet.left>=0&&sheet.right<=innerWidth+.5&&sheet.bottom<=innerHeight+.5
     };
   })()`);
+  await evaluate("window.VocabEditorV2.close(); window.scrollTo(0, 0)");
+  await wait(160);
   const shot = await command('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
   const fs = await import('node:fs/promises');
   await fs.mkdir(resolve(screenshotPath, '..'), { recursive: true });
   await fs.writeFile(screenshotPath, Buffer.from(shot.data, 'base64'));
-  console.log(JSON.stringify({ diagnostics, legacyDiagnostics, runtimeErrors, resourceErrors: resourceErrors.length, screenshotPath }, null, 2));
+  console.log(JSON.stringify({ pageUrl, diagnostics, topAddOpened, legacyDiagnostics, runtimeErrors, resourceErrors: resourceErrors.length, screenshotPath }, null, 2));
   const legacyFailed = !legacyDiagnostics.editorOpen || legacyDiagnostics.word !== 'legacyword' || legacyDiagnostics.meaning !== '原始意思' || legacyDiagnostics.id !== 'legacy-edit-smoke' || legacyDiagnostics.box !== 2 || legacyDiagnostics.sourceType !== 'manual' || legacyDiagnostics.senses !== 1;
-  if (legacyFailed || diagnostics.overflow || !diagnostics.vocabVisible || !diagnostics.editorOpen || diagnostics.senses !== 2 || diagnostics.synonyms !== 1 || !diagnostics.toolbarInside || !diagnostics.sheetInside || runtimeErrors.length) process.exitCode = 1;
+  if (!topAddOpened || legacyFailed || diagnostics.overflow || !diagnostics.vocabVisible || !diagnostics.editorOpen || diagnostics.senses !== 2 || diagnostics.synonyms !== 1 || !diagnostics.toolbarInside || !diagnostics.sheetInside || runtimeErrors.length) process.exitCode = 1;
 } finally {
   try { socket?.close(); } catch (_) {}
   processHandle.kill();

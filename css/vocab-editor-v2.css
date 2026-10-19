@@ -1,5 +1,29 @@
 /* ToeicQuest NBA — Vocabulary Editor V2 */
 .vocab-v2-lock { overflow: hidden !important; }
+#tab-vocab button, .vocab-v2-overlay button, .vocab-v2-card-main {
+  touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+}
+.vocab-v2-top-banner {
+  position: relative; z-index: 2; display: flex; align-items: center; justify-content: space-between; gap: 14px;
+  min-height: 72px; padding: 13px 15px; overflow: hidden; border: 1px solid var(--tq-line, #2c2c2e);
+  border-radius: 20px; color: var(--tq-text, #fff); background: linear-gradient(135deg, var(--tq-surface-raised, #111), var(--tq-surface-muted, #171717));
+  box-shadow: 0 10px 28px rgba(0,0,0,.12);
+}
+.vocab-v2-top-banner::after {
+  content: ''; position: absolute; right: -34px; top: -42px; width: 130px; height: 130px; border-radius: 50%;
+  background: radial-gradient(circle, rgba(240,201,104,.2), rgba(240,201,104,0) 70%); pointer-events: none;
+}
+.vocab-v2-top-banner-copy { position: relative; z-index: 1; min-width: 0; }
+.vocab-v2-top-banner-copy > span { display: block; color: #b58913; font-size: 9px; font-weight: 900; letter-spacing: .17em; }
+.vocab-v2-top-banner-copy > strong { display: block; margin-top: 2px; font-size: 18px; line-height: 1.2; }
+.vocab-v2-top-banner-copy > small { display: block; margin-top: 3px; color: var(--tq-muted, #aaa); font-size: 10px; }
+.vocab-v2-top-add {
+  position: relative; z-index: 3; display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: center; gap: 5px;
+  min-width: 112px; min-height: 46px; padding: 10px 13px; border: 1px solid #f0c968; border-radius: 14px;
+  color: #211900; background: #f0c968; box-shadow: 0 8px 18px rgba(181,137,19,.2); font-size: 12px; font-weight: 900;
+  cursor: pointer; pointer-events: auto;
+}
+.vocab-v2-top-add:active { transform: scale(.97); }
 .vocab-v2-overlay {
   position: fixed; inset: 0; z-index: 170; display: flex; align-items: flex-end; justify-content: center;
   padding-top: max(12px, env(safe-area-inset-top)); background: var(--tq-overlay, rgba(0,0,0,.72));
@@ -62,7 +86,7 @@
 .vocab-v2-search { position: relative; flex: 1 1 190px; }
 .vocab-v2-search input { width: 100%; box-sizing: border-box; padding: 9px 12px 9px 34px; border: 1px solid var(--tq-line, #2c2c2e); border-radius: 12px; color: var(--tq-text, #fff); background: var(--tq-surface-muted, #171717); font-size: 12px; outline: none; }
 .vocab-v2-search span { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--tq-muted, #aaa); pointer-events: none; }
-.vocab-v2-toolbar > button { padding: 9px 12px; border: 1px solid var(--tq-line, #2c2c2e); border-radius: 12px; font-size: 11px; font-weight: 850; }
+.vocab-v2-toolbar > button { position: relative; z-index: 2; min-height: 42px; padding: 9px 12px; border: 1px solid var(--tq-line, #2c2c2e); border-radius: 12px; font-size: 11px; font-weight: 850; pointer-events: auto; }
 .vocab-v2-add-button { color: #1e1700; background: #f0c968; border-color: #f0c968 !important; }
 .vocab-v2-synonym-button { color: #d4c9ff; background: #2b2350; border-color: #514180 !important; }
 .vocab-v2-search-status { width: 100%; margin: 0; color: var(--tq-muted, #aaa); font-size: 10px; }
@@ -82,7 +106,7 @@
 .vocab-v2-syn-preview i { padding: 4px 7px; border-radius: 99px; color: #8b79c5; background: rgba(116,91,180,.1); font-size: 10px; font-style: normal; }
 .vocab-v2-more { display: block; margin-top: 8px; color: var(--tq-muted, #aaa); font-size: 10px; }
 .vocab-v2-card-actions { display: flex; flex-direction: column; gap: 5px; }
-.vocab-v2-card-actions button { min-width: 42px; min-height: 30px; padding: 5px 7px; border: 1px solid var(--tq-line, #2c2c2e); border-radius: 9px; color: var(--tq-text-soft, #ddd); background: var(--tq-control, #1c1c1e); font-size: 10px; font-weight: 750; }
+.vocab-v2-card-actions button { position: relative; z-index: 2; min-width: 44px; min-height: 38px; padding: 7px 9px; border: 1px solid var(--tq-line, #2c2c2e); border-radius: 9px; color: var(--tq-text-soft, #ddd); background: var(--tq-control, #1c1c1e); font-size: 10px; font-weight: 750; cursor: pointer; pointer-events: auto; }
 .vocab-v2-card-actions button.is-danger { color: #c93e46; }
 
 .vocab-v2-detail header > span, .vocab-v2-quiz-question > span, .vocab-v2-quiz-result > span { color: var(--tq-muted, #aaa); font-size: 9px; font-weight: 900; letter-spacing: .15em; }
@@ -115,6 +139,10 @@
 .vocab-v2-quiz-result strong { display: block; margin: 8px 0; color: #b58913; font-size: 44px; }
 
 @media (max-width: 430px) {
+  .vocab-v2-top-banner { min-height: 68px; padding: 11px 12px; gap: 9px; border-radius: 17px; }
+  .vocab-v2-top-banner-copy > strong { font-size: 16px; }
+  .vocab-v2-top-banner-copy > small { max-width: 170px; }
+  .vocab-v2-top-add { min-width: 104px; min-height: 48px; padding-inline: 11px; }
   .vocab-v2-sheet { max-height: 96dvh; }
   .vocab-v2-body { padding: 13px; }
   .vocab-v2-word-section, .vocab-v2-grid { grid-template-columns: 1fr; }

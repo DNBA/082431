@@ -36,7 +36,7 @@
     <link rel="stylesheet" href="./css/season-v2.css?v=20261005-badge-cinema-1">
     <link rel="stylesheet" href="./css/study-planner.css?v=20261003-planner-3">
     <link rel="stylesheet" href="./css/vocab-endless.css?v=20261007-source-1">
-    <link rel="stylesheet" href="./css/vocab-editor-v2.css?v=20261019-v2">
+    <link rel="stylesheet" href="./css/vocab-editor-v2.css?v=20261019-mobile-1">
     <link rel="stylesheet" href="./css/learning-tools.css?v=20261005-learning-1">
     <link rel="stylesheet" href="./css/season-standings.css?v=20261005-standings-1">
     <link rel="stylesheet" href="./css/season-league.css?v=20261007-league-1">
@@ -603,6 +603,17 @@
 
     <!-- TAB 4: 📖 單字筆記 -->
     <section id="tab-vocab" class="tab-content space-y-6 hidden">
+      <header class="vocab-v2-top-banner" aria-label="單字學習快速操作">
+        <div class="vocab-v2-top-banner-copy">
+          <span>VOCABULARY</span>
+          <strong>我的單字庫</strong>
+          <small>新增、編輯與複習自己的單字</small>
+        </div>
+        <button id="vocabTopAddButton" type="button" class="vocab-v2-top-add" onclick="openAddVocabularyWord()">
+          <span aria-hidden="true">＋</span>
+          <span>新增單字</span>
+        </button>
+      </header>
 <!-- 📊 千字庫圖鑑收集進度面板 -->
 <div class="bg-slate-900 p-4 rounded-2xl border border-slate-800 shadow mb-4 space-y-2.5">
   <div class="flex justify-between items-center text-xs">
@@ -757,7 +768,6 @@
               <input id="vocabSearchInput" type="search" autocomplete="off" placeholder="搜尋單字、意思、例句或同義詞" oninput="changeVocabSearch(this.value)">
             </label>
             <button type="button" class="vocab-v2-synonym-button" onclick="startSynonymVocabChallenge()">同義詞挑戰</button>
-            <button type="button" class="vocab-v2-add-button" onclick="openAddVocabularyWord()">＋ 新增單字</button>
             <p id="vocabSearchStatus" class="vocab-v2-search-status"></p>
           </div>
         </div>
@@ -1462,8 +1472,8 @@
   <script src="./js/focus-timer.js?v=20261003-split-focus-2"></script>
   <script src="./js/core/save-backups.js?v=20261005-learning-1"></script>
   <script src="./js/box-score-integrity.js?v=20261007-integrity-1"></script>
-  <script src="./js/vocab-editor-v2.js?v=20261019-v2"></script>
-  <script src="./js/app.js?v=20261008-three-point-live-3"></script>
+  <script src="./js/vocab-editor-v2.js?v=20261019-mobile-1"></script>
+  <script src="./js/app.js?v=20261019-vocab-mobile-1"></script>
 <!-- 🏀 季後賽逐場動態播報彈窗 -->
 <div id="playoffSeriesModal" onclick="if(event.target === this && !document.getElementById('posNextRoundBtn').disabled) closeSeriesAndShowBoxScore()" class="fixed inset-0 bg-slate-950/90 backdrop-blur-md z-50 hidden flex items-end sm:items-center justify-center p-3 sm:p-4 ios-safe-modal">
   <div class="bg-slate-900 border border-amber-500/50 rounded-3xl w-full max-w-lg p-6 shadow-2xl space-y-4 relative animate-modal-in">
