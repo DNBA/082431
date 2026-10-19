@@ -1,4 +1,4 @@
-/* ToeicQuest NBA — LIVE GAME 2D renderer (V4.0.1 motion/pass update). */
+/* ToeicQuest NBA — LIVE GAME 2D renderer (V4.0.2 shot arc / rim finish). */
 (function () {
   'use strict';
 
@@ -33,6 +33,7 @@
           </svg>
           <div class="lg2d-hoop"><i></i><span></span></div>
           <div class="lg2d-players" data-lg-players></div>
+          <div class="lg2d-ball-shadow hidden" data-lg-ball-shadow></div>
           <div class="lg2d-ball" data-lg-ball>●</div>
           <div class="lg2d-shot-meter hidden" data-lg-shot-meter><span></span><i data-lg-shot-ring></i><b data-lg-shot-label>RELEASE</b></div>
           <div class="lg2d-feedback" data-lg-feedback><b>TIP OFF</b><span>自由移動並尋找空檔</span></div>
@@ -101,8 +102,9 @@
 
   function updateActionMode(current) {
     const offense = current.state.possession === 'home';
+    const shotAction = offense ? window.LiveGameEngine.getShotAction?.(current.state) || 'SHOOT' : 'CONTEST';
     const values = offense
-      ? [['shoot', 'SHOOT', 'HOLD'], ['pass', 'PASS', 'TAP / HOLD'], ['drive', 'DRIVE', 'MOVE'], ['screen', 'P&R', 'PHASE 7']]
+      ? [['shoot', shotAction, shotAction === 'SHOOT' ? 'HOLD' : 'TAP'], ['pass', 'PASS', 'TAP / HOLD'], ['drive', 'DRIVE', 'MOVE'], ['screen', 'P&R', 'PHASE 7']]
       : [['shoot', 'CONTEST', 'TIME'], ['pass', 'STEAL', 'RISK'], ['drive', 'SWITCH', 'DEFENDER'], ['screen', 'SPRINT', 'HOLD']];
     current.root.querySelectorAll('[data-lg-action]').forEach((button, index) => {
       const [action, label, hint] = values[index];
@@ -160,8 +162,17 @@
       if (route) route.textContent = player.routeKind === 'cut' ? 'CUT' : player.routeKind === 'give-go' ? 'GIVE & GO' : player.routeKind === 'relocate' ? 'SPACE' : '';
     });
     const ball = root.querySelector('[data-lg-ball]');
-    ball.style.transform = `translate3d(${state.ball.x * width / 100}px, ${state.ball.y * height / 100}px, 0) translate3d(-50%, -50%, 0)`;
+    const ballHeight = Math.max(0, Number(state.ball.z) || 0);
+    const lift = ballHeight * height / 140;
+    const scale = 1 + Math.min(.28, ballHeight * .012);
+    ball.style.transform = `translate3d(${state.ball.x * width / 100}px, ${state.ball.y * height / 100 - lift}px, 0) translate3d(-50%, -50%, 0) scale(${scale})`;
     ball.classList.toggle('is-flight', state.ball.inFlight);
+    ball.classList.toggle('is-shot', !!state.shot && state.ball.inFlight);
+    ball.style.setProperty('--lg2d-ball-height', String(ballHeight));
+    const shadow = root.querySelector('[data-lg-ball-shadow]');
+    shadow.classList.toggle('hidden', !state.ball.inFlight);
+    shadow.style.opacity = String(Math.max(.1, .34 - ballHeight * .009));
+    shadow.style.transform = `translate3d(${state.ball.x * width / 100}px, ${state.ball.y * height / 100}px, 0) translate3d(-50%, -50%, 0) scale(${1 + ballHeight * .018})`;
     const meter = root.querySelector('[data-lg-shot-meter]');
     const ring = root.querySelector('[data-lg-shot-ring]');
     meter.classList.toggle('hidden', !state.shot?.charging);

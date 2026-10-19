@@ -1,4 +1,4 @@
-/* ToeicQuest NBA — LIVE GAME 2D v1 gameplay engine (V4.0, Phase 1-6)
+/* ToeicQuest NBA — LIVE GAME 2D v1 gameplay engine (V4.0.2 shot arc / rim finish)
    Pure runtime module: no DOM access, no saveGame calls, testable in Node. */
 (function (root, factory) {
   const api = factory();
@@ -131,7 +131,7 @@
       possessionsRemaining: options.mode === 'hybrid' ? clamp(options.possessions || 3, 1, 6) : null,
       players,
       controlledPlayerId: homePoint.id,
-      ball: { x: homePoint.x, y: homePoint.y, holderId: homePoint.id, inFlight: false },
+      ball: { x: homePoint.x, y: homePoint.y, z: 0, holderId: homePoint.id, inFlight: false },
       lastPass: null,
       passFlight: null,
       shot: null,
@@ -190,6 +190,7 @@
     state.ball.holderId = point.id;
     state.ball.x = point.x;
     state.ball.y = point.y;
+    state.ball.z = 0;
     state.ball.inFlight = false;
     if (team === 'home') state.controlledPlayerId = point.id;
     else {
@@ -356,6 +357,7 @@
     if (ballHolder && !state.ball.inFlight) {
       state.ball.x = ballHolder.x + 2.5;
       state.ball.y = ballHolder.y - 1;
+      state.ball.z = 0;
     }
   }
 
@@ -402,10 +404,12 @@
     const progress = clamp((state.elapsed - flight.startedAt) / Math.max(.01, flight.endsAt - flight.startedAt), 0, 1);
     state.ball.x = flight.fromX + (target.x - flight.fromX) * progress;
     state.ball.y = flight.fromY + (target.y - flight.fromY) * progress;
+    state.ball.z = Math.sin(progress * Math.PI) * 2.2;
     if (progress < 1) return;
     const intercepted = state._rng() < flight.turnoverChance;
     state.passFlight = null;
     state.ball.inFlight = false;
+    state.ball.z = 0;
     if (intercepted) {
       const passer = playerById(state, flight.fromId);
       if (passer) passer.stats.tov += 1;
@@ -424,11 +428,56 @@
     addEvent(state, 'pass-complete', { targetId: target.id });
   }
 
+  function getShotAction(state, shooter) {
+    const player = shooter || holder(state);
+    if (!player) return 'SHOOT';
+    const hoopDistance = distance(player, { x: COURT.hoopX, y: COURT.hoopY });
+    if (hoopDistance > 13) return 'SHOOT';
+    const driving = player.driveUntil > state.elapsed;
+    return player.ratings.dunk >= 72 && (driving || hoopDistance <= 9.5) ? 'DUNK' : 'LAYUP';
+  }
+
+  function beginRimFinish(state, shooter, finishType) {
+    const contest = contestAgainst(state, shooter);
+    const dunk = finishType === 'dunk';
+    const rating = dunk ? shooter.ratings.dunk : (shooter.ratings.midrange * .58 + shooter.ratings.handling * .42);
+    const badgeBoost = hasBadge(shooter.card, ['曼巴精神']) && state.quarter >= 4 ? .025 : 0;
+    const base = dunk ? .79 : .62;
+    const ability = (rating - 70) * (dunk ? .005 : .0045);
+    const contestPenalty = contest.value * (dunk ? .27 : .36);
+    const probability = clamp(base + ability + badgeBoost - contestPenalty - shooter.fatigue * .14, .12, dunk ? .97 : .92);
+    const made = state._rng() < probability;
+    shooter.stats.fgA += 1;
+    state.shot = {
+      shooterId: shooter.id,
+      charging: false,
+      phase: 0,
+      finishType,
+      releasedAt: state.elapsed,
+      resolvesAt: state.elapsed + (dunk ? .36 : .48),
+      startX: shooter.x + 1.2,
+      startY: shooter.y - 1,
+      result: {
+        probability, isThree: false, atRim: true, points: 2, made, rating,
+        timing: { label: dunk ? 'DUNK' : 'LAYUP', score: 1, tone: made ? 'green' : 'bad' },
+        contest, greenWindow: 0, distance: distance(shooter, { x: COURT.hoopX, y: COURT.hoopY }), finishType
+      }
+    };
+    state.ball.holderId = null;
+    state.ball.inFlight = true;
+    state.ball.z = 0;
+    feedback(state, dunk ? 'ATTACK THE RIM' : 'LAYUP', `${contest.label} · ${Math.round(probability * 100)}%`, dunk ? 'good' : 'neutral', .7);
+    addEvent(state, 'rim-finish-start', { shooterId: shooter.id, finishType, probability });
+    return { ok: true, direct: true, finishType, probability, made };
+  }
+
   function startShot(state) {
     if (state.finished || state.paused || state.shot || state.passFlight || state.possession !== 'home') return { ok: false, reason: 'busy' };
     const shooter = holder(state);
     if (!shooter || shooter.id !== state.controlledPlayerId) return { ok: false, reason: 'no-ball' };
-    state.shot = { shooterId: shooter.id, charging: true, phase: 0, circleScale: 1.78, releasedAt: null, resolvesAt: null, result: null };
+    const action = getShotAction(state, shooter);
+    if (action !== 'SHOOT') return beginRimFinish(state, shooter, action.toLowerCase());
+    state.shot = { shooterId: shooter.id, charging: true, phase: 0, circleScale: 1.78, releasedAt: null, resolvesAt: null, startX: null, startY: null, result: null };
     addEvent(state, 'shot-charge', { shooterId: shooter.id });
     return { ok: true };
   }
@@ -485,10 +534,14 @@
     if (evaluation.isThree) shooter.stats.threeA += 1;
     state.shot.charging = false;
     state.shot.releasedAt = state.elapsed;
-    state.shot.resolvesAt = state.elapsed + .52;
+    const flightDuration = clamp(.34 + evaluation.distance * .0085, .43, .82);
+    state.shot.resolvesAt = state.elapsed + flightDuration;
+    state.shot.startX = shooter.x + 2.5;
+    state.shot.startY = shooter.y - 1;
     state.shot.result = { ...evaluation, made };
     state.ball.holderId = null;
     state.ball.inFlight = true;
+    state.ball.z = 0;
     feedback(state, evaluation.timing.label, `${evaluation.contest.label} · ${Math.round(evaluation.probability * 100)}%`, evaluation.timing.tone, 1.05);
     addEvent(state, 'shot-release', { shooterId: shooter.id, ...state.shot.result });
     return { ok: true, ...state.shot.result };
@@ -504,8 +557,21 @@
       return;
     }
     const progress = clamp((state.elapsed - shot.releasedAt) / Math.max(.01, shot.resolvesAt - shot.releasedAt), 0, 1);
-    state.ball.x = shooter.x + (COURT.hoopX - shooter.x) * progress;
-    state.ball.y = shooter.y + (COURT.hoopY - shooter.y) * progress - Math.sin(progress * Math.PI) * 7;
+    const startX = Number.isFinite(shot.startX) ? shot.startX : shooter.x;
+    const startY = Number.isFinite(shot.startY) ? shot.startY : shooter.y;
+    const finishType = shot.result?.finishType || null;
+    const targetX = COURT.hoopX;
+    const targetY = COURT.hoopY + (finishType === 'dunk' ? 1 : 1.8);
+    state.ball.x = startX + (targetX - startX) * progress;
+    state.ball.y = startY + (targetY - startY) * progress;
+    const shotDistance = Number(shot.result?.distance || distance({ x: startX, y: startY }, { x: targetX, y: targetY }));
+    const peakHeight = finishType === 'dunk' ? 3.4 : finishType === 'layup' ? 7.5 : clamp(10 + shotDistance * .18, 12, 22);
+    state.ball.z = Math.sin(progress * Math.PI) * peakHeight;
+    if (finishType === 'dunk') {
+      const attackProgress = Math.min(1, progress * 1.28);
+      shooter.x = startX + (COURT.hoopX - startX) * attackProgress;
+      shooter.y = startY + (COURT.hoopY + 5 - startY) * attackProgress;
+    }
     if (progress < 1) return;
     const result = shot.result;
     if (result.made) {
@@ -516,14 +582,16 @@
       state.quarterScores[shooter.team][state.quarter - 1] += result.points;
       const assist = state.lastPass && state.elapsed - state.lastPass.at < 3 ? playerById(state, state.lastPass.passerId) : null;
       if (assist && assist.team === shooter.team && assist.id !== shooter.id) assist.stats.ast += 1;
-      feedback(state, result.isThree ? '3 POINTER' : 'BUCKET', `${shooter.name} · ${result.timing.label}`, 'good');
+      const madeLabel = result.finishType === 'dunk' ? 'SLAM DUNK' : result.finishType === 'layup' ? 'LAYUP' : result.isThree ? '3 POINTER' : 'BUCKET';
+      feedback(state, madeLabel, `${shooter.name} · ${result.contest.label}`, shooter.team === 'home' ? 'good' : 'bad');
       addEvent(state, 'shot-made', { shooterId: shooter.id, points: result.points });
     } else {
-      feedback(state, 'MISSED', `${result.contest.label} · ${result.timing.label}`, 'bad');
+      feedback(state, shooter.team === 'home' ? 'MISSED' : 'DEFENSIVE STOP', `${result.contest.label} · ${result.timing.label}`, shooter.team === 'home' ? 'bad' : 'good');
       addEvent(state, 'shot-missed', { shooterId: shooter.id });
     }
     state.shot = null;
     state.ball.inFlight = false;
+    state.ball.z = 0;
     changePossession(state, shooter.team === 'home' ? 'away' : 'home', result.made ? 'SCORE' : 'DEFENSIVE REBOUND');
   }
 
@@ -597,6 +665,8 @@
   }
 
   function cpuShoot(state, shooter) {
+    const rimAction = getShotAction(state, shooter);
+    if (rimAction !== 'SHOOT') return beginRimFinish(state, shooter, rimAction.toLowerCase());
     const contest = contestAgainst(state, shooter);
     const distanceToHoop = distance(shooter, { x: COURT.hoopX, y: COURT.hoopY });
     const isThree = distanceToHoop > 31;
@@ -606,16 +676,26 @@
     if (isThree) shooter.stats.threeA += 1;
     const made = state._rng() < probability;
     const points = isThree ? 3 : 2;
-    if (made) {
-      shooter.stats.fgM += 1;
-      shooter.stats.pts += points;
-      if (isThree) shooter.stats.threeM += 1;
-      state.awayScore += points;
-      state.quarterScores.away[state.quarter - 1] += points;
-      feedback(state, isThree ? 'OPPONENT 3' : 'OPPONENT SCORE', `${shooter.name} · ${contest.label}`, 'bad');
-    } else feedback(state, 'DEFENSIVE STOP', `${contest.label} 造成失手`, 'good');
-    addEvent(state, made ? 'cpu-shot-made' : 'cpu-shot-missed', { shooterId: shooter.id, points: made ? points : 0, contest: contest.label });
-    changePossession(state, 'home', made ? 'SCORE' : 'DEFENSIVE REBOUND');
+    const flightDuration = clamp(.34 + distanceToHoop * .0085, .43, .82);
+    state.shot = {
+      shooterId: shooter.id,
+      charging: false,
+      phase: 0,
+      releasedAt: state.elapsed,
+      resolvesAt: state.elapsed + flightDuration,
+      startX: shooter.x + 2.5,
+      startY: shooter.y - 1,
+      result: {
+        probability, isThree, atRim: false, points, made, rating: ability,
+        timing: { label: 'AI RELEASE', score: .72, tone: 'neutral' },
+        contest, greenWindow: 0, distance: distanceToHoop, finishType: null
+      }
+    };
+    state.ball.holderId = null;
+    state.ball.inFlight = true;
+    state.ball.z = 0;
+    feedback(state, 'OPPONENT SHOT', `${shooter.name} · ${contest.label}`, 'warn', .72);
+    addEvent(state, 'cpu-shot-release', { shooterId: shooter.id, isThree, probability });
   }
 
   function updateCPUOffense(state, dt) {
@@ -732,7 +812,7 @@
   }
 
   return {
-    VERSION, COURT, create, step, pass, startShot, releaseShot, drive, contest, steal, switchDefender,
+    VERSION, COURT, create, step, pass, startShot, releaseShot, drive, contest, steal, switchDefender, getShotAction,
     setPaused, toBoxScore, snapshot, resolveRatings, evaluateShot,
     helpers: { clamp, distance, playerById, teamPlayers, holder, controlled, changePossession, resetPossession }
   };

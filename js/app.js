@@ -28620,6 +28620,7 @@ dailyQuests: {
         totalListening: 0,
         totalReading: 0,
         vocabList: [...TOEIC_WORDS],
+        vocabSchemaVersion: 2,
         wrongAnswers: [],
         endlessBest: 0,
         endlessBestAt: '',
@@ -28720,6 +28721,11 @@ function saveGame() {
       s.studyStreak = Math.max(0, Number(s.studyStreak) || 0);
       s.studyStreakLastDate = typeof s.studyStreakLastDate === 'string' ? s.studyStreakLastDate : '';
       if (!s.toeic || typeof s.toeic !== 'object') s.toeic = { ...defaultState.toeic };
+      if (!Array.isArray(s.toeic.vocabList)) s.toeic.vocabList = [];
+      if (window.VocabEditorV2) {
+        s.toeic.vocabList = window.VocabEditorV2.migrateAllVocabulary(s.toeic.vocabList);
+        s.toeic.vocabSchemaVersion = 2;
+      }
       s.toeic.endlessBest = Math.max(0, Number(s.toeic.endlessBest) || 0);
       s.toeic.endlessBestAt = typeof s.toeic.endlessBestAt === 'string' ? s.toeic.endlessBestAt : '';
       if (!s.playerProgression || typeof s.playerProgression !== 'object') s.playerProgression = JSON.parse(JSON.stringify(defaultState.playerProgression));
@@ -28963,6 +28969,10 @@ function saveGame() {
        ⑩ RENDERING & UI SYNC
     ===================================================== */
     let state = loadGame() || defaultState;
+    if (window.VocabEditorV2 && state?.toeic) {
+      state.toeic.vocabList = window.VocabEditorV2.migrateAllVocabulary(state.toeic.vocabList || []);
+      state.toeic.vocabSchemaVersion = 2;
+    }
     if (!state.inventorySortOrder) state.inventorySortOrder = 'desc';
     if (!state.inventoryFilters) state.inventoryFilters = { position: 'ALL', team: 'ALL', rarity: 'ALL' };
 
@@ -30020,6 +30030,7 @@ function updateVocabProgressBar() {
 }
     let vocabListSortMode = 'recent';
     let vocabRandomOrder = [];
+    let vocabSearchQuery = '';
 
     function vocabDisplayKey(item) {
       return item?.id != null ? `id:${item.id}` : `word:${String(item?.word || '').trim().toLowerCase()}`;
@@ -30035,7 +30046,12 @@ function updateVocabProgressBar() {
     }
 
     function getVocabListForDisplay() {
-      const source = [...(state.toeic.vocabList || [])];
+      const source = [...(state.toeic.vocabList || [])].filter(item => {
+        if (!vocabSearchQuery) return true;
+        if (window.VocabEditorV2) return window.VocabEditorV2.matchesSearch(item, vocabSearchQuery);
+        const haystack = `${item?.word || ''} ${item?.meaning || ''} ${item?.example || ''}`.toLocaleLowerCase('en-US');
+        return haystack.includes(vocabSearchQuery.toLocaleLowerCase('en-US'));
+      });
       if (vocabListSortMode === 'az') {
         return source.sort((a, b) => String(a?.word || '').localeCompare(String(b?.word || ''), 'en', { sensitivity: 'base' }));
       }
@@ -30066,23 +30082,30 @@ function updateVocabProgressBar() {
       if (typeof lucide !== 'undefined') lucide.createIcons();
     }
 
+    function changeVocabSearch(query) {
+      vocabSearchQuery = String(query || '').trim();
+      renderVocabList();
+    }
+
     function renderVocabList() {
       const container = document.getElementById('vocabListContainer');
-      document.getElementById('vocabTotalBadge').innerText = `${state.toeic.vocabList.length}`;
-      if (state.toeic.vocabList.length === 0) {
+      if (!container) return;
+      const allWords = state.toeic.vocabList || [];
+      const displayWords = getVocabListForDisplay();
+      document.getElementById('vocabTotalBadge').innerText = `${allWords.length}`;
+      const searchStatus = document.getElementById('vocabSearchStatus');
+      if (searchStatus) searchStatus.innerText = vocabSearchQuery ? `找到 ${displayWords.length} / ${allWords.length} 個單字` : '可搜尋所有詞性、中文意思、例句與同義詞';
+      if (allWords.length === 0) {
         container.innerHTML = `<p class="text-xs text-slate-500 py-4 text-center">單字庫為空</p>`;
         return;
       }
-      container.innerHTML = getVocabListForDisplay().map(v => `
-        <div class="bg-slate-950 border border-slate-800 rounded-xl p-2.5 flex justify-between items-center text-xs">
-          <div>
-            <span class="font-bold text-amber-400">${v.word}</span>
-<span class="text-[10px] font-mono text-emerald-400 bg-emerald-950/80 border border-emerald-700/50 px-1.5 py-0.5 rounded ml-2">${v.pos || 'n.'}</span>
-            <span class="text-slate-300 ml-2">${v.meaning}</span>
-<span class="text-[10px] font-mono font-bold bg-amber-950/50 border border-amber-800/40 px-1.5 py-0.5 rounded text-amber-400 ml-2">★${v.box || 1}</span>
-          </div>
-          <button onclick="deleteWord(${v.id})" class="text-slate-500 hover:text-rose-400"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
-        </div>`).join('');
+      if (!displayWords.length) {
+        container.innerHTML = `<p class="text-xs text-slate-500 py-6 text-center">找不到符合「${escapeHtmlText(vocabSearchQuery)}」的單字</p>`;
+        return;
+      }
+      container.innerHTML = window.VocabEditorV2
+        ? displayWords.map(item => window.VocabEditorV2.renderWordCard(item)).join('')
+        : displayWords.map(item => `<div class="vocab-v2-card"><strong>${escapeHtmlText(item.word)}</strong><span>${escapeHtmlText(item.meaning)}</span></div>`).join('');
     }
 
     function renderSeasonTab() {
@@ -31455,41 +31478,108 @@ function checkSpellingAnswer() {
       document.getElementById('spellingContent').classList.toggle('hidden', !state.toeic.isSpellingMode);
       updateQuizCard();
     }
-    function addWord(e) {
-      e.preventDefault();
-      const word = document.getElementById('inputWord').value.trim();
-      const pos = document.getElementById('inputPos').value;
-      const meaning = document.getElementById('inputMeaning').value.trim();
-      const example = document.getElementById('inputExample').value.trim();
-      if (!word || !meaning) return;
+    function findVocabularyWord(key) {
+      const normalizedKey = String(key == null ? '' : key);
+      return (state.toeic.vocabList || []).find(item => String(item?.id) === normalizedKey) || null;
+    }
 
-      // 1. 新增至單字庫
-      state.toeic.vocabList.unshift({
-        id: Date.now(),
-        word,
-        pos,
-        meaning,
-        example,
-        box: 1,
-        sourceType: 'manual'
+    function findVocabularyWordIndex(key) {
+      const normalizedKey = String(key == null ? '' : key);
+      return (state.toeic.vocabList || []).findIndex(item => String(item?.id) === normalizedKey);
+    }
+
+    function openAddVocabularyWord() {
+      if (!window.VocabEditorV2) {
+        showToast('單字編輯器尚未載入，請重新整理頁面。', 'warning');
+        return;
+      }
+      window.VocabEditorV2.open({
+        onSave(word) {
+          const duplicate = (state.toeic.vocabList || []).find(item => String(item?.word || '').trim().toLocaleLowerCase('en-US') === word.word.toLocaleLowerCase('en-US'));
+          if (duplicate) {
+            showToast(`「${word.word}」已經在單字庫，已為你開啟原單字編輯。`, 'warning');
+            window.setTimeout(() => editVocabularyWord(duplicate.id), 80);
+            return true;
+          }
+          state.toeic.vocabList.unshift({ ...word, box: 1, sourceType: 'manual' });
+          state.scoutPoints = (Number(state.scoutPoints) || 0) + 1;
+          checkAndResetDailyQuests();
+          state.dailyQuests.wordAddedToday = (state.dailyQuests.wordAddedToday || 0) + 1;
+          saveGame();
+          updateVocabProgressBar();
+          renderAll();
+          playSound('flip');
+          showToast(`🎉 成功新增單字【${word.word}】！獲得 💎 選秀碎片 +1 點！`, 'success');
+          return true;
+        }
       });
+    }
 
-      // 2. 鼓勵手動學習：新增 1 個單字獎勵 1 點選秀碎片 (scoutPoints)
-      state.scoutPoints = (Number(state.scoutPoints) || 0) + 1;
-      checkAndResetDailyQuests();
-      state.dailyQuests.wordAddedToday = (state.dailyQuests.wordAddedToday || 0) + 1;
+    function addWord(e) {
+      e?.preventDefault?.();
+      openAddVocabularyWord();
+    }
 
-      // 3. 重設表單與存檔更新
-      document.getElementById('addWordForm').reset();
-      saveGame();
-      updateVocabProgressBar();
-      renderAll();
+    function editVocabularyWord(key) {
+      const index = findVocabularyWordIndex(key);
+      if (index < 0 || !window.VocabEditorV2) {
+        showToast('⚠️ 找不到這個單字，可能已被刪除。', 'warning');
+        return;
+      }
+      const item = state.toeic.vocabList[index];
+      window.VocabEditorV2.open({
+        item,
+        onSave(updatedWord) {
+          const duplicate = (state.toeic.vocabList || []).find((entry, entryIndex) => entryIndex !== index && String(entry?.word || '').trim().toLocaleLowerCase('en-US') === updatedWord.word.toLocaleLowerCase('en-US'));
+          if (duplicate) {
+            showToast(`單字庫已經有另一筆「${updatedWord.word}」，請合併後再儲存。`, 'warning');
+            return false;
+          }
+          state.toeic.vocabList[index] = { ...updatedWord, id: item.id, box: item.box || 1, sourceType: item.sourceType || updatedWord.sourceType || 'manual' };
+          saveGame();
+          renderAll();
+          showToast(`已更新「${updatedWord.word}」`, 'success');
+          return true;
+        }
+      });
+    }
 
-      // 4. 回饋效果
-      playSound('flip');
-      showToast(`🎉 成功新增單字【${word}】！獲得 💎 選秀碎片 +1 點！`, "success");
-    }    async function deleteWord(id) {
-      const item = (state.toeic.vocabList || []).find(v => v.id === id);
+    function openVocabularyWordDetail(key) {
+      const item = findVocabularyWord(key);
+      if (!item || !window.VocabEditorV2) return;
+      window.VocabEditorV2.openDetail({
+        item,
+        onEdit: () => editVocabularyWord(item.id),
+        onDelete: () => deleteWord(item.id)
+      });
+    }
+
+    function handleVocabListAction(event) {
+      const button = event?.target?.closest?.('[data-vocab-action]');
+      if (!button) return;
+      const key = decodeURIComponent(button.dataset.vocabKey || '');
+      const action = button.dataset.vocabAction;
+      if (action === 'detail') openVocabularyWordDetail(key);
+      if (action === 'edit') editVocabularyWord(key);
+      if (action === 'delete') deleteWord(key);
+      if (action === 'speak') {
+        const item = findVocabularyWord(key);
+        if (item?.word) speakEnglishText(item.word);
+      }
+    }
+
+    function startSynonymVocabChallenge() {
+      if (!window.VocabEditorV2) return;
+      const question = window.VocabEditorV2.createSynonymQuestion(state.toeic.vocabList || []);
+      if (!question) {
+        showToast('至少需要 4 個不同同義詞，才能開始同義詞挑戰。', 'warning');
+        return;
+      }
+      window.VocabEditorV2.openSynonymChallenge(state.toeic.vocabList || [], { questions: 10 });
+    }
+
+    async function deleteWord(id) {
+      const item = findVocabularyWord(id);
       if (!item) {
         showToast('⚠️ 找不到這個單字，可能已被刪除。', 'warning');
         return;
@@ -31504,7 +31594,7 @@ function checkSpellingAnswer() {
       });
       if (!confirmed) return;
 
-      state.toeic.vocabList = state.toeic.vocabList.filter(v => v.id !== id);
+      state.toeic.vocabList = state.toeic.vocabList.filter(v => String(v?.id) !== String(id));
       saveGame();
       updateVocabProgressBar();
       renderAll();
@@ -31568,7 +31658,7 @@ function checkSpellingAnswer() {
 
       // 6. 規範化寫入玩家單字庫（保證欄位完全對齊）
       picked.forEach(item => {
-        state.toeic.vocabList.unshift({
+        const vocabItem = {
           id: Date.now() + Math.floor(Math.random() * 100000),
           word: item.word,
           pos: item.pos,
@@ -31576,7 +31666,8 @@ function checkSpellingAnswer() {
           example: item.example,
           box: 1,
           sourceType: 'official'
-        });
+        };
+        state.toeic.vocabList.unshift(window.VocabEditorV2 ? window.VocabEditorV2.migrateVocabItem(vocabItem) : vocabItem);
       });
 
       // 7. 更新每日任務進度、存檔並刷新 UI
@@ -31693,6 +31784,19 @@ function checkSpellingAnswer() {
           example: String(item[3] || '').trim()
         };
       }
+      if (window.VocabEditorV2 && Array.isArray(item?.senses)) {
+        const sense = window.VocabEditorV2.getAllSensePool([item])[0];
+        if (sense) {
+          return {
+            word: String(sense.word || '').trim(),
+            pos: String(sense.pos || 'n.').trim(),
+            meaning: String(sense.meaning || '').trim(),
+            example: String(sense.example || '').trim(),
+            wordId: sense.wordId,
+            senseId: sense.senseId
+          };
+        }
+      }
       return {
         word: String(item?.word || '').trim(),
         pos: String(item?.pos || 'n.').trim(),
@@ -31701,14 +31805,31 @@ function checkSpellingAnswer() {
       };
     }
 
+    function expandPlayerVocabQuizItems(playerWords) {
+      if (window.VocabEditorV2) {
+        return window.VocabEditorV2.getAllSensePool(playerWords || []).map(normalizeQuizItem);
+      }
+      return (playerWords || []).map(normalizeQuizItem);
+    }
+
     function buildCombinedVocabQuizPool(officialSource = null, playerSource = null) {
       const official = officialSource || ((typeof TOEIC_1000_RAW !== 'undefined' && Array.isArray(TOEIC_1000_RAW)) ? TOEIC_1000_RAW : []);
       const playerWords = playerSource || (state.toeic.vocabList || []);
+      const playerEntries = expandPlayerVocabQuizItems(playerWords).filter(item => item.word && item.meaning);
+      const playerWordKeys = new Set(playerEntries.map(item => item.word.toLocaleLowerCase('en-US')));
       const deduplicated = new Map();
-      [...official, ...playerWords].forEach(rawItem => {
+      official.forEach(rawItem => {
         const item = normalizeQuizItem(rawItem);
-        const key = item.word.toLocaleLowerCase('en-US');
+        const wordKey = item.word.toLocaleLowerCase('en-US');
+        const key = `${wordKey}::${item.meaning.toLocaleLowerCase('zh-TW')}`;
+        if (playerWordKeys.has(wordKey)) return;
         if (!key || !item.meaning || deduplicated.has(key)) return;
+        deduplicated.set(key, item);
+      });
+      playerEntries.forEach(item => {
+        const wordKey = item.word.toLocaleLowerCase('en-US');
+        const key = window.VocabEditorV2 ? `${wordKey}::${item.meaning.toLocaleLowerCase('zh-TW')}` : wordKey;
+        if (!item.word || !item.meaning || deduplicated.has(key)) return;
         deduplicated.set(key, item);
       });
       return [...deduplicated.values()];
@@ -31717,9 +31838,9 @@ function checkSpellingAnswer() {
     function buildManualVocabQuizPool(playerSource = null) {
       const playerWords = playerSource == null ? (state.toeic.vocabList || []) : playerSource;
       const deduplicated = new Map();
-      playerWords.forEach(rawItem => {
-        const item = normalizeQuizItem(rawItem);
-        const key = item.word.toLocaleLowerCase('en-US');
+      expandPlayerVocabQuizItems(playerWords).forEach(item => {
+        const wordKey = item.word.toLocaleLowerCase('en-US');
+        const key = window.VocabEditorV2 ? `${wordKey}::${item.meaning.toLocaleLowerCase('zh-TW')}` : wordKey;
         if (!key || !item.meaning || deduplicated.has(key)) return;
         deduplicated.set(key, item);
       });

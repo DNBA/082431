@@ -36,6 +36,7 @@
     <link rel="stylesheet" href="./css/season-v2.css?v=20261005-badge-cinema-1">
     <link rel="stylesheet" href="./css/study-planner.css?v=20261003-planner-3">
     <link rel="stylesheet" href="./css/vocab-endless.css?v=20261007-source-1">
+    <link rel="stylesheet" href="./css/vocab-editor-v2.css?v=20261019-v2">
     <link rel="stylesheet" href="./css/learning-tools.css?v=20261005-learning-1">
     <link rel="stylesheet" href="./css/season-standings.css?v=20261005-standings-1">
     <link rel="stylesheet" href="./css/season-league.css?v=20261007-league-1">
@@ -46,7 +47,7 @@
     <link id="tqThemeDark" rel="stylesheet" href="./css/system-theme-dark.css?v=20261005-theme-2" media="not all" disabled>
     <link rel="stylesheet" href="./css/achievement-backs.css?v=20261006-backs-2">
     <link rel="stylesheet" href="./css/box-score.css?v=20261007-integrity-2">
-    <link rel="stylesheet" href="./css/live-game-2d.css?v=20261015-v401-motion-pass">
+    <link rel="stylesheet" href="./css/live-game-2d.css?v=20261015-v402-shot-arc">
     <script src="./js/system-theme.js?v=20261005-theme-2"></script>
 </head>
 <body data-v2-active="home" class="bg-slate-950 text-slate-100 min-h-screen pb-24 font-sans selection:bg-amber-500 selection:text-black">
@@ -750,21 +751,17 @@
         </div>
 
         <div class="bg-slate-950 p-3.5 rounded-2xl border border-slate-800">
-<form id="addWordForm" onsubmit="addWord(event)" class="grid grid-cols-1 sm:grid-cols-5 gap-2">
-  <input id="inputWord" type="text" placeholder="單字 (Word)" required class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none">
-  <select id="inputPos" class="bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-emerald-400 font-bold focus:outline-none">
-    <option value="n.">n. 名詞</option>
-    <option value="v.">v. 動詞</option>
-    <option value="adj.">adj. 形容詞</option>
-    <option value="adv.">adv. 副詞</option>
-    <option value="phr.">phr. 片語</option>
-  </select>
-  <input id="inputMeaning" type="text" placeholder="中文翻譯 (Meaning)" required class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none">
-  <input id="inputExample" type="text" placeholder="例句 (Example)" class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none">
-  <button type="submit" class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-1.5 rounded-lg text-xs transition">+ 新增</button>
-</form>
+          <div class="vocab-v2-toolbar">
+            <label class="vocab-v2-search" for="vocabSearchInput">
+              <span aria-hidden="true">⌕</span>
+              <input id="vocabSearchInput" type="search" autocomplete="off" placeholder="搜尋單字、意思、例句或同義詞" oninput="changeVocabSearch(this.value)">
+            </label>
+            <button type="button" class="vocab-v2-synonym-button" onclick="startSynonymVocabChallenge()">同義詞挑戰</button>
+            <button type="button" class="vocab-v2-add-button" onclick="openAddVocabularyWord()">＋ 新增單字</button>
+            <p id="vocabSearchStatus" class="vocab-v2-search-status"></p>
+          </div>
         </div>
-        <div id="vocabListContainer" class="space-y-2 max-h-60 overflow-y-auto pr-1"></div>
+        <div id="vocabListContainer" class="vocab-v2-list overflow-y-auto" onclick="handleVocabListAction(event)"></div>
       </div>
     </section>
 
@@ -1465,6 +1462,7 @@
   <script src="./js/focus-timer.js?v=20261003-split-focus-2"></script>
   <script src="./js/core/save-backups.js?v=20261005-learning-1"></script>
   <script src="./js/box-score-integrity.js?v=20261007-integrity-1"></script>
+  <script src="./js/vocab-editor-v2.js?v=20261019-v2"></script>
   <script src="./js/app.js?v=20261008-three-point-live-3"></script>
 <!-- 🏀 季後賽逐場動態播報彈窗 -->
 <div id="playoffSeriesModal" onclick="if(event.target === this && !document.getElementById('posNextRoundBtn').disabled) closeSeriesAndShowBoxScore()" class="fixed inset-0 bg-slate-950/90 backdrop-blur-md z-50 hidden flex items-end sm:items-center justify-center p-3 sm:p-4 ios-safe-modal">
@@ -2108,9 +2106,9 @@
 <script src="./js/ui-v2/achievement-backs.js?v=20261006-backs-1"></script>
 <script src="./js/player-progression.js?v=20261012-v311"></script>
 <script src="./js/dynasty-era.js?v=20261012-v310"></script>
-<script src="./js/live-game/live-game-engine.js?v=20261015-v401-motion-pass"></script>
+<script src="./js/live-game/live-game-engine.js?v=20261015-v402-shot-arc"></script>
 <script src="./js/live-game/live-game-input.js?v=20261015-v401-motion-pass"></script>
-<script src="./js/live-game/live-game-renderer.js?v=20261015-v401-motion-pass"></script>
+<script src="./js/live-game/live-game-renderer.js?v=20261015-v402-shot-arc"></script>
 <script src="./js/season-journey.js?v=20261015-v400-phase6"></script>
 <script src="./js/ui-v2/ui-v2-adapter.js?v=20261005-standings-1"></script>
 <script src="./js/ui-v2/home-v2.js?v=20261003-train-vocab-1"></script>
