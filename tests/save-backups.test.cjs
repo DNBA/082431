@@ -63,11 +63,18 @@ let now = new Date('2026-10-05T12:00:00+08:00').getTime();
 {
   const root = path.resolve(__dirname, '..');
   const saveTools = fs.readFileSync(path.join(root, 'js', 'core', 'save-tools.js'), 'utf8');
+  const saveResilience = fs.readFileSync(path.join(root, 'js', 'core', 'save-resilience.js'), 'utf8');
   const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
   assert.match(saveTools, /navigator\.share\(shareData\)/, 'iPhone/PWA backup uses the system share sheet when file sharing is supported');
   assert.match(saveTools, /navigator\.storage\.persist\(\)/, 'the save tools can request persistent browser storage');
-  assert.match(html, /分享備份檔/);
+  assert.match(saveResilience, /indexedDB\\.open\\(DB_NAME, 1\\)/, 'large manual restore points use IndexedDB rather than duplicating the save in localStorage');
+  assert.match(saveResilience, /new CompressionStream\\('gzip'\\)/, 'transfer codes are compressed when the browser supports it');
+  assert.match(saveResilience, /new DecompressionStream\\('gzip'\\)/, 'compressed transfer codes can be restored');
+  assert.match(html, /分享／下載備份/);
   assert.match(html, /選擇備份檔還原/);
+  assert.match(html, /產生並複製換機碼/);
+  assert.match(html, /從換機碼還原/);
+  assert.match(html, /save-resilience\\.js/);
   assert.match(html, /沒有安全的帳號伺服器/);
 }
 console.log('Save backup rotation, throttling, corrupt-save recovery, validation, and quota tests passed.');
