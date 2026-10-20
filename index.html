@@ -2102,17 +2102,29 @@
     <div class="learning-sheet-head"><h3 id="saveToolsTitle">備份與換機</h3><button type="button" onclick="closeSaveTools()" aria-label="關閉備份">✕</button></div>
     <p id="saveToolsStatus" class="learning-note"></p>
     <div class="learning-action-grid">
-      <button type="button" onclick="exportGameSave()">分享備份檔</button>
+      <button type="button" onclick="exportGameSave()">分享／下載備份</button>
       <button type="button" onclick="document.getElementById('saveImportInput').click()">選擇備份檔還原</button>
-      <button type="button" onclick="createManualSaveBackup()">建立還原點</button>
+      <button type="button" onclick="createManualSaveBackup()">建立本機還原點</button>
       <button type="button" onclick="requestPersistentSaveStorage()">保護本機存檔</button>
     </div>
     <input id="saveImportInput" type="file" accept=".json,application/json,text/json" onchange="importGameSave(event)" hidden>
     <p id="saveStorageStatus" class="learning-note"></p>
-    <p class="learning-note">換手機／電腦：分享備份檔 → 存到「檔案」、iCloud Drive、Google Drive 或 AirDrop → 在另一台裝置選擇備份檔還原。iPhone／PWA 會優先開啟系統分享選單。</p>
+    <div class="save-transfer-box">
+      <div class="save-transfer-head">
+        <strong>不用檔案也能換機</strong>
+        <small>iPhone／PWA 分享失敗時使用</small>
+      </div>
+      <textarea id="saveTransferCode" rows="4" spellcheck="false" autocorrect="off" autocapitalize="off" autocomplete="off" placeholder="點「產生並複製換機碼」，或在新裝置把換機碼貼到這裡"></textarea>
+      <div class="learning-action-grid">
+        <button type="button" onclick="copyGameSaveCode()">產生並複製換機碼</button>
+        <button type="button" onclick="importGameSaveCode()">從換機碼還原</button>
+      </div>
+      <p id="saveTransferStatus" class="learning-note">換機碼只包含你的遊戲進度；請只傳給自己。</p>
+    </div>
+    <p class="learning-note">換手機／電腦可選：分享備份檔，或複製換機碼並在另一台裝置貼上還原。iPhone 分享檔案被限制時，系統會自動改用換機碼。</p>
     <p class="learning-note learning-cloud-note"><strong>帳號同步說明：</strong>目前是純 GitHub Pages，沒有安全的帳號伺服器，因此不會把帳密假存在手機裡。真正跨裝置自動同步需後續接入 Apple／Google 登入與雲端資料庫。</p>
     <h4 class="learning-subtitle">本機還原點</h4>
-    <p class="learning-note">自動保留最多 4 份，約每 15 分鐘更新。清除網站資料也會清除本機備份，請定期匯出檔案。</p>
+    <p class="learning-note">手動還原點改存於較大容量的瀏覽器資料庫，最多保留 4 份；舊的自動還原點也會繼續顯示。清除網站資料仍會清除本機備份，請另外保存換機碼或備份檔。</p>
     <div id="saveBackupList"></div>
   </section>
 </div>
@@ -2142,6 +2154,7 @@
 <script src="./js/study-notes.js?v=20261019-notes-1"></script>
 <script src="./js/study-planner.js?v=20261005-learning-1"></script>
 <script src="./js/core/save-tools.js?v=20261020-mobile-share-1"></script>
+<script src="./js/core/save-resilience.js?v=20261020-vault-code-1"></script>
 <script src="./js/learning-insights.js?v=20261007-endless-source-1"></script>
 <script src="./js/ui-v2/team-v2.js"></script>
 <script src="./js/ui-v2/normal-card-v2.js?v=20261012-silver-black-1"></script>
