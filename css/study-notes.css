@@ -279,7 +279,7 @@ html[data-system-theme="dark"] {
 
 .train-local-dock {
   position: fixed;
-  z-index: 116;
+  z-index: 60;
   left: 50%;
   bottom: calc(4.75rem + env(safe-area-inset-bottom));
   width: min(calc(100vw - 2rem), 22rem);

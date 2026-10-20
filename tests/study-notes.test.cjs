@@ -54,10 +54,12 @@ test('project wires Notes into TRAIN, shared save state, focus mode, and mobile 
   assert.match(index, /id="tab-notes"/);
   assert.match(index, /VOCAB<\/button>[\s\S]*NOTES<\/button>/);
   assert.match(index, /study-notes\.js\?v=20261019-notes-1/);
-  assert.ok(index.indexOf('app.js?v=20261019-notes-1') < index.indexOf('study-notes.js?v=20261019-notes-1'));
+  assert.ok(index.indexOf('app.js?v=20261020-contest-fix-1') < index.indexOf('study-notes.js?v=20261019-notes-1'));
   assert.match(app, /studyNotes:\s*\{[\s\S]*notes:\s*\[\][\s\S]*fontSize:\s*'normal'/);
   assert.match(app, /\['stats', 'planner', 'vocab', 'notes'\]/);
   assert.match(home, /notes:\s*'train'/);
   assert.match(css, /\.train-local-dock\s*\{[\s\S]*position:\s*fixed/);
+  assert.match(css, /\.train-local-dock\s*\{[\s\S]*?z-index:\s*60;/, 'the TRAIN dock stays below championship ring and other modal layers');
+  assert.match(index, /id="championshipRingsModal"[\s\S]*?z-\[100\]/, 'the ring cabinet remains above the TRAIN local dock');
   assert.match(css, /touch-action:\s*manipulation/);
 });

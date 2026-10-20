@@ -8,30 +8,75 @@ function buildSaveExportPayload() {
   };
 }
 
-function exportGameSave() {
+async function exportGameSave() {
   try {
     if (saveRecoveryBlocked) throw new Error('請先還原存檔，再匯出恢復後的進度。');
     if (typeof syncPomodoroFromClock === 'function') syncPomodoroFromClock();
     saveGame();
     const payload = JSON.stringify(buildSaveExportPayload(), null, 2);
     const blob = new Blob([payload], { type: 'application/json;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
     const date = new Date().toISOString().slice(0, 10);
-    link.href = url;
-    link.download = `ToeicQuest-save-${date}.json`;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    const filename = `ToeicQuest-save-${date}.json`;
+    const file = typeof File === 'function' ? new File([blob], filename, { type: blob.type }) : null;
+    const shareData = file ? { title: 'ToeicQuest 存檔', text: 'ToeicQuest 備份與換機檔案', files: [file] } : null;
+    const canShareFile = !!(shareData && navigator.share
+      && (!navigator.canShare || navigator.canShare({ files: shareData.files })));
+
+    if (canShareFile) {
+      try {
+        await navigator.share(shareData);
+      } catch (shareError) {
+        if (shareError?.name === 'AbortError') {
+          const status = document.getElementById('saveToolsStatus');
+          if (status) status.textContent = '已取消分享，遊戲進度沒有變更。';
+          return;
+        }
+        throw shareError;
+      }
+    } else {
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 3000);
+    }
     const status = document.getElementById('saveToolsStatus');
-    if (status) status.textContent = '已匯出存檔。請將 JSON 檔案傳到另一台裝置，再從「匯入存檔」開啟。';
-    showToast('✅ 存檔已匯出，請妥善保存 JSON 檔案。', 'success');
+    if (status) status.textContent = canShareFile
+      ? '備份已交給手機分享選單。請存到「檔案」、iCloud Drive、Google Drive 或 AirDrop。'
+      : '備份檔已下載。請傳到另一台裝置，再從「選擇備份檔還原」開啟。';
+    showToast(canShareFile ? '✅ 已開啟備份分享選單。' : '✅ 備份檔已下載。', 'success');
   } catch (error) {
     console.error('Export save failed:', error);
     const status = document.getElementById('saveToolsStatus');
     if (status) status.textContent = `匯出失敗：${error.message || '請稍後再試。'}`;
     showToast(`存檔匯出失敗：${error.message || '請稍後再試。'}`, 'error');
+  }
+}
+
+async function updatePersistentStorageStatus() {
+  const status = document.getElementById('saveStorageStatus');
+  if (!status) return;
+  if (!navigator.storage?.persisted) {
+    status.textContent = '這個瀏覽器不提供本機永久儲存保護；請定期分享備份檔。';
+    return;
+  }
+  const persisted = await navigator.storage.persisted();
+  status.textContent = persisted
+    ? '本機存檔保護：已啟用。仍建議換機前分享一份備份。'
+    : '本機存檔保護：尚未啟用。可按下方按鈕向瀏覽器提出申請。';
+}
+
+async function requestPersistentSaveStorage() {
+  try {
+    if (!navigator.storage?.persist) throw new Error('此瀏覽器不支援永久儲存申請');
+    const granted = await navigator.storage.persist();
+    await updatePersistentStorageStatus();
+    showToast(granted ? '✅ 已啟用本機存檔保護。' : '瀏覽器未核准；請定期分享備份檔。', granted ? 'success' : 'warning');
+  } catch (error) {
+    showToast(`${error.message}，請使用分享備份。`, 'warning');
   }
 }
 
@@ -76,6 +121,7 @@ function openSaveTools() {
     : `目前進度：${saveSummaryText(state)}`;
   document.getElementById('saveToolsBackdrop')?.classList.remove('hidden');
   document.body.style.overflow = 'hidden';
+  updatePersistentStorageStatus().catch(() => {});
 }
 
 function createManualSaveBackup() {

@@ -6,6 +6,7 @@ const allStar = require('../js/season-all-star.js');
 const root = path.resolve(__dirname, '..');
 const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
 const app = fs.readFileSync(path.join(root, 'js', 'app.js'), 'utf8');
+const journey = fs.readFileSync(path.join(root, 'js', 'season-journey.js'), 'utf8');
 
 const plan = allStar.contestShotPlan(2);
 assert.equal(plan.length, 27, 'contest uses 25 rack balls and two deep balls');
@@ -61,5 +62,10 @@ assert.match(app, /threePtContestPlayedShooters/);
 assert.match(app, /threePtContestResultsByShooter/);
 assert.match(app, /ADMIN · 再挑戰一場/);
 assert.match(app, /!state\.isAdmin && isChamp/, 'admin replays do not repeatedly grant champion rewards');
+assert.match(app, /function didCurrentShooterAdvance\(\)/, 'the final round has a dedicated qualification guard');
+assert.match(app, /if \(!didCurrentShooterAdvance\(\)\)/, 'an eliminated shooter cannot open the final round through stale UI state');
+assert.match(app, /filter\(player => !isCurrentThreePointShooter\(player\)\)/, 'CPU simulation excludes the exact user card identity');
+assert.match(journey, /function resolveThreePointChampionCard\(playerName, identity = \{\}\)/, 'champion reward resolves the exact owned card');
+assert.match(journey, /function repairRecordedThreePointChampionBack\(\)/, 'old saves with a recorded champion can repair a missing card back');
 
 console.log('Authentic two-round three-point contest, legacy 3PT fallback, and hidden UI version checks passed.');

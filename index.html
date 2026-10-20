@@ -37,7 +37,7 @@
     <link rel="stylesheet" href="./css/study-planner.css?v=20261003-planner-3">
     <link rel="stylesheet" href="./css/vocab-endless.css?v=20261007-source-1">
     <link rel="stylesheet" href="./css/vocab-editor-v2.css?v=20261019-mobile-1">
-    <link rel="stylesheet" href="./css/study-notes.css?v=20261019-notes-1">
+    <link rel="stylesheet" href="./css/study-notes.css?v=20261020-layer-1">
     <link rel="stylesheet" href="./css/learning-tools.css?v=20261005-learning-1">
     <link rel="stylesheet" href="./css/season-standings.css?v=20261005-standings-1">
     <link rel="stylesheet" href="./css/season-league.css?v=20261007-league-1">
@@ -1487,7 +1487,7 @@
   <script src="./js/core/save-backups.js?v=20261005-learning-1"></script>
   <script src="./js/box-score-integrity.js?v=20261007-integrity-1"></script>
   <script src="./js/vocab-editor-v2.js?v=20261019-mobile-1"></script>
-  <script src="./js/app.js?v=20261019-notes-1"></script>
+  <script src="./js/app.js?v=20261020-contest-fix-1"></script>
 <!-- 🏀 季後賽逐場動態播報彈窗 -->
 <div id="playoffSeriesModal" onclick="if(event.target === this && !document.getElementById('posNextRoundBtn').disabled) closeSeriesAndShowBoxScore()" class="fixed inset-0 bg-slate-950/90 backdrop-blur-md z-50 hidden flex items-end sm:items-center justify-center p-3 sm:p-4 ios-safe-modal">
   <div class="bg-slate-900 border border-amber-500/50 rounded-3xl w-full max-w-lg p-6 shadow-2xl space-y-4 relative animate-modal-in">
@@ -2102,12 +2102,15 @@
     <div class="learning-sheet-head"><h3 id="saveToolsTitle">備份與換機</h3><button type="button" onclick="closeSaveTools()" aria-label="關閉備份">✕</button></div>
     <p id="saveToolsStatus" class="learning-note"></p>
     <div class="learning-action-grid">
-      <button type="button" onclick="exportGameSave()">匯出存檔</button>
-      <button type="button" onclick="document.getElementById('saveImportInput').click()">匯入存檔</button>
+      <button type="button" onclick="exportGameSave()">分享備份檔</button>
+      <button type="button" onclick="document.getElementById('saveImportInput').click()">選擇備份檔還原</button>
       <button type="button" onclick="createManualSaveBackup()">建立還原點</button>
+      <button type="button" onclick="requestPersistentSaveStorage()">保護本機存檔</button>
     </div>
-    <input id="saveImportInput" type="file" accept=".json,application/json" onchange="importGameSave(event)" hidden>
-    <p class="learning-note">換手機／電腦：匯出檔案 → 用 AirDrop 或雲端硬碟傳送 → 在另一台裝置匯入。這是手動轉移，不會自動雲端同步。</p>
+    <input id="saveImportInput" type="file" accept=".json,application/json,text/json" onchange="importGameSave(event)" hidden>
+    <p id="saveStorageStatus" class="learning-note"></p>
+    <p class="learning-note">換手機／電腦：分享備份檔 → 存到「檔案」、iCloud Drive、Google Drive 或 AirDrop → 在另一台裝置選擇備份檔還原。iPhone／PWA 會優先開啟系統分享選單。</p>
+    <p class="learning-note learning-cloud-note"><strong>帳號同步說明：</strong>目前是純 GitHub Pages，沒有安全的帳號伺服器，因此不會把帳密假存在手機裡。真正跨裝置自動同步需後續接入 Apple／Google 登入與雲端資料庫。</p>
     <h4 class="learning-subtitle">本機還原點</h4>
     <p class="learning-note">自動保留最多 4 份，約每 15 分鐘更新。清除網站資料也會清除本機備份，請定期匯出檔案。</p>
     <div id="saveBackupList"></div>
@@ -2133,12 +2136,12 @@
 <script src="./js/live-game/live-game-engine.js?v=20261015-v402-shot-arc"></script>
 <script src="./js/live-game/live-game-input.js?v=20261015-v401-motion-pass"></script>
 <script src="./js/live-game/live-game-renderer.js?v=20261015-v402-shot-arc"></script>
-<script src="./js/season-journey.js?v=20261015-v400-phase6"></script>
+<script src="./js/season-journey.js?v=20261020-contest-back-1"></script>
 <script src="./js/ui-v2/ui-v2-adapter.js?v=20261005-standings-1"></script>
 <script src="./js/ui-v2/home-v2.js?v=20261019-notes-1"></script>
 <script src="./js/study-notes.js?v=20261019-notes-1"></script>
 <script src="./js/study-planner.js?v=20261005-learning-1"></script>
-<script src="./js/core/save-tools.js?v=20261005-learning-1"></script>
+<script src="./js/core/save-tools.js?v=20261020-mobile-share-1"></script>
 <script src="./js/learning-insights.js?v=20261007-endless-source-1"></script>
 <script src="./js/ui-v2/team-v2.js"></script>
 <script src="./js/ui-v2/normal-card-v2.js?v=20261012-silver-black-1"></script>

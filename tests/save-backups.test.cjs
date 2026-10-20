@@ -1,4 +1,6 @@
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const { parseState, createStore } = require('../js/core/save-backups.js');
 function storage(limit = Infinity) {
   const map = new Map();
@@ -57,5 +59,15 @@ let now = new Date('2026-10-05T12:00:00+08:00').getTime();
   store.save({ ...base, tickets: 99 });
   assert.equal(store.load().state.tickets, 99, 'Primary saving must survive snapshot storage pressure');
   assert.equal(local.getItem('unrelated-data'), 'preserve');
+}
+{
+  const root = path.resolve(__dirname, '..');
+  const saveTools = fs.readFileSync(path.join(root, 'js', 'core', 'save-tools.js'), 'utf8');
+  const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+  assert.match(saveTools, /navigator\.share\(shareData\)/, 'iPhone/PWA backup uses the system share sheet when file sharing is supported');
+  assert.match(saveTools, /navigator\.storage\.persist\(\)/, 'the save tools can request persistent browser storage');
+  assert.match(html, /分享備份檔/);
+  assert.match(html, /選擇備份檔還原/);
+  assert.match(html, /沒有安全的帳號伺服器/);
 }
 console.log('Save backup rotation, throttling, corrupt-save recovery, validation, and quota tests passed.');

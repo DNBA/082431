@@ -813,8 +813,17 @@
     return state.seasonJourney?.allStarWeekend?.revengeGames?.find(item => Number(item.game) === Number(gameNumber))?.player || '';
   }
 
-  function awardThreePointChampion(playerName, score, leaderboard) {
-    const card = findActiveCardByName(playerName);
+  function resolveThreePointChampionCard(playerName, identity = {}) {
+    const participantKey = String(identity.participantKey || '');
+    const cardId = String(identity.cardId || (participantKey.startsWith('player:') ? participantKey.slice(7) : ''));
+    const cards = activeSeasonCards().concat((state.inventory || []).filter(Boolean));
+    return (cardId ? cards.find(card => String(card.cardId || '') === cardId) : null)
+      || cards.find(card => card.name === playerName)
+      || null;
+  }
+
+  function awardThreePointChampion(playerName, score, leaderboard, identity = {}) {
+    const card = resolveThreePointChampionCard(playerName, identity);
     if (!card) return false;
     const weekend = state.seasonJourney?.allStarWeekend;
     if (weekend && !Array.isArray(weekend.threePointBackAwardedPlayers)) {
@@ -822,20 +831,49 @@
         ? [weekend.threePointChampionName]
         : [];
     }
-    if (weekend?.threePointBackAwardedPlayers?.includes(playerName)) return false;
+    if (weekend && !Array.isArray(weekend.threePointBackAwardedPlayerKeys)) weekend.threePointBackAwardedPlayerKeys = [];
     ensureCardJourney(card);
-    card.legacy.threePtTitles = (Number(card.legacy.threePtTitles) || 0) + 1;
-    unlockBack(card, 'threepoint', `Season ${state.seasonJourney.seasonNo} · ${score} PTS · CONTEST WINNER`);
+    const awardKey = card.cardId ? `card:${card.cardId}` : `name:${playerName}`;
+    const alreadyAwarded = !!weekend && (weekend.threePointBackAwardedPlayers.includes(playerName)
+      || weekend.threePointBackAwardedPlayerKeys.includes(awardKey));
+    if (!alreadyAwarded) card.legacy.threePtTitles = (Number(card.legacy.threePtTitles) || 0) + 1;
+    const backUnlocked = unlockBack(card, 'threepoint', `Season ${state.seasonJourney.seasonNo} · ${score} PTS · CONTEST WINNER`);
     if (weekend) {
       weekend.threePointBackAwarded = true;
-      weekend.threePointBackAwardedPlayers.push(playerName);
+      if (!weekend.threePointBackAwardedPlayers.includes(playerName)) weekend.threePointBackAwardedPlayers.push(playerName);
+      if (!weekend.threePointBackAwardedPlayerKeys.includes(awardKey)) weekend.threePointBackAwardedPlayerKeys.push(awardKey);
       weekend.threePointChampionName = playerName;
       const participant = weekend.threePointParticipants?.find(player => player.name === playerName);
-      weekend.threePointChampionKey = participant?.key || null;
-      weekend.contestResult = (leaderboard || []).map(player => ({ name: String(player.name || '').replace(' (你)', ''), score: Number(player.score || 0), isPlayer: !!player.isPlayer }));
+      weekend.threePointChampionKey = identity.participantKey || participant?.key || null;
+      weekend.contestResult = (leaderboard || []).map(player => ({
+        key: player.key || '', name: String(player.name || '').replace(' (你)', ''), score: Number(player.score || 0),
+        rank: Number(player.rank || 0), round1Score: player.round1Score ?? null,
+        finalScore: player.finalScore ?? null, isPlayer: !!player.isPlayer
+      }));
     }
-    if (typeof addNotification === 'function') addNotification({ title: '🎯 3-POINT CHAMPION', message: `${playerName} 贏得三分球大賽，解鎖全新 Achievement BACK。`, icon: '🏆', type: 'achievement' });
+    if (!identity.silent && typeof addNotification === 'function') addNotification({ title: '🎯 3-POINT CHAMPION', message: `${playerName} 贏得三分球大賽，解鎖全新 Achievement BACK。`, icon: '🏆', type: 'achievement' });
     saveGame();
+    return backUnlocked;
+  }
+
+  function repairRecordedThreePointChampionBack() {
+    const weekend = state.seasonJourney?.allStarWeekend;
+    const results = Array.isArray(weekend?.contestResult) ? weekend.contestResult : [];
+    const winner = results.find(player => Number(player.rank) === 1) || results[0];
+    const playerWon = !!winner?.isPlayer || String(weekend?.threePointChampionKey || '').startsWith('player:');
+    if (!weekend?.threePointChampionName || !playerWon) return false;
+    const card = resolveThreePointChampionCard(weekend.threePointChampionName, {
+      participantKey: weekend.threePointChampionKey || winner?.key || ''
+    });
+    if (!card) return false;
+    const hadBackBeforeRepair = Array.isArray(card.achievementBacks) && card.achievementBacks.some(item => item.id === 'threepoint');
+    ensureCardJourney(card);
+    if (card.achievementBacks.some(item => item.id === 'threepoint')) return !hadBackBeforeRepair;
+    card.legacy.threePtTitles = Math.max(1, Number(card.legacy.threePtTitles) || 0);
+    unlockBack(card, 'threepoint', `Season ${state.seasonJourney.seasonNo} · ${Number(winner?.finalScore ?? winner?.score) || 0} PTS · CONTEST WINNER`);
+    if (!Array.isArray(weekend.threePointBackAwardedPlayers)) weekend.threePointBackAwardedPlayers = [];
+    if (!weekend.threePointBackAwardedPlayers.includes(card.name)) weekend.threePointBackAwardedPlayers.push(card.name);
+    weekend.threePointBackAwarded = true;
     return true;
   }
 
@@ -886,6 +924,7 @@
       ensureCardJourney(card);
       window.PlayerProgression?.ensureCard(card);
     });
+    if (repairRecordedThreePointChampionBack()) saveGame();
   }
 
   function applyEnergyRegen() {

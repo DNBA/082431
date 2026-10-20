@@ -32822,10 +32822,25 @@ function setThreePointResultsVisible(visible) {
   }
 }
 
+function isCurrentThreePointShooter(player) {
+  if (!player || !threePtState.shooter) return false;
+  const shooterCardId = String(threePtState.shooter.cardId || '');
+  const playerKey = String(player.key || '');
+  const playerCardId = String(player.cardId || (playerKey.startsWith('player:') ? playerKey.slice(7) : ''));
+  if (shooterCardId && playerCardId) return shooterCardId === playerCardId;
+  return !!(player.isPlayer || player.isUserEntry) && player.name === threePtState.shooter.name;
+}
+
+function didCurrentShooterAdvance() {
+  const playerRank = threePtState.roundOneResults.findIndex(player => isCurrentThreePointShooter(player)) + 1;
+  const isFinalist = threePtState.finalists.some(player => isCurrentThreePointShooter(player));
+  return playerRank > 0 && playerRank <= 3 && isFinalist;
+}
+
 function prepareThreePointOpponentResults() {
   const pool = threePtState.round === 'final' ? threePtState.finalists : getThreePointParticipants();
   threePtState.cpuRoundResults = pool
-    .filter(player => player.name !== threePtState.shooter?.name)
+    .filter(player => !isCurrentThreePointShooter(player))
     .map((player, index) => simulateCpuThreePointRound(player, threePtState.round, index));
   const scores = threePtState.cpuRoundResults.map(player => player.score).sort((a, b) => b - a);
   threePtState.advanceCutoff = threePtState.round === 'round1' ? Number(scores[2] || 0) : 0;
@@ -33343,6 +33358,12 @@ function startThreePointRound() {
 }
 
 function startThreePointFinal() {
+  if (!didCurrentShooterAdvance()) {
+    threePtState.pendingResultAction = 'close';
+    setThreePointResultsVisible(true);
+    showToast('第一輪只有前 3 名能進入決賽；本次已淘汰。', 'warning');
+    return;
+  }
   setThreePointResultsVisible(false);
   startThreePointManualRound('final');
 }
@@ -33386,7 +33407,7 @@ function startThreePointManualRound(round) {
   renderRacksInitial();
   updateThreePointRoundUi();
   prepareThreePointOpponentResults();
-  const livePlayer = getThreePointParticipants().find(player => player.name === threePtState.shooter?.name) || { key: 'live-player', name: threePtState.shooter?.name };
+  const livePlayer = getThreePointParticipants().find(player => isCurrentThreePointShooter(player)) || { key: 'live-player', name: threePtState.shooter?.name, isPlayer: true };
   renderThreePointParticipantStrip([...threePtState.cpuRoundResults, { ...livePlayer, score: 0 }]);
   startThreePointClock();
   startMeterLoop();
@@ -33452,7 +33473,7 @@ function triggerShotRelease() {
   const scoreEl = document.getElementById('threePtScore');
   if (scoreEl) scoreEl.innerText = threePtState.score;
   renderThreePointLiveStatus();
-  const livePlayer = getThreePointParticipants().find(player => player.name === threePtState.shooter?.name) || { key: 'live-player', name: threePtState.shooter?.name };
+  const livePlayer = getThreePointParticipants().find(player => isCurrentThreePointShooter(player)) || { key: 'live-player', name: threePtState.shooter?.name, isPlayer: true };
   renderThreePointParticipantStrip([...threePtState.cpuRoundResults, { ...livePlayer, score: threePtState.score }]);
 
   const fb = document.getElementById('shotFeedback');
@@ -33519,7 +33540,7 @@ function rankThreePointRound(results) {
 }
 
 function makePlayerThreePointResult(round) {
-  const base = getThreePointParticipants().find(player => player.name === threePtState.shooter?.name) || {};
+  const base = getThreePointParticipants().find(player => isCurrentThreePointShooter(player)) || {};
   const simulated = simulateCpuThreePointRound(base, round, 99);
   return {
     ...base,
@@ -33549,7 +33570,7 @@ function finishThreePointRound() {
     // 決賽依第一輪名次反向出場：第三名先投，第一名最後投。
     threePtState.finalists = threePtState.roundOneResults.slice(0, 3).reverse();
     renderThreePointParticipantStrip(threePtState.roundOneResults);
-    const playerRank = threePtState.roundOneResults.findIndex(player => player.name === playerResult.name) + 1;
+    const playerRank = threePtState.roundOneResults.findIndex(player => isCurrentThreePointShooter(player)) + 1;
     const weekend = state.seasonJourney?.allStarWeekend;
     if (weekend) weekend.contestProgress = {
       stage: playerRank > 0 && playerRank <= 3 ? 'final-ready' : 'completed',
@@ -33589,7 +33610,9 @@ function showThreePointFinalists(playerRank) {
 }
 
 function completeCpuThreePointFinal() {
-  const finalResults = threePtState.finalists.map((player, index) => simulateCpuThreePointRound(player, 'final', index));
+  const finalResults = threePtState.finalists
+    .filter(player => !isCurrentThreePointShooter(player))
+    .map((player, index) => simulateCpuThreePointRound(player, 'final', index));
   finalizeThreePointContest(rankThreePointRound(finalResults));
 }
 
@@ -33600,12 +33623,12 @@ function finalizeThreePointContest(finalResults) {
     rank: index + 1,
     round1Score: roundOneByKey.get(player.key || player.name)?.score ?? null,
     finalScore: player.score,
-    isPlayer: player.name === threePtState.shooter?.name
+    isPlayer: isCurrentThreePointShooter(player)
   }));
   const finalistKeys = new Set(finalists.map(player => player.key || player.name));
   const eliminated = threePtState.roundOneResults
     .filter(player => !finalistKeys.has(player.key || player.name))
-    .map((player, index) => ({ ...player, rank: index + 4, round1Score: player.score, finalScore: null, isPlayer: player.name === threePtState.shooter?.name }));
+    .map((player, index) => ({ ...player, rank: index + 4, round1Score: player.score, finalScore: null, isPlayer: isCurrentThreePointShooter(player) }));
   const ranking = finalists.concat(eliminated);
   const champion = ranking[0];
   const playerResult = ranking.find(player => player.isPlayer);
@@ -33644,7 +33667,13 @@ function finalizeThreePointContest(finalResults) {
     weekend.threePointChampionKey = champion?.key || null;
     weekend.threePointChampionName = champion?.name || '';
   }
-  if (!state.isAdmin && isChamp && typeof window.awardThreePointChampion === 'function') window.awardThreePointChampion(playerName, playerScore, ranking);
+  let championBackAwarded = false;
+  if (!state.isAdmin && isChamp && typeof window.awardThreePointChampion === 'function') {
+    championBackAwarded = window.awardThreePointChampion(playerName, playerScore, ranking, {
+      cardId: threePtState.shooter?.cardId || '',
+      participantKey: playerResult?.key || ''
+    });
+  }
   saveGame();
 
   const btnStart = document.getElementById('btnStartContest');
@@ -33672,6 +33701,10 @@ function finalizeThreePointContest(finalResults) {
     feedback.className = 'tpc-feedback is-money';
   }
   renderThreePointContestRanking(compactRanking);
+  if (isChamp) {
+    const sub = document.getElementById('contestResultSub');
+    if (sub) sub.innerText += championBackAwarded ? ' 3-POINT CHAMPION 卡背已解鎖。' : ' 3-POINT CHAMPION 卡背已保存在球員收藏。';
+  }
 }
 
 // Kept for compatibility with old inline calls.
