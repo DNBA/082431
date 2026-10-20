@@ -8,6 +8,16 @@
   const ENERGY_REGEN_MS = 30 * 60 * 1000;
   const SEASON_LENGTH = 82;
   const AUTO_STEP_MS = 1800;
+  const journeyCheckpointStore = (() => {
+    try {
+      const storageKey = typeof STORAGE_KEY !== 'undefined' ? STORAGE_KEY : 'toeicquest_nba_save_v1';
+      return window.ToeicQuestSeasonCheckpoint?.createStore(localStorage, storageKey) || null;
+    } catch (_) {
+      return null;
+    }
+  })();
+  let checkpointRecoveredThisLoad = false;
+  let journeyLifecycleSaveBound = false;
   const MATCH_PRESENTATION_TIMING = Object.freeze({
     event: 290,
     scorePulse: 230,
@@ -886,6 +896,42 @@
     return script;
   }
 
+  function latestPlayedJourneyGame(journey) {
+    return Array.isArray(journey?.schedule)
+      ? [...journey.schedule].reverse().find(game => game?.played)
+      : null;
+  }
+
+  function recordJourneyCheckpoint(journey, game = latestPlayedJourneyGame(journey)) {
+    try {
+      return journeyCheckpointStore?.record(journey, game) || false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function persistJourneyProgress(journey, game, { clearOnSuccess = true } = {}) {
+    recordJourneyCheckpoint(journey, game);
+    const saved = typeof saveGame === 'function' ? saveGame() : false;
+    if (saved && clearOnSuccess) journeyCheckpointStore?.clear(journey);
+    return saved;
+  }
+
+  function flushJourneyProgressOnBackground() {
+    const journey = state?.seasonJourney;
+    if (!journey || !Number(journey.gameIndex)) return;
+    persistJourneyProgress(journey, latestPlayedJourneyGame(journey));
+  }
+
+  function bindJourneyLifecycleSave() {
+    if (journeyLifecycleSaveBound) return;
+    journeyLifecycleSaveBound = true;
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') flushJourneyProgressOnBackground();
+    });
+    window.addEventListener('pagehide', flushJourneyProgressOnBackground);
+  }
+
   function ensureJourneyState() {
     if (!state.seasonJourney || typeof state.seasonJourney !== 'object') {
       state.seasonJourney = {
@@ -910,6 +956,8 @@
       if (!Array.isArray(game.moments)) game.moments = [];
       if (game.played && !game.analysis) game.analysis = null;
     });
+    const recovery = journeyCheckpointStore?.apply(journey);
+    if (recovery?.applied) checkpointRecoveredThisLoad = true;
     if (seasonSimulation()) journey.recordBook = seasonSimulation().ensureRecordBook(journey.recordBook);
     window.SeasonStandings?.ensure(journey, typeof NBA_PLAYERS !== 'undefined' ? NBA_PLAYERS : []);
     syncLeagueState();
@@ -924,6 +972,7 @@
       ensureCardJourney(card);
       window.PlayerProgression?.ensureCard(card);
     });
+    if (journey.gameIndex >= SEASON_LENGTH && !journey.completed) completeRegularSeason();
     if (repairRecordedThreePointChampionBack()) saveGame();
   }
 
@@ -3105,6 +3154,9 @@
     j.gameIndex += 1; j.wins += win ? 1 : 0; j.losses += win ? 0 : 1;
     j.streak = win ? j.streak + 1 : 0; j.bestStreak = Math.max(j.bestStreak, j.streak);
     j.recent.push({ game: item.game, win, opponent: item.opponent }); j.recent = j.recent.slice(-10);
+    // Commit the completed game before any reward, badge, standings or award work can throw.
+    // On storage pressure, the compact checkpoint still prevents the 82-game progress from rolling back.
+    persistJourneyProgress(j, item, { clearOnSuccess: j.gameIndex < SEASON_LENGTH });
     updateTeamMorale(gameData, win, j.streak);
     (gameData.boxScore || []).forEach(stat => {
       const card = findActiveCardByName(stat.name);
@@ -3122,7 +3174,7 @@
     if (j.gameIndex >= SEASON_LENGTH) completeRegularSeason();
     window.SeasonStandings?.ensure(j, typeof NBA_PLAYERS !== 'undefined' ? NBA_PLAYERS : []);
     syncLeagueState();
-    saveGame();
+    persistJourneyProgress(j, item);
     const actions = document.getElementById('sjGameActions'); if (actions) actions.classList.add('hidden');
     const finals = document.getElementById('sjFinalActions'); if (finals) { finals.classList.remove('hidden'); finals.classList.add('grid'); }
     activeGame.feed.push(`${win ? '✅ FINAL 勝利' : '❌ FINAL 敗北'}：${activeGame.homeScore}-${activeGame.awayScore}`);
@@ -3159,7 +3211,17 @@
     state.season.lastSimRecord = `${j.wins} 勝 ${j.losses} 敗`;
     state.season.lastSimWins = j.wins;
     state.season.lastSimStreak = j.bestStreak;
-    state.season.lastSimGames = j.schedule;
+    // Keep the legacy summary lightweight. Copying all 82 full box scores here doubles
+    // the serialized season and can make mobile localStorage reject the final save.
+    state.season.lastSimGames = j.schedule.map(game => ({
+      game: game.game,
+      opponent: game.opponent,
+      played: !!game.played,
+      win: !!game.win,
+      myScore: Number(game.myScore) || 0,
+      oppScore: Number(game.oppScore) || 0,
+      special: game.special || null
+    }));
     state.season.lastBoxScores = j.awards.map(award => ({ title: `${award.icon} ${award.label}`, player: award.player, stat: award.stat }));
     if (typeof addNotification === 'function') addNotification({ title: '🏁 例行賽完成', message: `Season ${j.seasonNo} 以 ${j.wins}-${j.losses} 完成，MVP 與 DPOY 卡背已結算。`, icon: '🏆', type: 'achievement' });
   }
@@ -3234,6 +3296,8 @@
       j.gameIndex += 1; j.wins += win ? 1 : 0; j.losses += win ? 0 : 1;
       j.streak = win ? j.streak + 1 : 0; j.bestStreak = Math.max(j.bestStreak, j.streak);
       j.recent.push({ game: item.game, win, opponent: item.opponent }); j.recent = j.recent.slice(-10);
+      recordJourneyCheckpoint(j, item);
+      if (j.gameIndex % 5 === 0 && saveGame()) journeyCheckpointStore?.clear(j);
       updateTeamMorale(gameData, win, j.streak);
       (gameData.boxScore || []).forEach(stat => {
         const card = findActiveCardByName(stat.name);
@@ -3252,7 +3316,7 @@
     if (j.gameIndex >= SEASON_LENGTH && !j.completed) completeRegularSeason();
     window.SeasonStandings?.ensure(j, typeof NBA_PLAYERS !== 'undefined' ? NBA_PLAYERS : []);
     syncLeagueState();
-    saveGame(); renderAll();
+    persistJourneyProgress(j, latestPlayedJourneyGame(j)); renderAll();
     if (typeof showToast === 'function') showToast(`⚡ 管理員已模擬至 Game ${finalTarget}`, 'success');
   }
 
@@ -3589,6 +3653,7 @@
 
   function initSeasonJourney() {
     ensureJourneyState();
+    bindJourneyLifecycleSave();
     injectGameModal();
     renderJourneyShell();
     renderJourneySeasonTab();
@@ -3599,7 +3664,12 @@
       leaguePulseIndex += 1;
       renderLeaguePulse();
     }, 8000);
-    saveGame();
+    const saved = saveGame();
+    if (saved) journeyCheckpointStore?.clear(state.seasonJourney);
+    if (checkpointRecoveredThisLoad && typeof showToast === 'function') {
+      showToast(`已恢復到 Game ${state.seasonJourney.gameIndex}，上一場不會再倒退。`, 'success');
+      checkpointRecoveredThisLoad = false;
+    }
   }
 
   window.editJourneyTeamName = editJourneyTeamName;
@@ -3655,3 +3725,4 @@
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initSeasonJourney);
   else initSeasonJourney();
 })();
+
