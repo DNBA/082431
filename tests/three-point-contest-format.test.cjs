@@ -61,6 +61,11 @@ assert.match(app, /晉級線 \$\{threePtState\.advanceCutoff\}/);
 assert.match(app, /threePtContestPlayedShooters/);
 assert.match(app, /threePtContestResultsByShooter/);
 assert.match(app, /ADMIN · 再挑戰一場/);
+assert.match(app, /if \(!weekend\?\.announced \|\| !window\.SeasonAllStar\) return \[\]/, 'the roster is not treated as invited before the official announcement');
+assert.doesNotMatch(app, /!invitedNames \|\| invitedNames\.has\(player\.name\)/, 'missing invite data never falls back to every owned player');
+assert.match(app, /function isMatchingThreePointInvite\(card, invite\)/, 'invite checks prefer the exact card identity');
+assert.match(app, /只有正式受邀的參賽球員可以出戰三分大賽/, 'both round entry points reject non-invited players');
+assert.doesNotMatch(app, /if \(!merged\.some\(player => player\.name === playerName\)\) merged\.push\(playerEntry\)/, 'a selected roster player cannot be injected into the official participant field');
 assert.match(app, /!state\.isAdmin && isChamp/, 'admin replays do not repeatedly grant champion rewards');
 assert.match(app, /function didCurrentShooterAdvance\(\)/, 'the final round has a dedicated qualification guard');
 assert.match(app, /if \(!didCurrentShooterAdvance\(\)\)/, 'an eliminated shooter cannot open the final round through stale UI state');
@@ -69,3 +74,4 @@ assert.match(journey, /function resolveThreePointChampionCard\(playerName, ident
 assert.match(journey, /function repairRecordedThreePointChampionBack\(\)/, 'old saves with a recorded champion can repair a missing card back');
 
 console.log('Authentic two-round three-point contest, legacy 3PT fallback, and hidden UI version checks passed.');
+
