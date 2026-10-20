@@ -3,7 +3,11 @@
   const DB_NAME = 'toeicquest-save-vault-v1';
   const STORE_NAME = 'snapshots';
   const MAX_ENTRIES = 4;
+  const AUTO_SAVE_ID = 'vault_auto_current';
   let dbPromise = null;
+  let pendingAutoRaw = '';
+  let autoSaveTimer = 0;
+  let autoSaveRunning = false;
 
   function openDb() {
     if (!window.indexedDB) return Promise.reject(new Error('此瀏覽器不支援大容量本機還原點'));
@@ -77,9 +81,81 @@
       tx.onabort = () => reject(tx.error || new Error('無法建立本機還原點'));
     });
     const entries = await listVault();
-    await deleteVault(entries.slice(MAX_ENTRIES).map(item => item.id));
+    const manualEntries = entries.filter(item => item.id !== AUTO_SAVE_ID);
+    await deleteVault(manualEntries.slice(MAX_ENTRIES).map(item => item.id));
     return entry;
   }
+
+  async function writeAutoVault(raw) {
+    const candidate = ToeicQuestSaveBackups.parseState(raw);
+    const entry = {
+      id: AUTO_SAVE_ID,
+      at: Date.now(),
+      label: '自動大容量存檔',
+      raw,
+      ...ToeicQuestSaveBackups.summarize(candidate)
+    };
+    const db = await openDb();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      tx.objectStore(STORE_NAME).put(entry);
+      tx.oncomplete = resolve;
+      tx.onerror = () => reject(tx.error || new Error('無法更新自動大容量存檔'));
+      tx.onabort = () => reject(tx.error || new Error('無法更新自動大容量存檔'));
+    });
+    return entry;
+  }
+
+  async function flushAutoSnapshot() {
+    if (autoSaveRunning || !pendingAutoRaw) return;
+    const raw = pendingAutoRaw;
+    pendingAutoRaw = '';
+    autoSaveRunning = true;
+    try {
+      await writeAutoVault(raw);
+    } catch (error) {
+      console.warn('Auto large-save snapshot failed:', error);
+      if (!pendingAutoRaw) pendingAutoRaw = raw;
+    } finally {
+      autoSaveRunning = false;
+      if (pendingAutoRaw && !autoSaveTimer) {
+        autoSaveTimer = window.setTimeout(() => {
+          autoSaveTimer = 0;
+          flushAutoSnapshot();
+        }, 2000);
+      }
+    }
+  }
+
+  function queueAutoSnapshot(raw) {
+    pendingAutoRaw = String(raw || '');
+    if (!pendingAutoRaw) return;
+    if (autoSaveTimer) window.clearTimeout(autoSaveTimer);
+    autoSaveTimer = window.setTimeout(() => {
+      autoSaveTimer = 0;
+      flushAutoSnapshot();
+    }, 1200);
+  }
+
+  window.ToeicQuestSaveVault = {
+    queueAutoSnapshot,
+    flushAutoSnapshot,
+    list: listVault,
+    read: readVault
+  };
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') {
+      if (autoSaveTimer) window.clearTimeout(autoSaveTimer);
+      autoSaveTimer = 0;
+      flushAutoSnapshot();
+    }
+  });
+  window.addEventListener('pagehide', () => {
+    if (autoSaveTimer) window.clearTimeout(autoSaveTimer);
+    autoSaveTimer = 0;
+    flushAutoSnapshot();
+  });
 
   function bytesToBase64(bytes) {
     let binary = '';
