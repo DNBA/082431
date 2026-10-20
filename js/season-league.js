@@ -2,7 +2,7 @@
   'use strict';
 
   const VERSION = 2;
-  const STAT_KEYS = ['pts', 'reb', 'ast', 'stl', 'blk', 'threeM', 'threeA'];
+  const STAT_KEYS = ['min', 'pts', 'reb', 'ast', 'stl', 'blk', 'tov', 'fgM', 'fgA', 'threeM', 'threeA', 'ftM', 'ftA', 'plusMinus'];
   const LEADER_CONFIG = Object.freeze({
     PTS: { key: 'ppg', label: 'PTS', suffix: 'PPG' },
     REB: { key: 'rpg', label: 'REB', suffix: 'RPG' },
@@ -81,22 +81,37 @@
     let threePct = numberStat(basic['3P%']) ?? (guard ? 36 : 34);
     if (threePct > 0 && threePct < 1) threePct *= 100;
     return {
+      min: clamp(numberStat(basic.MP) ?? numberStat(basic.MIN) ?? (guard ? 33 : 30), 12, 40),
       pts: clamp(numberStat(basic.PTS) ?? (6.2 + (ovr - 70) * .87 + (guard ? 1.2 : 0)), 4, 34.5),
       reb: clamp(numberStat(basic.REB) ?? (2.2 + (ovr - 70) * .14 + (big ? 4.2 : 0) + (center ? 1.4 : 0)), 1.5, 14.5),
       ast: clamp(numberStat(basic.AST) ?? (1.2 + (ovr - 70) * .1 + (guard ? 2 : 0) + (point ? 2.1 : 0)), .8, 11.5),
       stl: clamp(numberStat(basic.STL) ?? (.45 + (ovr - 70) * .035 + (guard ? .18 : 0)), .3, 2.4),
       blk: clamp(numberStat(basic.BLK) ?? (.25 + (ovr - 70) * .025 + (big ? .55 : 0) + (center ? .45 : 0)), .15, 3.8),
+      tov: clamp(numberStat(basic.TOV) ?? (point ? 2.7 : (guard ? 2 : 1.5)), .4, 4.8),
+      fgA: clamp((numberStat(basic.FGA) ?? numberStat(basic.PTS) * .72) || (9 + (ovr - 70) * .38), 3, 25),
+      fgM: clamp((numberStat(basic.FGM) ?? numberStat(basic.FGA) * .47) || (4 + (ovr - 70) * .18), 1, 15),
       threeA,
-      threeM: clamp(threeA * clamp(threePct, 20, 50) / 100, 0, threeA)
+      threeM: clamp(threeA * clamp(threePct, 20, 50) / 100, 0, threeA),
+      ftA: clamp(numberStat(basic.FTA) ?? 3.2, .2, 12),
+      ftM: clamp(numberStat(basic.FTM) ?? 2.5, 0, 11),
+      plusMinus: 0
     };
   }
-  function emptyTotals() { return { pts: 0, reb: 0, ast: 0, stl: 0, blk: 0, threeM: 0, threeA: 0 }; }
+  function emptyTotals() {
+    return { min: 0, pts: 0, reb: 0, ast: 0, stl: 0, blk: 0, tov: 0, fgM: 0, fgA: 0, threeM: 0, threeA: 0, ftM: 0, ftA: 0, plusMinus: 0 };
+  }
+  function normalizeTotals(value) {
+    const result = { ...emptyTotals() };
+    Object.keys(result).forEach(stat => { result[stat] = Number(value?.[stat]) || 0; });
+    return result;
+  }
   function createStatRecord(player, options = {}) {
     const team = options.team || player?.team || 'FA';
     const meta = TEAM_META[team];
     return {
       key: options.key || `${options.isPlayer ? 'player' : 'cpu'}:${team}:${player?.nbaId || player?.id || player?.name}`,
       name: String(player?.name || 'Unknown Player'), nbaId: Number(player?.nbaId || player?.id || 0),
+      cardId: options.cardId || player?.cardId || null,
       team, conference: options.conference || meta?.conference || 'west', ovr: playerOvr(player),
       positions: positionsOf(player), isPlayer: !!options.isPlayer, source: options.isPlayer ? 'player' : 'cpu',
       games: 0, totals: emptyTotals(), months: {}, base: baselineFor(player)
@@ -107,7 +122,8 @@
     if (!record.months[monthKey]) record.months[monthKey] = { games: 0, ...emptyTotals() };
     record.months[monthKey].games += 1;
     STAT_KEYS.forEach(stat => {
-      const value = Math.max(0, Number(line[stat]) || 0);
+      const rawValue = Number(line[stat]) || 0;
+      const value = stat === 'plusMinus' ? rawValue : Math.max(0, rawValue);
       record.totals[stat] = round(record.totals[stat] + value, 2);
       record.months[monthKey][stat] = round(record.months[monthKey][stat] + value, 2);
     });
@@ -148,6 +164,14 @@
     if (!league.awardRaces || typeof league.awardRaces !== 'object') league.awardRaces = { mvp: [], dpoy: [] };
     if (!league.previousRaceRanks || typeof league.previousRaceRanks !== 'object') league.previousRaceRanks = { mvp: {}, dpoy: {} };
     if (!Array.isArray(league.finalAwards)) league.finalAwards = [];
+    Object.values(league.playerStats || {}).forEach(record => {
+      record.totals = normalizeTotals(record.totals);
+      if (!record.months || typeof record.months !== 'object') record.months = {};
+      Object.keys(record.months).forEach(key => {
+        const games = Number(record.months[key]?.games) || 0;
+        record.months[key] = { games, ...normalizeTotals(record.months[key]) };
+      });
+    });
     return league;
   }
   function ensureCpuRoster(league, players) {
@@ -188,12 +212,12 @@
     const records = new Map();
     cards.forEach(card => {
       const key = `player:${card.cardId || card.nbaId || card.name}`;
-      records.set(card.name, createStatRecord(card, { key, team: 'PLAYER', conference: 'west', isPlayer: true }));
+      records.set(card.name, createStatRecord(card, { key, cardId: card.cardId, team: 'PLAYER', conference: 'west', isPlayer: true }));
     });
     (journey?.schedule || []).slice(0, Number(journey?.gameIndex) || 0).forEach((game, index) => {
       const month = monthForGame(journey.seasonNo, Number(game.game) || index + 1);
       (game.boxScore || []).forEach(row => {
-        if (!records.has(row.name)) records.set(row.name, createStatRecord({ ...row, name: row.name }, { key: `player:${row.name}`, team: 'PLAYER', conference: 'west', isPlayer: true }));
+        if (!records.has(row.name)) records.set(row.name, createStatRecord({ ...row, name: row.name }, { key: `player:${row.cardId || row.name}`, cardId: row.cardId || null, team: 'PLAYER', conference: 'west', isPlayer: true }));
         addLine(records.get(row.name), row, month.key);
       });
     });
@@ -228,10 +252,22 @@
     const base = record.base || emptyTotals();
     return {
       games,
+      mpg: round(games ? totals.min / games : base.min),
       ppg: round(games ? totals.pts / games : base.pts), rpg: round(games ? totals.reb / games : base.reb),
       apg: round(games ? totals.ast / games : base.ast), spg: round(games ? totals.stl / games : base.stl),
-      bpg: round(games ? totals.blk / games : base.blk)
+      bpg: round(games ? totals.blk / games : base.blk),
+      tovpg: round(games ? totals.tov / games : base.tov),
+      fgPct: round(Number(totals.fgA) > 0 ? Number(totals.fgM) / Number(totals.fgA) * 100 : 0),
+      threePct: round(Number(totals.threeA) > 0 ? Number(totals.threeM) / Number(totals.threeA) * 100 : 0),
+      ftPct: round(Number(totals.ftA) > 0 ? Number(totals.ftM) / Number(totals.ftA) * 100 : 0)
     };
+  }
+  function getAwardMinimumGames(teamGames) {
+    return Math.ceil(Math.max(0, Number(teamGames) || 0) * .8);
+  }
+  function isSeasonAwardEligible(player, teamGames) {
+    const required = getAwardMinimumGames(teamGames);
+    return required === 0 || (Number(player?.games ?? player?.gp) || 0) >= required;
   }
   function publicPlayer(record, league, monthKey = null) {
     const stat = averages(record, monthKey);
@@ -245,8 +281,11 @@
     const threePa = round(hasTrackedThrees ? Number(statTotals.threeA) / stat.games : Number(record.base?.threeA || 0));
     const threePm = round(hasTrackedThrees ? Number(statTotals.threeM || 0) / stat.games : Number(record.base?.threeM || 0));
     return {
-      key: record.key, name: record.name, nbaId: record.nbaId, team: record.team, conference: record.conference,
+      key: record.key, name: record.name, nbaId: record.nbaId, cardId: record.cardId || null, team: record.team, conference: record.conference,
       ovr: record.ovr, isPlayer: record.isPlayer, projected: stat.games === 0, ...stat,
+      teamGames: Number(teamRecord.games) || 0,
+      minimumGames: getAwardMinimumGames(teamRecord.games),
+      awardEligible: isSeasonAwardEligible(stat, teamRecord.games),
       teamWins: teamRecord.wins, teamLosses: teamRecord.losses, teamWinPct: teamRecord.games ? teamRecord.winPct : .5,
       teamDefense: clamp(116 - defenseAllowed, -4, 12),
       threePa,
@@ -286,16 +325,17 @@
   }
   function updateLeadersAndRaces(league, journey, force = false) {
     const players = combinedPlayers(league);
+    const eligiblePlayers = players.filter(player => player.awardEligible);
     Object.entries(LEADER_CONFIG).forEach(([category, config]) => {
-      league.leaders[category] = [...players].sort((a, b) => b[config.key] - a[config.key] || b.ovr - a.ovr).slice(0, 5)
+      league.leaders[category] = [...eligiblePlayers].sort((a, b) => b[config.key] - a[config.key] || b.ovr - a.ovr).slice(0, 5)
         .map((player, index) => ({ ...player, rank: index + 1, value: player[config.key], suffix: config.suffix }));
     });
     const gameIndex = Number(journey?.gameIndex) || 0;
     const cadence = Math.floor(gameIndex / 5) * 5;
     if (!force && league.raceUpdatedAt === cadence && league.awardRaces.mvp?.length && league.awardRaces.dpoy?.length) return;
     const recentMonth = monthForGame(journey.seasonNo, Math.max(1, gameIndex)).key;
-    league.awardRaces.mvp = rankRace(league, 'mvp', players, recentMonth);
-    league.awardRaces.dpoy = rankRace(league, 'dpoy', players, recentMonth);
+    league.awardRaces.mvp = rankRace(league, 'mvp', eligiblePlayers, recentMonth);
+    league.awardRaces.dpoy = rankRace(league, 'dpoy', eligiblePlayers, recentMonth);
     league.raceUpdatedAt = cadence;
   }
   function monthlyWinner(league, month, conference) {
@@ -385,7 +425,32 @@
     if (!league.monthlyAwardsSeen.includes(monthKey)) league.monthlyAwardsSeen.push(monthKey);
   }
 
-  const api = { sync, view, finalizeAwards, markMonthSeen, monthPlan, monthForGame, seasonYears, LEADER_CONFIG, teams: TEAM_LIST };
+  function snapshotPlayerSeasons(journey) {
+    const league = journey?.leagueState;
+    if (!league?.playerStats) return [];
+    const season = seasonYears(journey.seasonNo);
+    return Object.values(league.playerStats)
+      .filter(record => record?.source === 'player' && Number(record.games) > 0)
+      .map(record => ({
+        key: record.key,
+        cardId: record.cardId || String(record.key || '').replace(/^player:/, ''),
+        nbaId: Number(record.nbaId) || 0,
+        name: record.name,
+        team: record.team,
+        seasonNo: Number(journey.seasonNo) || 1,
+        seasonLabel: season.label,
+        games: Number(record.games) || 0,
+        totals: normalizeTotals(record.totals),
+        perGame: averages(record)
+      }));
+  }
+
+  const api = {
+    sync, view, finalizeAwards, markMonthSeen, monthPlan, monthForGame, seasonYears,
+    getAwardMinimumGames, isSeasonAwardEligible, snapshotPlayerSeasons, averages,
+    LEADER_CONFIG, teams: TEAM_LIST
+  };
   global.SeasonLeague = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);
+

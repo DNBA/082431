@@ -96,7 +96,7 @@
 
 .player-dossier-v2__tabs {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   border-top: 1px solid rgba(255,255,255,.09);
   border-bottom: 1px solid rgba(255,255,255,.09);
 }
@@ -274,6 +274,97 @@
 
 .player-dossier-v2__legend-progress { margin-top: 4cqi; }
 
+.player-dossier-v2__season-history {
+  margin-top: 4cqi;
+  padding-top: 3cqi;
+  border-top: 1px solid rgba(255,255,255,.09);
+}
+
+.player-dossier-v2__season-heading,
+.player-dossier-v2__season-row header,
+.player-dossier-v2__career-average {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2cqi;
+}
+
+.player-dossier-v2__season-heading span,
+.player-dossier-v2__career-average span {
+  color: color-mix(in srgb, var(--normal-card-accent, #e6bb56), white 12%);
+  font-size: clamp(6px, 2.2cqi, 9px);
+  font-weight: 900;
+  letter-spacing: .1em;
+}
+
+.player-dossier-v2__season-heading small,
+.player-dossier-v2__season-row header span {
+  color: #7f7986;
+  font-size: clamp(5px, 1.9cqi, 8px);
+  font-weight: 850;
+}
+
+.player-dossier-v2__season-list { display: grid; gap: 2cqi; margin-top: 2.5cqi; }
+
+.player-dossier-v2__season-row {
+  padding: 2.4cqi;
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 2cqi;
+  background: rgba(255,255,255,.035);
+}
+
+.player-dossier-v2__season-row.is-current {
+  border-color: color-mix(in srgb, var(--normal-card-accent, #e6bb56), transparent 50%);
+  background: color-mix(in srgb, var(--normal-card-accent, #e6bb56), transparent 92%);
+}
+
+.player-dossier-v2__season-row header b {
+  color: #f7f3ea;
+  font-size: clamp(7px, 2.7cqi, 11px);
+}
+
+.player-dossier-v2__season-row > div {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 1cqi;
+  margin-top: 2cqi;
+  text-align: center;
+}
+
+.player-dossier-v2__season-row > div span b,
+.player-dossier-v2__season-row > div span small { display: block; }
+
+.player-dossier-v2__season-row > div span b {
+  color: #fff;
+  font: 850 clamp(7px, 2.8cqi, 11px)/1 ui-monospace, "SFMono-Regular", Consolas, monospace;
+}
+
+.player-dossier-v2__season-row > div span small {
+  margin-top: .8cqi;
+  color: #77717e;
+  font-size: clamp(5px, 1.8cqi, 7px);
+  font-weight: 900;
+}
+
+.player-dossier-v2__season-row footer {
+  margin-top: 2cqi;
+  color: #8d8793;
+  font-size: clamp(5px, 1.85cqi, 8px);
+  text-align: center;
+}
+
+.player-dossier-v2__career-average {
+  margin-top: 2.5cqi;
+  padding: 2.3cqi 0;
+  border-top: 1px solid rgba(255,255,255,.07);
+  border-bottom: 1px solid rgba(255,255,255,.07);
+}
+
+.player-dossier-v2__career-average b {
+  color: #f2ede3;
+  font-size: clamp(6px, 2.15cqi, 9px);
+}
+
 .player-dossier-v2__legend-progress > div:first-child {
   display: flex;
   justify-content: space-between;
@@ -382,3 +473,4 @@
     padding-inline: 0;
   }
 }
+

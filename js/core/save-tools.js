@@ -217,12 +217,6 @@ async function importGameSave(event) {
   }
 }
 
-document.addEventListener('DOMContentLoaded', () => {
-  const recovery = window.toeicQuestSaveRecovery;
-  if (recovery?.blocked) {
-    openSaveTools();
-    showToast(recovery.message, 'warning');
-  } else if (recovery?.recovered) {
-    showToast(`已從 ${new Date(recovery.recovered.at).toLocaleString('zh-TW')} 的備份恢復進度。`, 'info');
-  }
-}, { once: true });
+// Recovery remains available from Backup & Transfer, but never interrupts the
+// player with a restore / do-not-restore prompt merely for opening the site.
+

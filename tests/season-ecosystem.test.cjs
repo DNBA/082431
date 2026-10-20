@@ -28,6 +28,10 @@ assert.match(season, /window\.SeasonLeague\.sync/);
 assert.match(season, /award\.isPlayer/, 'annual Achievement BACK unlocks must only use player-owned winners');
 assert.doesNotMatch(league, /Math\.random/, 'CPU league simulation must be deterministic');
 assert.match(league, /finalAwardsLocked/);
+assert.match(league, /getAwardMinimumGames/);
+assert.match(league, /snapshotPlayerSeasons/);
+assert.match(season, /awardMinimumGames/);
+assert.match(season, /playerStats/);
 assert.match(league, /monthlyAwardsSeen/);
 assert.match(league, /source: options\.isPlayer \? 'player' : 'cpu'/);
 assert.match(allStar, /SELECTION_GAME = 47/);
@@ -39,3 +43,4 @@ assert.match(css, /@media \(max-width: 430px\)/);
 assert.equal((css.match(/{/g) || []).length, (css.match(/}/g) || []).length, 'Season League CSS braces must be balanced');
 
 console.log('Season ecosystem UI: three tabs, compact five-game Journey, League, Awards, monthly modal, career honors, and responsive CSS passed.');
+

@@ -140,6 +140,7 @@
   let arenaMusicStep = 0;
   let arenaMusicMuted = false;
   let energyTimer = null;
+  let energySpendFailure = '';
   let autoMode = { running: false, remaining: 0, timer: null };
   let standingsConference = 'west';
   let currentSeasonView = 'journey';
@@ -993,14 +994,24 @@
   }
 
   function spendEnergy() {
+    energySpendFailure = '';
     if (state.isAdmin) return true;
     applyEnergyRegen();
     const energy = state.seasonEnergy;
-    if (energy.current < 1) return false;
+    if (energy.current < 1) {
+      energySpendFailure = 'empty';
+      return false;
+    }
     const before = energy.current;
+    const beforeRegenAt = energy.lastRegenAt;
     energy.current -= 1;
     if (before >= ENERGY_MAX && energy.current < ENERGY_MAX) energy.lastRegenAt = now();
-    saveGame();
+    if (typeof saveGame !== 'function' || !saveGame()) {
+      energy.current = before;
+      energy.lastRegenAt = beforeRegenAt;
+      energySpendFailure = 'storage';
+      return false;
+    }
     return true;
   }
 
@@ -1272,7 +1283,7 @@
 
   function raceMarkup(players) {
     return (players || []).map(player => `<div class="sj-ranking-row ${player.isPlayer ? 'is-player' : ''}">
-      <span class="sj-ranking-row__rank">${player.rank}</span><span class="sj-ranking-row__player"><b>${safeText(player.name)}${seasonMovementMarkup(player.movement)}</b><small>${player.isPlayer ? 'YOUR TEAM' : safeText(player.team)} · ${player.ppg.toFixed(1)} PPG</small></span><strong class="sj-ranking-row__value">${player.score.toFixed(1)}</strong>
+      <span class="sj-ranking-row__rank">${player.rank}</span><span class="sj-ranking-row__player"><b>${safeText(player.name)}${seasonMovementMarkup(player.movement)}</b><small>${player.isPlayer ? 'YOUR TEAM' : safeText(player.team)} · ${player.ppg.toFixed(1)} PPG · GP ${player.games}/${player.minimumGames} ✓</small></span><strong class="sj-ranking-row__value">${player.score.toFixed(1)}</strong>
     </div>`).join('') || '<p class="sj-empty-copy">完成比賽後開始更新獎項排名。</p>';
   }
 
@@ -1679,6 +1690,10 @@
 
   function openJourneyGame() {
     ensureJourneyState();
+    if (activeGame && !activeGame.finalized) {
+      showGameAlert({ title: '比賽已經開始', message: '請先完成或返回目前這一場，系統不會重複扣除體力球。', type: 'info' });
+      return;
+    }
     const starters = ['PG','SG','SF','PF','C'].map(pos => state.startingLineup[pos]).filter(Boolean);
     if (starters.length < 5) {
       showGameAlert({ title: '先發陣容未補齊', message: '請先安排完整的五名先發球員。', type: 'warning' });
@@ -1689,7 +1704,14 @@
       return;
     }
     if (!spendEnergy()) {
-      showGameAlert({ title: '體力不足', message: '目前沒有體力球。少於 15 球時，每 30 分鐘會恢復 1 球。', type: 'info' });
+      const storageFailed = energySpendFailure === 'storage';
+      showGameAlert({
+        title: storageFailed ? '無法保存體力扣除' : '體力不足',
+        message: storageFailed
+          ? '本場沒有開始、體力球也已回復。請先釋放瀏覽器存檔空間或匯出備份後再試。'
+          : '目前沒有體力球。少於 15 球時，每 30 分鐘會恢復 1 球。',
+        type: storageFailed ? 'warning' : 'info'
+      });
       return;
     }
     const scheduleGame = currentGameInfo();
@@ -2944,7 +2966,8 @@
       else item.secondHalf += Number(row.pts || 0) + Number(row.reb || 0) + Number(row.ast || 0);
       if (row.role === 'bench') item.role = 'bench';
     }));
-    const players = Object.values(trackers);
+    const minimumGames = Math.ceil(Math.max(0, Number(journey?.gameIndex) || SEASON_LENGTH) * .8);
+    const players = Object.values(trackers).filter(player => player.games >= minimumGames);
     if (!players.length) return [];
     const avg = (player, stat) => player[stat] / Math.max(1, player.games);
     const best = score => [...players].sort((a, b) => score(b) - score(a))[0];
@@ -3207,7 +3230,16 @@
     }
     const supportingAwards = calculateSeasonAwards(j).filter(award => !/MVP|DPOY|得分王|助攻王|籃板王/.test(award.label));
     j.awards = leagueAwards.length ? leagueAwards.concat(supportingAwards) : calculateSeasonAwards(j);
-    j.history.push({ season: j.seasonNo, record: `${j.wins}-${j.losses}`, awards: j.awards, completedAt: new Date().toISOString() });
+    const playerStats = window.SeasonLeague?.snapshotPlayerSeasons(j) || [];
+    j.history.push({
+      season: j.seasonNo,
+      seasonLabel: window.SeasonLeague?.seasonYears(j.seasonNo)?.label || `Season ${j.seasonNo}`,
+      record: `${j.wins}-${j.losses}`,
+      awards: j.awards,
+      playerStats,
+      awardMinimumGames: window.SeasonLeague?.getAwardMinimumGames(j.gameIndex) || Math.ceil(SEASON_LENGTH * .8),
+      completedAt: new Date().toISOString()
+    });
     state.season.lastSimRecord = `${j.wins} 勝 ${j.losses} 敗`;
     state.season.lastSimWins = j.wins;
     state.season.lastSimStreak = j.bestStreak;

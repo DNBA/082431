@@ -1,6 +1,6 @@
 (function (global) {
   'use strict';
-  let selectedCardId = '', listMode = 'near', searchText = '';
+  let selectedCardId = '', listMode = 'near', searchText = '', promotionLocked = false;
   const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
   const currentState = () => global.state || (typeof state !== 'undefined' ? state : null);
   const cards = () => (currentState()?.inventory || []).filter(card => !global.PlayerProgression.specialCard(card));
@@ -20,6 +20,37 @@
   global.selectPromotionCard=cardId=>{selectedCardId=cardId;render();};
   global.setPromotionListMode=mode=>{listMode=['near','active','ready','all'].includes(mode)?mode:'near';render();};
   global.searchPromotionPlayers=value=>{searchText=value||'';renderList();};
-  global.promotePlayerCard=cardId=>{const s=currentState(),card=(s.inventory||[]).find(item=>String(item.cardId)===String(cardId));if(!card)return;const result=global.PlayerProgression.promote(s,card);if(!result.ok){if(typeof showToast==='function')showToast('素材還沒集滿，先讓這名球員上場累積碎片。','warning');return;}if(typeof saveGame==='function')saveGame();render();if(typeof renderAll==='function')renderAll();if(typeof showRewardModal==='function')showRewardModal({title:result.awakening?'銀黑特卡覺醒':'球員升階成功',subtitle:`${card.name} · ${result.before.rarity} → ${result.after.rarity} · ${result.before.ovr} → ${result.after.ovr} OVR`,rewards:result.growth.map(item=>({icon:'✦',name:item.name,amount:`+${item.value}`}))});};
+  global.promotePlayerCard=cardId=>{
+    if(promotionLocked)return;
+    const s=currentState(),card=(s.inventory||[]).find(item=>String(item.cardId)===String(cardId));
+    if(!card)return;
+    const clone=value=>value==null?value:JSON.parse(JSON.stringify(value));
+    const cardBefore=clone(card);
+    const progressionBefore=clone(s.playerProgression);
+    promotionLocked=true;
+    try{
+      const result=global.PlayerProgression.promote(s,card);
+      if(!result.ok){
+        if(typeof showToast==='function')showToast('素材還沒集滿，先讓這名球員上場累積碎片。','warning');
+        return;
+      }
+      const saved=typeof saveGame==='function'&&saveGame();
+      if(!saved){
+        Object.keys(card).forEach(key=>delete card[key]);
+        Object.assign(card,cardBefore);
+        s.playerProgression=progressionBefore;
+        render();
+        if(typeof renderAll==='function')renderAll();
+        if(typeof showToast==='function')showToast('存檔失敗，升階已取消；升階券與球員碎片都沒有扣除。','error');
+        return;
+      }
+      render();
+      if(typeof renderAll==='function')renderAll();
+      if(typeof showRewardModal==='function')showRewardModal({title:result.awakening?'銀黑特卡覺醒':'球員升階成功',subtitle:`${card.name} · ${result.before.rarity} → ${result.after.rarity} · ${result.before.ovr} → ${result.after.ovr} OVR`,rewards:result.growth.map(item=>({icon:'✦',name:item.name,amount:`+${item.value}`}))});
+    }finally{
+      promotionLocked=false;
+    }
+  };
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',ensureUi,{once:true});else ensureUi();
 })(window);
+

@@ -185,6 +185,81 @@
     </div>`;
   }
 
+  function sameSeasonPlayer(row, player) {
+    if (!row || !player) return false;
+    if (row.cardId && player.cardId && String(row.cardId) === String(player.cardId)) return true;
+    if (row.nbaId && player.nbaId && String(row.nbaId) === String(player.nbaId)) return true;
+    return String(row.name || '').toLowerCase() === String(player.name || '').toLowerCase();
+  }
+
+  function seasonPerGame(row) {
+    if (row?.perGame) return row.perGame;
+    if (global.SeasonLeague?.averages) return global.SeasonLeague.averages(row);
+    const games = Math.max(1, Number(row?.games) || 0);
+    const totals = row?.totals || {};
+    const pct = (made, attempts) => Number(attempts) > 0 ? Number((Number(made || 0) / Number(attempts) * 100).toFixed(1)) : 0;
+    return {
+      games: Number(row?.games) || 0,
+      mpg: Number((Number(totals.min || 0) / games).toFixed(1)),
+      ppg: Number((Number(totals.pts || 0) / games).toFixed(1)),
+      rpg: Number((Number(totals.reb || 0) / games).toFixed(1)),
+      apg: Number((Number(totals.ast || 0) / games).toFixed(1)),
+      spg: Number((Number(totals.stl || 0) / games).toFixed(1)),
+      bpg: Number((Number(totals.blk || 0) / games).toFixed(1)),
+      fgPct: pct(totals.fgM, totals.fgA), threePct: pct(totals.threeM, totals.threeA), ftPct: pct(totals.ftM, totals.ftA)
+    };
+  }
+
+  function seasonRowsForPlayer(player) {
+    if (typeof state === 'undefined' || !state?.seasonJourney) return [];
+    const journey = state.seasonJourney;
+    const rows = new Map();
+    (journey.history || []).forEach(history => {
+      (history.playerStats || []).filter(row => sameSeasonPlayer(row, player)).forEach(row => {
+        const seasonNo = Number(row.seasonNo || history.season) || 0;
+        rows.set(seasonNo, { ...row, seasonNo, seasonLabel: row.seasonLabel || history.seasonLabel || `Season ${seasonNo}`, current: false });
+      });
+    });
+    const current = Object.values(journey.leagueState?.playerStats || {}).find(row => row?.source === 'player' && sameSeasonPlayer(row, player));
+    if (current && Number(current.games) > 0) {
+      const seasonNo = Number(journey.seasonNo) || 1;
+      const label = global.SeasonLeague?.seasonYears?.(seasonNo)?.label || `Season ${seasonNo}`;
+      rows.set(seasonNo, { ...current, seasonNo, seasonLabel: label, perGame: seasonPerGame(current), current: !journey.completed });
+    }
+    return [...rows.values()].sort((a, b) => b.seasonNo - a.seasonNo);
+  }
+
+  function aggregateCareerSeasonRows(rows) {
+    const totals = rows.reduce((all, row) => {
+      all.games += Number(row.games) || 0;
+      Object.keys(all.stats).forEach(key => { all.stats[key] += Number(row.totals?.[key]) || 0; });
+      return all;
+    }, { games: 0, stats: { min: 0, pts: 0, reb: 0, ast: 0, stl: 0, blk: 0, fgM: 0, fgA: 0, threeM: 0, threeA: 0, ftM: 0, ftA: 0 } });
+    return seasonPerGame({ games: totals.games, totals: totals.stats });
+  }
+
+  function compactSeasonValue(value) {
+    return Number.isFinite(Number(value)) ? Number(value).toFixed(1) : '--';
+  }
+
+  function renderSeasonHistory(player) {
+    const rows = seasonRowsForPlayer(player);
+    if (!rows.length) return `<section class="player-dossier-v2__season-history"><div class="player-dossier-v2__season-heading"><span>SEASON STATS</span><small>完成 82 場後會永久保存</small></div><p class="player-dossier-v2__empty">目前尚無 ToeicQuest 賽季出賽資料。</p></section>`;
+    const career = aggregateCareerSeasonRows(rows);
+    return `<section class="player-dossier-v2__season-history">
+      <div class="player-dossier-v2__season-heading"><span>SEASON STATS</span><small>${rows.length} SEASON${rows.length > 1 ? 'S' : ''}</small></div>
+      <div class="player-dossier-v2__season-list">${rows.map(row => {
+        const perGame = seasonPerGame(row);
+        return `<article class="player-dossier-v2__season-row ${row.current ? 'is-current' : ''}">
+          <header><b>${escapeHtml(row.seasonLabel)}</b><span>${row.current ? 'CURRENT · ' : ''}${Number(row.games) || 0} GP</span></header>
+          <div>${[['PTS', perGame.ppg], ['REB', perGame.rpg], ['AST', perGame.apg], ['STL', perGame.spg], ['BLK', perGame.bpg]].map(([label, value]) => `<span><b>${compactSeasonValue(value)}</b><small>${label}</small></span>`).join('')}</div>
+          <footer>FG ${compactSeasonValue(perGame.fgPct)}% · 3P ${compactSeasonValue(perGame.threePct)}% · FT ${compactSeasonValue(perGame.ftPct)}%</footer>
+        </article>`;
+      }).join('')}</div>
+      <div class="player-dossier-v2__career-average"><span>CAREER AVG · ${rows.reduce((sum, row) => sum + (Number(row.games) || 0), 0)} GP</span><b>${compactSeasonValue(career.ppg)} PTS · ${compactSeasonValue(career.rpg)} REB · ${compactSeasonValue(career.apg)} AST</b></div>
+    </section>`;
+  }
+
   function renderInfo(player, placement) {
     const positions = positionsFor(player);
     const primary = positions[0] || '--';
@@ -228,7 +303,7 @@
       ['GAMES', legacy.games || 0], ['TOTAL PTS', legacy.pts || 0], ['SEASONS', legacy.seasons || 0],
       ['CHAMPION', legacy.rings || 0], ['MVP', legacy.mvps || 0], ['FMVP', legacy.fmvps || (player.isFmvp ? 1 : 0)]
     ];
-    return `${statGrid(items, 'player-dossier-v2__stat-grid--career')}${careerProgress(legacy)}`;
+    return `${statGrid(items, 'player-dossier-v2__stat-grid--career')}${renderSeasonHistory(player)}${careerProgress(legacy)}`;
   }
 
   function renderPlayerDossierBack(inputPlayer) {
@@ -304,3 +379,4 @@
     installPlayerDetailAdapter();
   }
 })(window);
+
