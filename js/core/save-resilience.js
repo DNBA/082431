@@ -132,7 +132,9 @@
   async function prepareTransferCode(copy) {
     if (saveRecoveryBlocked) throw new Error('請先還原存檔，再建立換機碼');
     if (typeof syncPomodoroFromClock === 'function') syncPomodoroFromClock();
-    saveGame();
+    try { saveGame(); } catch (error) {
+      console.warn('Primary save is full; transfer code will use the in-memory state.', error);
+    }
     setTransferStatus('正在壓縮存檔，請稍候…');
     const code = await encodeTransferCode(buildSaveExportPayload());
     const textarea = document.getElementById('saveTransferCode');
@@ -176,7 +178,9 @@
     try {
       if (saveRecoveryBlocked) throw new Error('請先還原存檔，再匯出恢復後的進度。');
       if (typeof syncPomodoroFromClock === 'function') syncPomodoroFromClock();
-      saveGame();
+      try { saveGame(); } catch (error) {
+        console.warn('Primary save is full; export will use the in-memory state.', error);
+      }
       const payload = JSON.stringify(buildSaveExportPayload(), null, 2);
       const blob = new Blob([payload], { type: 'application/json;charset=utf-8' });
       const filename = `ToeicQuest-save-${new Date().toISOString().slice(0, 10)}.json`;
