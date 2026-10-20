@@ -1,7 +1,7 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { parseState, createStore } = require('../js/core/save-backups.js');
+const { parseState, createStore, compressRaw, decompressRaw, COMPRESSED_PREFIX } = require('../js/core/save-backups.js');
 function storage(limit = Infinity) {
   const map = new Map();
   return {
@@ -61,20 +61,54 @@ let now = new Date('2026-10-05T12:00:00+08:00').getTime();
   assert.equal(local.getItem('unrelated-data'), 'preserve');
 }
 {
+  const large = {
+    ...base,
+    inventory: Array.from({ length: 180 }, (_, index) => ({ cardId: `card-${index}`, name: `球員 ${index}`, rarity: 'SSR', stats: { pts: 28, reb: 7, ast: 6 } })),
+    seasonJourney: {
+      schedule: Array.from({ length: 82 }, (_, game) => ({
+        game: game + 1,
+        played: true,
+        boxScore: Array.from({ length: 11 }, (_, index) => ({ name: `球員 ${index}`, pts: 20, reb: 5, ast: 4, fgM: 8, fgA: 16 }))
+      }))
+    }
+  };
+  const raw = JSON.stringify(large);
+  const compressed = compressRaw(raw);
+  assert.ok(compressed.startsWith(COMPRESSED_PREFIX), 'large saves use the compact local format');
+  assert.ok(compressed.length < raw.length * 0.7, 'the compact format materially reduces localStorage usage');
+  assert.equal(decompressRaw(compressed), raw, 'compressed Unicode saves round-trip exactly');
+  assert.deepEqual(parseState(compressed).seasonJourney.schedule[81].boxScore[10], large.seasonJourney.schedule[81].boxScore[10]);
+}
+{
+  const local = storage();
+  const queued = [];
+  global.ToeicQuestSaveVault = { queueAutoSnapshot: raw => queued.push(raw) };
+  const store = createStore(local, 'save', () => ++now);
+  store.save(base);
+  store.save({ ...base, tickets: 77 });
+  assert.equal(store.list().length, 0, 'when IndexedDB vault is available, automatic full copies do not consume localStorage');
+  assert.equal(queued.length, 2);
+  assert.equal(JSON.parse(queued.at(-1)).tickets, 77);
+  delete global.ToeicQuestSaveVault;
+}
+{
   const root = path.resolve(__dirname, '..');
   const saveTools = fs.readFileSync(path.join(root, 'js', 'core', 'save-tools.js'), 'utf8');
   const saveResilience = fs.readFileSync(path.join(root, 'js', 'core', 'save-resilience.js'), 'utf8');
   const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
   assert.match(saveTools, /navigator\.share\(shareData\)/, 'iPhone/PWA backup uses the system share sheet when file sharing is supported');
   assert.match(saveTools, /navigator\.storage\.persist\(\)/, 'the save tools can request persistent browser storage');
-  assert.match(saveResilience, /indexedDB\\.open\\(DB_NAME, 1\\)/, 'large manual restore points use IndexedDB rather than duplicating the save in localStorage');
-  assert.match(saveResilience, /new CompressionStream\\('gzip'\\)/, 'transfer codes are compressed when the browser supports it');
-  assert.match(saveResilience, /new DecompressionStream\\('gzip'\\)/, 'compressed transfer codes can be restored');
+  assert.match(saveResilience, /indexedDB\.open\(DB_NAME, 1\)/, 'large manual restore points use IndexedDB rather than duplicating the save in localStorage');
+  assert.match(saveResilience, /AUTO_SAVE_ID = 'vault_auto_current'/, 'the latest full save is mirrored into the IndexedDB vault');
+  assert.match(saveResilience, /queueAutoSnapshot/, 'normal saves queue a large automatic restore point');
+  assert.match(saveResilience, /new CompressionStream\('gzip'\)/, 'transfer codes are compressed when the browser supports it');
+  assert.match(saveResilience, /new DecompressionStream\('gzip'\)/, 'compressed transfer codes can be restored');
   assert.match(html, /分享／下載備份/);
   assert.match(html, /選擇備份檔還原/);
   assert.match(html, /產生並複製換機碼/);
   assert.match(html, /從換機碼還原/);
-  assert.match(html, /save-resilience\\.js/);
+  assert.match(html, /save-resilience\.js/);
   assert.match(html, /沒有安全的帳號伺服器/);
 }
 console.log('Save backup rotation, throttling, corrupt-save recovery, validation, and quota tests passed.');
+
