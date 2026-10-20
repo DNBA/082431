@@ -27344,6 +27344,22 @@ window.generateGameBoxScoreData = generateGameBoxScoreData;
    🏀 82 場例行賽即時模擬主引擎 (完全防卡死 + 11 人全數據版)
 ===================================================== */
 function start82GamesSimulation() {
+  // The original all-at-once 82-game simulator is kept below only for save
+  // compatibility. Never fall back to it when the Season Journey bundle is
+  // late, stale, or failed to load: that would replace the current journey
+  // with the retired screen and leave mobile players without an exit path.
+  if (typeof window.openSeasonJourneyGame === 'function') {
+    window.openSeasonJourneyGame();
+    return;
+  }
+  playSound('buzz');
+  showGameAlert({
+    title: '新版賽季仍在載入',
+    message: '請重新整理頁面後再按 PLAY GAME。系統沒有啟動舊版 82 場模擬，也不會扣除體力球。',
+    type: 'info'
+  });
+  return;
+
   if (isSimulating) return;
   const today = getTodayString();
   if (!state.isAdmin && state.season.lastSimDate === today) {

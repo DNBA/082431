@@ -1691,7 +1691,15 @@
   function openJourneyGame() {
     ensureJourneyState();
     if (activeGame && !activeGame.finalized) {
-      showGameAlert({ title: '比賽已經開始', message: '請先完成或返回目前這一場，系統不會重複扣除體力球。', type: 'info' });
+      // Re-open the existing game instead of leaving the player on a screen
+      // with no way back into (or out of) the active match.
+      injectGameModal();
+      const existingModal = document.getElementById('sjGameModal');
+      if (existingModal) {
+        existingModal.classList.remove('hidden');
+        renderActiveGame();
+      }
+      showToast?.('已返回目前比賽，沒有重複扣除體力球。', 'info');
       return;
     }
     const starters = ['PG','SG','SF','PF','C'].map(pos => state.startingLineup[pos]).filter(Boolean);
@@ -3523,13 +3531,12 @@
 
   function closeJourneyGame() {
     const modal = document.getElementById('sjGameModal');
-    if (!modal) return;
     if (activeGame && !activeGame.finalized) {
       if (!window.confirm('比賽尚未結束，離開後本場體力不會退還。確定離開嗎？')) return;
     }
     if (window.LiveGameRenderer?.hasSession()) window.LiveGameRenderer.close();
     if (state.seasonJourney?.liveGameDraft) state.seasonJourney.liveGameDraft = null;
-    modal.classList.add('hidden');
+    if (modal) modal.classList.add('hidden');
     stopJourneyArenaMusic();
     if (activeGame && !activeGame.finalized) {
       clearVisualEventTimer();
@@ -3541,7 +3548,9 @@
       visualGameState = null;
       saveGame();
     }
+    currentSeasonView = 'journey';
     renderJourneySeasonTab();
+    showSeasonView('journey');
   }
 
   function showJourneyBoxScore() {
@@ -3704,6 +3713,10 @@
     }
   }
 
+  // Export the authoritative entry before hooks run. app.js deliberately
+  // refuses to launch its retired simulator unless this handler is ready.
+  window.openSeasonJourneyGame = openJourneyGame;
+
   window.editJourneyTeamName = editJourneyTeamName;
   window.getJourneyStandings = getJourneyStandings;
   window.selectJourneyConference = selectJourneyConference;
@@ -3757,4 +3770,3 @@
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initSeasonJourney);
   else initSeasonJourney();
 })();
-
