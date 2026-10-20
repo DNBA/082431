@@ -32876,7 +32876,9 @@ function renderThreePointLiveStatus() {
 
 function getThreePointParticipants() {
   const weekend = state.seasonJourney?.allStarWeekend;
-  const invited = Array.isArray(weekend?.threePointParticipants) ? weekend.threePointParticipants : [];
+  const invited = Array.isArray(weekend?.threePointParticipants)
+    ? weekend.threePointParticipants.filter(player => player?.accepted !== false)
+    : [];
   const playerName = threePtState.shooter?.name;
   const playerEntry = {
     key: `player:${threePtState.shooter?.cardId || playerName || 'user'}`,
@@ -32887,8 +32889,9 @@ function getThreePointParticipants() {
     isPlayer: true,
     isUserEntry: true
   };
-  const merged = invited.map(player => player.name === playerName ? { ...player, ...playerEntry, key: player.key || playerEntry.key } : { ...player, isPlayer: false, isUserEntry: false });
-  if (!merged.some(player => player.name === playerName)) merged.push(playerEntry);
+  const merged = invited.map(player => isMatchingThreePointInvite(threePtState.shooter, player)
+    ? { ...player, ...playerEntry, key: player.key || playerEntry.key }
+    : { ...player, isPlayer: false, isUserEntry: false });
   const fallbacks = [
     ['Stephen Curry', 42.1, 11.2, 96], ['Damian Lillard', 38.4, 9.4, 91], ['Klay Thompson', 40.2, 8.1, 88],
     ['Buddy Hield', 39.7, 8.7, 86], ['Devin Booker', 38.1, 6.3, 90], ['Trae Young', 37.2, 9.0, 90],
@@ -32969,12 +32972,29 @@ function getPlayedThreePointShooterNames() {
   return new Set(state.season.threePtContestPlayedShooters.map(String));
 }
 
+function threePointCardIdentity(player) {
+  const direct = player?.cardId ?? player?.cardID ?? player?.id;
+  if (direct !== undefined && direct !== null && String(direct).trim()) return String(direct).trim();
+  const key = String(player?.key || '');
+  return key.startsWith('player:') ? key.slice(7) : '';
+}
+
+function isMatchingThreePointInvite(card, invite) {
+  if (!card || !invite) return false;
+  const cardId = threePointCardIdentity(card);
+  const inviteId = threePointCardIdentity(invite);
+  if (cardId && inviteId) return cardId === inviteId;
+  return String(card.name || '').trim().toLocaleLowerCase('en-US')
+    === String(invite.name || '').trim().toLocaleLowerCase('en-US');
+}
+
 function getOwnedThreePointInvitees() {
   const weekend = state.seasonJourney?.allStarWeekend;
-  const invitedNames = weekend?.announced && window.SeasonAllStar
-    ? new Set(window.SeasonAllStar.playerThreePointInvites(weekend).map(player => player.name))
-    : null;
-  return getAllMyPlayers().filter(player => !invitedNames || invitedNames.has(player.name));
+  if (!weekend?.announced || !window.SeasonAllStar) return [];
+  const officialInvites = window.SeasonAllStar.playerThreePointInvites(weekend)
+    .filter(player => player?.accepted !== false);
+  if (!officialInvites.length) return [];
+  return getAllMyPlayers().filter(card => officialInvites.some(invite => isMatchingThreePointInvite(card, invite)));
 }
 
 function getRemainingThreePointShooters() {
@@ -33203,11 +33223,13 @@ function openThreePointContest() {
       threePtState.shooter = myPlayers[0];
     }
   } else {
-    const opt = document.createElement('option');
-    opt.value = "隊內神射手";
-    opt.innerText = "隊內神射手 (3P%: 42.6%)";
-    if (selectElem) selectElem.appendChild(opt);
-    threePtState.shooter = { name: "隊內神射手", threePtPct: 42.6 };
+    threePtState.shooter = allInvitedPlayers[0] || null;
+    if (threePtState.shooter && selectElem) {
+      const opt = document.createElement('option');
+      opt.value = threePtState.shooter.name;
+      opt.innerText = `${threePtState.shooter.name}（本季已出戰）`;
+      selectElem.appendChild(opt);
+    }
   }
 
   // 🔒 選好球員（或已鎖定、已挑戰）後就不能換了
@@ -33349,6 +33371,12 @@ function renderRacksInitial() {
 }
 // 3. 點擊「開始挑戰」按鈕 (選定球員後立即鎖定不可更換，每賽季限玩一次)
 function startThreePointRound() {
+  const officiallyInvited = getOwnedThreePointInvitees()
+    .some(player => isMatchingThreePointInvite(player, threePtState.shooter));
+  if (!officiallyInvited) {
+    showToast('只有正式受邀的參賽球員可以出戰三分大賽。', 'warning');
+    return;
+  }
   if (!state.isAdmin && getPlayedThreePointShooterNames().has(threePtState.shooter?.name)) {
     showToast('這位球員本季已經出賽，請選擇另一位尚未出賽的受邀球員。', 'warning');
     return;
@@ -33369,6 +33397,12 @@ function startThreePointFinal() {
 }
 
 function startThreePointManualRound(round) {
+  const officiallyInvited = getOwnedThreePointInvitees()
+    .some(player => isMatchingThreePointInvite(player, threePtState.shooter));
+  if (!officiallyInvited) {
+    showToast('只有正式受邀的參賽球員可以出戰三分大賽。', 'warning');
+    return;
+  }
   // 選好球員開打後立即鎖定，本賽季不能再更換球員。
   if (!state.season) state.season = {};
   if (state.isAdmin) state.season.adminThreePtContestShooter = threePtState.shooter.name;
