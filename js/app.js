@@ -32827,7 +32827,7 @@ function isCurrentThreePointShooter(player) {
   const shooterCardId = String(threePtState.shooter.cardId || '');
   const playerKey = String(player.key || '');
   const playerCardId = String(player.cardId || (playerKey.startsWith('player:') ? playerKey.slice(7) : ''));
-  if (shooterCardId && playerCardId) return shooterCardId === playerCardId;
+  if (shooterCardId && playerCardId && shooterCardId === playerCardId) return true;
   return !!(player.isPlayer || player.isUserEntry) && player.name === threePtState.shooter.name;
 }
 
