@@ -1178,7 +1178,10 @@
     });
     document.querySelectorAll('[data-sj-view-panel]').forEach(panel => panel.classList.toggle('hidden', panel.dataset.sjViewPanel !== currentSeasonView));
     if (currentSeasonView === 'league') renderLeaguePanel();
-    if (currentSeasonView === 'awards') renderAwardsPanel();
+    if (currentSeasonView === 'awards') {
+      renderAwardsPanel();
+      renderSeasonCollections();
+    }
   }
 
   function selectLeagueLeaderCategory(category) {
@@ -1383,7 +1386,7 @@
             <div class="sj-next-game-card__head"><b>NEXT GAME</b><span id="sjSpecialLabel"></span></div>
             <div class="sj-next-matchup"><div><strong id="sjHomeName"></strong><small id="sjHomeRecord"></small></div><i>VS</i><div><strong id="sjAwayName"></strong><small id="sjAwayRecord"></small></div></div>
             <div class="sj-next-meta"><span id="sjOpponentOvr"></span><span id="sjRecent"></span><span id="sjMatchup"></span></div>
-            <button id="simSeasonBtn" onclick="start82GamesSimulation()" class="sj-play-button">PLAY GAME</button>
+            <button id="simSeasonBtn" onclick="openSeasonJourneyGame()" class="sj-play-button">PLAY GAME</button>
             <button id="playoffBtn" onclick="openJourneyPostseason()" class="sj-postseason-button hidden">進入 Playoffs</button>
             <details id="sjAutoControls" class="sj-auto-details"><summary>掛機模式 · <span id="sjAutoStatus">尚未啟動</span></summary><div class="sj-auto-details__controls"><input id="sjAutoCount" type="number" min="1" value="1" placeholder="自動比賽場數"><button id="sjAutoBtn" onclick="toggleJourneyAutoMode()">開始掛機</button></div></details>
           </section>
@@ -1487,9 +1490,6 @@
     const admin = document.getElementById('sjAdminPanel');
     if (admin) admin.classList.toggle('hidden', !state.isAdmin);
     renderLeaguePulse();
-    renderLeaguePanel();
-    renderAwardsPanel();
-    renderSeasonCollections();
     renderDynastyAndProject();
     renderEnergy();
     showSeasonView(currentSeasonView);
@@ -3612,7 +3612,10 @@
 
   function hookExistingFunctions() {
     const oldRenderAll = renderAll;
-    renderAll = function () { oldRenderAll(); ensureJourneyState(); renderJourneySeasonTab(); };
+    renderAll = function () {
+      ensureJourneyState();
+      return oldRenderAll.apply(this, arguments);
+    };
     renderSeasonTab = renderJourneySeasonTab;
     start82GamesSimulation = openJourneyGame;
 
@@ -3699,9 +3702,14 @@
     renderJourneyShell();
     renderJourneySeasonTab();
     if (energyTimer) clearInterval(energyTimer);
-    energyTimer = setInterval(renderEnergy, 1000);
+    energyTimer = setInterval(() => {
+      const seasonTab = document.getElementById('tab-season');
+      if (!document.hidden && seasonTab && !seasonTab.classList.contains('hidden')) renderEnergy();
+    }, 1000);
     if (leaguePulseTimer) clearInterval(leaguePulseTimer);
     leaguePulseTimer = setInterval(() => {
+      const seasonTab = document.getElementById('tab-season');
+      if (document.hidden || !seasonTab || seasonTab.classList.contains('hidden') || currentSeasonView !== 'journey') return;
       leaguePulseIndex += 1;
       renderLeaguePulse();
     }, 8000);
