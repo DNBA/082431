@@ -37,7 +37,7 @@
     <link rel="stylesheet" href="./css/study-planner.css?v=20261003-planner-3">
     <link rel="stylesheet" href="./css/vocab-endless.css?v=20261007-source-1">
     <link rel="stylesheet" href="./css/vocab-editor-v2.css?v=20261019-mobile-1">
-    <link rel="stylesheet" href="./css/study-notes.css?v=20261020-layer-1">
+    <link rel="stylesheet" href="./css/study-notes.css?v=20261021-v446">
     <link rel="stylesheet" href="./css/learning-tools.css?v=20261005-learning-1">
     <link rel="stylesheet" href="./css/season-standings.css?v=20261005-standings-1">
     <link rel="stylesheet" href="./css/season-league.css?v=20261007-league-1">
@@ -435,49 +435,15 @@
       </div>
     </section>
 
-    <!-- TAB 3: 🏆 82場例行賽 -->
+    <!-- TAB 3: 🏆 Season Journey（舊版一鍵 82 場已移除） -->
     <section id="tab-season" class="tab-content space-y-6 hidden">
-      <div class="bg-gradient-to-b from-slate-900 to-slate-950 p-6 sm:p-8 rounded-3xl border border-slate-800 shadow-xl text-center">
-        <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-800 border border-slate-700 text-xs text-amber-400 mb-3">
-          <i data-lucide="calendar" class="w-3.5 h-3.5"></i>
-          <span id="seasonLimitTip">每日限挑戰 1 次 ｜ 82-GAME SIMULATION</span>
-        </div>
-        <h2 class="text-xl font-black text-white"> 例行賽 82 場即時模擬</h2>
-        <p class="text-slate-400 text-xs max-w-md mx-auto mt-1">戰績達 42 勝以上自動解鎖 16 強季後賽對戰圖表！</p>
-
-        <div class="max-w-xl mx-auto my-5 bg-slate-950/80 border border-slate-800 rounded-2xl p-5 text-center shadow-inner">
-          <div class="flex justify-between items-center text-xs text-slate-400 font-mono mb-1">
-            <span>2025-26 REGULAR SEASON</span>
-            <span id="seasonStreakBadge" class="text-amber-400 font-bold">最長連勝: 0 場</span>
-          </div>
-          <div id="seasonRecordText" class="text-4xl sm:text-5xl font-black text-amber-400 font-mono my-2 tracking-tight">-- 勝 -- 敗</div>
-          <div class="flex justify-center items-center gap-2 text-xs text-slate-400">
-            <span id="seasonRankText">預估分區排名: --</span>
-            <span>•</span>
-          </div>
-        </div>
-
-        <div id="boxScoreSection" class="max-w-xl mx-auto mb-6 bg-slate-900/80 border border-slate-800 rounded-2xl p-4 text-left hidden">
-          <h4 class="text-xs font-black uppercase text-amber-400 font-mono mb-2 flex items-center gap-1.5">
-            <i data-lucide="award" class="w-4 h-4"></i> 本賽季獎項一覽
-          </h4>
-          <div id="boxScoreLeadersList" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5 text-xs font-mono"></div>
-        </div>
-
-        <div class="flex justify-center gap-3">
-          <button id="simSeasonBtn" onclick="start82GamesSimulation()" class="bg-emerald-600 hover:bg-emerald-500 active:scale-95 transition text-white font-black px-6 py-3 rounded-2xl text-sm shadow-lg">
-            🏀 開始模擬 82 場比賽
-          </button>
-          <button id="playoffBtn" onclick="openPlayoffBracketModal()" class="hidden bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 text-slate-950 font-black px-6 py-3 rounded-2xl text-sm shadow-lg">
-            🏆 進入 16 強季後賽對戰圖表
-          </button>
-        </div>
-
-<div class="mt-6 pt-5 border-t border-slate-800 text-left">
-          <div class="flex justify-between items-center mb-2">
-            <span class="text-xs font-bold text-slate-300 font-mono">82-GAME TRACKER</span>
-          </div>
-          <div id="gameGrid" class="grid grid-cols-8 sm:grid-cols-12 md:grid-cols-21 gap-1 sm:gap-1.5 p-2.5 bg-slate-950/90 rounded-2xl border border-slate-800/80"></div>
+      <div class="min-h-[46vh] flex items-center justify-center px-4 py-10">
+        <div class="w-full max-w-md rounded-3xl border border-slate-800 bg-slate-950/90 p-6 text-center shadow-xl">
+          <span id="seasonLimitTip" class="text-[10px] font-black tracking-[.16em] text-amber-400">SEASON JOURNEY</span>
+          <h2 class="mt-3 text-xl font-black text-white">正在準備新版 82 場賽季</h2>
+          <p class="mt-2 text-xs leading-6 text-slate-400">新版程式載入完成後會自動顯示；不會再啟動舊版一次跑完整季的模擬器。</p>
+          <button id="simSeasonBtn" type="button" onclick="if (typeof openSeasonJourneyGame === 'function') openSeasonJourneyGame(); else location.reload();" class="mt-5 w-full rounded-2xl bg-amber-500 px-5 py-3 text-sm font-black text-slate-950 active:scale-95">OPEN SEASON JOURNEY</button>
+          <button id="playoffBtn" type="button" class="hidden"></button>
         </div>
       </div>
     </section>
@@ -1488,7 +1454,7 @@
   <script src="./js/core/season-checkpoint.js?v=20261020-v442"></script>
   <script src="./js/box-score-integrity.js?v=20261007-integrity-1"></script>
   <script src="./js/vocab-editor-v2.js?v=20261019-mobile-1"></script>
-  <script src="./js/app.js?v=20261020-v445"></script>
+  <script src="./js/app.js?v=20261021-v446"></script>
 <!-- 🏀 季後賽逐場動態播報彈窗 -->
 <div id="playoffSeriesModal" onclick="if(event.target === this && !document.getElementById('posNextRoundBtn').disabled) closeSeriesAndShowBoxScore()" class="fixed inset-0 bg-slate-950/90 backdrop-blur-md z-50 hidden flex items-end sm:items-center justify-center p-3 sm:p-4 ios-safe-modal">
   <div class="bg-slate-900 border border-amber-500/50 rounded-3xl w-full max-w-lg p-6 shadow-2xl space-y-4 relative animate-modal-in">
@@ -2149,9 +2115,9 @@
 <script src="./js/live-game/live-game-engine.js?v=20261015-v402-shot-arc"></script>
 <script src="./js/live-game/live-game-input.js?v=20261015-v401-motion-pass"></script>
 <script src="./js/live-game/live-game-renderer.js?v=20261015-v402-shot-arc"></script>
-<script src="./js/season-journey.js?v=20261020-v445"></script>
+<script src="./js/season-journey.js?v=20261021-v446"></script>
 <script src="./js/ui-v2/ui-v2-adapter.js?v=20261005-standings-1"></script>
-<script src="./js/ui-v2/home-v2.js?v=20261019-notes-1"></script>
+<script src="./js/ui-v2/home-v2.js?v=20261021-v446"></script>
 <script src="./js/study-notes.js?v=20261019-notes-1"></script>
 <script src="./js/study-planner.js?v=20261005-learning-1"></script>
 <script src="./js/core/save-tools.js?v=20261020-v444"></script>
@@ -2163,7 +2129,7 @@
 <script src="./js/ui-v2/card-v2.js?v=20261003-mobile-hydrate-2"></script>
 <script src="./js/ui-v2/player-dossier-v2.js?v=20261020-v444"></script>
 <script src="./js/promotion-center.js?v=20261020-v444"></script>
-<script src="./js/ui-v2/gacha-v2.js?v=20261003-mobile-flip-1"></script>
+<script src="./js/ui-v2/gacha-v2.js?v=20261021-v446"></script>
 </body>
 </html>
 
