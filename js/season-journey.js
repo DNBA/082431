@@ -148,6 +148,8 @@
   let leagueLeaderCategory = 'PTS';
   let leaguePulseIndex = 0;
   let leaguePulseTimer = null;
+  let leagueDataReady = false;
+  let leagueWarmupScheduled = false;
 
   function now() { return Date.now(); }
   function clamp(n, min, max) { return Math.max(min, Math.min(max, n)); }
@@ -933,8 +935,54 @@
     window.addEventListener('pagehide', flushJourneyProgressOnBackground);
   }
 
+  function normalizeJourneySchedule(journey) {
+    const baseSchedule = buildSchedule();
+    const savedSchedule = Array.isArray(journey.schedule) ? journey.schedule : [];
+    const savedByGame = new Map();
+    savedSchedule.forEach((savedGame, index) => {
+      if (!savedGame || typeof savedGame !== 'object') return;
+      const gameNo = clamp(Math.round(Number(savedGame.game) || index + 1), 1, SEASON_LENGTH);
+      if (!savedByGame.has(gameNo)) savedByGame.set(gameNo, savedGame);
+    });
+    journey.schedule = baseSchedule.map((fallback, index) => {
+      const gameNo = index + 1;
+      const savedGame = savedByGame.get(gameNo);
+      const game = savedGame ? { ...fallback, ...savedGame, game: gameNo } : fallback;
+      if (game.game === 41 && game.special?.key === 'allstar') game.special = null;
+      if (game.game === 47) game.special = { key: 'allstar-selection', icon: '★', label: 'All-Star Selection' };
+      if (game.game === 50) game.special = { key: 'allstar', icon: '⭐', label: 'All-Star Weekend' };
+      if (!Array.isArray(game.moments)) game.moments = [];
+      if (!Array.isArray(game.boxScore)) game.boxScore = [];
+      if (game.played && !game.analysis) game.analysis = null;
+      return game;
+    });
+  }
+
+  function scheduleLeagueWarmup() {
+    if (leagueDataReady || leagueWarmupScheduled || !window.SeasonLeague) return;
+    leagueWarmupScheduled = true;
+    const warmup = () => {
+      leagueWarmupScheduled = false;
+      try {
+        leagueDataReady = !!syncLeagueState();
+        if (leagueDataReady) {
+          renderLeaguePulse();
+          if (currentSeasonView === 'league') renderLeaguePanel();
+          if (currentSeasonView === 'awards') renderAwardsPanel();
+        }
+      } catch (error) {
+        console.error('[Season Journey] League background sync failed', error);
+      }
+    };
+    if (typeof window.requestIdleCallback === 'function') {
+      window.requestIdleCallback(warmup, { timeout: 1800 });
+    } else {
+      window.setTimeout(warmup, 160);
+    }
+  }
+
   function ensureJourneyState() {
-    if (!state.seasonJourney || typeof state.seasonJourney !== 'object') {
+    if (!state.seasonJourney || typeof state.seasonJourney !== 'object' || Array.isArray(state.seasonJourney)) {
       state.seasonJourney = {
         version: 3, seasonNo: 1, teamName: PLAYER_TEAM_FALLBACK,
         gameIndex: 0, wins: 0, losses: 0, streak: 0, bestStreak: 0,
@@ -944,24 +992,35 @@
     }
     const journey = state.seasonJourney;
     journey.version = 3;
-    if (!Array.isArray(journey.schedule) || journey.schedule.length !== SEASON_LENGTH) journey.schedule = buildSchedule();
     if (!Array.isArray(journey.recent)) journey.recent = [];
     if (!Array.isArray(journey.history)) journey.history = [];
     if (!Array.isArray(journey.awards)) journey.awards = [];
     journey.teamName = String(journey.teamName || PLAYER_TEAM_FALLBACK).slice(0, 24);
-    journey.gameIndex = clamp(Number(journey.gameIndex) || 0, 0, SEASON_LENGTH);
-    journey.schedule.forEach(game => {
-      if (game.game === 41 && game.special?.key === 'allstar') game.special = null;
-      if (game.game === 47) game.special = { key: 'allstar-selection', icon: '★', label: 'All-Star Selection' };
-      if (game.game === 50) game.special = { key: 'allstar', icon: '⭐', label: 'All-Star Weekend' };
-      if (!Array.isArray(game.moments)) game.moments = [];
-      if (game.played && !game.analysis) game.analysis = null;
-    });
-    const recovery = journeyCheckpointStore?.apply(journey);
-    if (recovery?.applied) checkpointRecoveredThisLoad = true;
-    if (seasonSimulation()) journey.recordBook = seasonSimulation().ensureRecordBook(journey.recordBook);
-    window.SeasonStandings?.ensure(journey, typeof NBA_PLAYERS !== 'undefined' ? NBA_PLAYERS : []);
-    syncLeagueState();
+    normalizeJourneySchedule(journey);
+    const playedCount = journey.schedule.filter(game => game?.played).length;
+    journey.gameIndex = clamp(Math.max(Number(journey.gameIndex) || 0, playedCount), 0, SEASON_LENGTH);
+    journey.wins = Math.max(0, Number(journey.wins) || journey.schedule.filter(game => game?.played && game?.win).length);
+    journey.losses = Math.max(0, Number(journey.losses) || journey.schedule.filter(game => game?.played && !game?.win).length);
+
+    try {
+      const recovery = journeyCheckpointStore?.apply(journey);
+      if (recovery?.applied) checkpointRecoveredThisLoad = true;
+    } catch (error) {
+      console.warn('[Season Journey] Checkpoint migration skipped', error);
+    }
+    try {
+      if (seasonSimulation()) journey.recordBook = seasonSimulation().ensureRecordBook(journey.recordBook);
+    } catch (error) {
+      console.warn('[Season Journey] Record book migration skipped', error);
+    }
+    try {
+      window.SeasonStandings?.ensure(journey, typeof NBA_PLAYERS !== 'undefined' ? NBA_PLAYERS : []);
+    } catch (error) {
+      console.warn('[Season Journey] Rebuilding legacy standings', error);
+      delete journey.leagueStandings;
+      try { window.SeasonStandings?.ensure(journey, typeof NBA_PLAYERS !== 'undefined' ? NBA_PLAYERS : []); } catch (_) {}
+    }
+    leagueDataReady = !!(journey.leagueState && Number(journey.leagueState.lastSyncedGame) >= journey.gameIndex);
 
     if (!state.seasonEnergy || typeof state.seasonEnergy !== 'object') {
       state.seasonEnergy = { current: ENERGY_MAX, lastRegenAt: now() };
@@ -969,12 +1028,32 @@
     state.seasonEnergy.current = Math.max(0, Number(state.seasonEnergy.current));
     state.seasonEnergy.lastRegenAt = Number(state.seasonEnergy.lastRegenAt) || now();
     applyEnergyRegen();
-    (state.inventory || []).forEach(card => {
-      ensureCardJourney(card);
-      window.PlayerProgression?.ensureCard(card);
+
+    if (!Array.isArray(state.inventory)) {
+      state.inventory = state.inventory && typeof state.inventory === 'object'
+        ? Object.values(state.inventory).filter(card => card && typeof card === 'object')
+        : [];
+    }
+    state.inventory.forEach(card => {
+      try {
+        ensureCardJourney(card);
+        window.PlayerProgression?.ensureCard(card);
+      } catch (error) {
+        console.warn('[Season Journey] Card migration skipped', card?.cardId, error);
+      }
     });
-    if (journey.gameIndex >= SEASON_LENGTH && !journey.completed) completeRegularSeason();
-    if (repairRecordedThreePointChampionBack()) saveGame();
+    if (!journey.seasonStartedAt) journey.seasonStartedAt = new Date().toISOString();
+    if (journey.gameIndex >= SEASON_LENGTH && !journey.completed && !journey.completionScheduled) {
+      journey.completionScheduled = true;
+      window.setTimeout(() => {
+        try { completeRegularSeason(); } finally { delete journey.completionScheduled; }
+      }, 0);
+    }
+    try {
+      if (repairRecordedThreePointChampionBack()) saveGame();
+    } catch (error) {
+      console.warn('[Season Journey] 3PT back repair skipped', error);
+    }
   }
 
   function applyEnergyRegen() {
@@ -1226,6 +1305,11 @@
     const button = document.getElementById('sjLeaguePulse');
     const body = document.getElementById('sjLeaguePulseBody');
     if (!button || !body || !window.SeasonLeague) return;
+    if (!leagueDataReady) {
+      button.dataset.target = 'league';
+      body.innerHTML = '<div class="sj-league-pulse__copy"><small>LEAGUE PULSE</small><strong>聯盟資料整理中</strong><span>不影響 PLAY GAME，完成後自動更新</span></div><div class="sj-league-pulse__rank">…</div>';
+      return;
+    }
     const view = window.SeasonLeague.view(state.seasonJourney);
     if (!view) return;
     const mvpRace = view.awardRaces.mvp || [];
@@ -3696,11 +3780,23 @@
   }
 
   function initSeasonJourney() {
-    ensureJourneyState();
-    bindJourneyLifecycleSave();
-    injectGameModal();
+    // 先接管畫面，再處理舊存檔與聯盟資料；舊帳號不再卡在靜態載入頁。
     renderJourneyShell();
-    renderJourneySeasonTab();
+    try {
+      ensureJourneyState();
+      bindJourneyLifecycleSave();
+      injectGameModal();
+      renderJourneySeasonTab();
+      scheduleLeagueWarmup();
+    } catch (error) {
+      console.error('[Season Journey] Boot recovery', error);
+      renderJourneyShell();
+      const label = document.getElementById('sjSeasonLabel');
+      const name = document.getElementById('sjTeamName');
+      if (label) label.textContent = 'SEASON SAVE RECOVERY';
+      if (name) name.textContent = state?.seasonJourney?.teamName || PLAYER_TEAM_FALLBACK;
+      if (typeof showToast === 'function') showToast('已略過一筆舊版賽季資料，請再按一次 PLAY GAME。', 'info');
+    }
     if (energyTimer) clearInterval(energyTimer);
     energyTimer = setInterval(() => {
       const seasonTab = document.getElementById('tab-season');
@@ -3724,6 +3820,7 @@
   // Export the authoritative entry before hooks run. app.js deliberately
   // refuses to launch its retired simulator unless this handler is ready.
   window.openSeasonJourneyGame = openJourneyGame;
+  window.reinitializeSeasonJourney = initSeasonJourney;
 
   window.editJourneyTeamName = editJourneyTeamName;
   window.getJourneyStandings = getJourneyStandings;
