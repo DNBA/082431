@@ -35,9 +35,6 @@
   }
 
   function revealCardMarkup(card, index, id, compact) {
-    const cardMarkup = typeof global.renderNormalCardV2 === 'function'
-      ? global.renderNormalCardV2(card, { size: 'gacha', interactive: false })
-      : `<div class="gacha-v2__fallback-player"><strong>${escapeHtml(displayName(card))}</strong><span>${Number(card.ovr || 0)} OVR</span></div>`;
     return `<div class="gacha-v2-reveal ${compact ? 'gacha-v2-reveal--compact' : 'gacha-v2-reveal--single'} ${rarityClass(card)}" data-rarity="${escapeHtml(card.rarity)}" onclick="flipCardDirect(${index}, '${id}')">
       <div id="${id}" class="gacha-v2-reveal__inner gacha-v2-card-inner">
         <section class="gacha-v2-reveal__face gacha-v2-reveal__back" aria-label="尚未翻開的球員卡">
@@ -46,11 +43,22 @@
           <strong>TAP</strong>
         </section>
         <section class="gacha-v2-reveal__face gacha-v2-reveal__front" aria-label="抽卡結果 ${escapeHtml(displayName(card))}">
-          ${cardMarkup}
+          <div class="gacha-v2-card-mount" data-gacha-card-mount></div>
           <button type="button" class="gacha-v2-reveal__info" onclick="showPlayerDetails(event, '${escapeHtml(card.cardId)}')" aria-label="查看 ${escapeHtml(displayName(card))} 球員資訊">i</button>
         </section>
       </div>
     </div>`;
+  }
+
+  function hydrateGachaCard(index, id) {
+    const mount = document.getElementById(id)?.querySelector('[data-gacha-card-mount]');
+    if (!mount || mount.dataset.mounted === 'true') return;
+    const card = activeSessionCards?.[index]?.cardData;
+    if (!card) return;
+    mount.innerHTML = typeof global.renderNormalCardV2 === 'function'
+      ? global.renderNormalCardV2(card, { size: 'gacha', interactive: false })
+      : `<div class="gacha-v2__fallback-player"><strong>${escapeHtml(displayName(card))}</strong><span>${Number(card.ovr || 0)} OVR</span></div>`;
+    mount.dataset.mounted = 'true';
   }
 
   function installPresentationAdapter() {
@@ -85,6 +93,7 @@
       const wrappedFlip = function (index, id) {
         const reveal = document.getElementById(id)?.closest('.gacha-v2-reveal');
         reveal?.classList.add('is-revealing');
+        hydrateGachaCard(index, id);
         const result = previousFlip.call(this, index, id);
         global.setTimeout(() => reveal?.classList.add('is-revealed'), 80);
         return result;
