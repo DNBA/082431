@@ -279,7 +279,7 @@ html[data-system-theme="dark"] {
 
 .train-local-dock {
   position: fixed;
-  z-index: 60;
+  z-index: 30;
   left: 50%;
   bottom: calc(4.75rem + env(safe-area-inset-bottom));
   width: min(calc(100vw - 2rem), 22rem);
@@ -293,6 +293,14 @@ html[data-system-theme="dark"] {
   box-shadow: var(--notes-shadow);
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
+}
+
+/* TRAIN 的本地切換列屬於頁面導航，不可蓋住測驗或編輯 Bottom Sheet。 */
+body:has(#vocabQuizModal:not(.hidden)) .train-local-dock,
+body:has(#endlessSourcePicker:not(.hidden)) .train-local-dock,
+body:has(.vocab-v2-sheet:not([hidden])) .train-local-dock,
+body:has(.study-note-sheet:not([hidden])) .train-local-dock {
+  display: none;
 }
 
 .train-local-dock button {
