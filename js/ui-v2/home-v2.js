@@ -152,7 +152,11 @@
       openJourneyPostseason();
       return;
     }
-    if (typeof start82GamesSimulation === 'function') start82GamesSimulation();
+    if (typeof global.openSeasonJourneyGame === 'function') {
+      global.openSeasonJourneyGame();
+    } else if (typeof start82GamesSimulation === 'function') {
+      start82GamesSimulation();
+    }
   }
 
   function makeSectionSwitch(id, items) {
