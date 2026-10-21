@@ -440,9 +440,9 @@
       <div class="min-h-[46vh] flex items-center justify-center px-4 py-10">
         <div class="w-full max-w-md rounded-3xl border border-slate-800 bg-slate-950/90 p-6 text-center shadow-xl">
           <span id="seasonLimitTip" class="text-[10px] font-black tracking-[.16em] text-amber-400">SEASON JOURNEY</span>
-          <h2 class="mt-3 text-xl font-black text-white">正在準備新版 82 場賽季</h2>
-          <p class="mt-2 text-xs leading-6 text-slate-400">新版程式載入完成後會自動顯示；不會再啟動舊版一次跑完整季的模擬器。</p>
-          <button id="simSeasonBtn" type="button" onclick="if (typeof openSeasonJourneyGame === 'function') openSeasonJourneyGame(); else location.reload();" class="mt-5 w-full rounded-2xl bg-amber-500 px-5 py-3 text-sm font-black text-slate-950 active:scale-95">OPEN SEASON JOURNEY</button>
+          <h2 class="mt-3 text-xl font-black text-white">SEASON JOURNEY</h2>
+          <p class="mt-2 text-xs leading-6 text-slate-400">正在讀取你的 82 場進度；舊帳號會自動修復後接續原場次。</p>
+          <button id="simSeasonBtn" type="button" onclick="if (typeof reinitializeSeasonJourney === 'function') reinitializeSeasonJourney(); else if (typeof openSeasonJourneyGame === 'function') openSeasonJourneyGame(); else location.reload();" class="mt-5 w-full rounded-2xl bg-amber-500 px-5 py-3 text-sm font-black text-slate-950 active:scale-95">RELOAD SEASON JOURNEY</button>
           <button id="playoffBtn" type="button" class="hidden"></button>
         </div>
       </div>
@@ -2115,7 +2115,7 @@
 <script src="./js/live-game/live-game-engine.js?v=20261015-v402-shot-arc"></script>
 <script src="./js/live-game/live-game-input.js?v=20261015-v401-motion-pass"></script>
 <script src="./js/live-game/live-game-renderer.js?v=20261015-v402-shot-arc"></script>
-<script src="./js/season-journey.js?v=20261021-v446"></script>
+<script src="./js/season-journey.js?v=20261021-v447"></script>
 <script src="./js/ui-v2/ui-v2-adapter.js?v=20261005-standings-1"></script>
 <script src="./js/ui-v2/home-v2.js?v=20261021-v446"></script>
 <script src="./js/study-notes.js?v=20261019-notes-1"></script>
