@@ -724,9 +724,13 @@
   function advanceQuarter(state) {
     if (state.quarter >= state.maxQuarters) {
       if (state.homeScore === state.awayScore) {
-        state.quarter = 4;
+        state.quarter += 1;
+        state.quarterScores.home[state.quarter - 1] = 0;
+        state.quarterScores.away[state.quarter - 1] = 0;
         state.gameClock = 30;
+        state.shotClock = 24;
         feedback(state, 'OVERTIME', '延長決勝 30 秒', 'warn', 1.2);
+        resetPossession(state, state.quarter % 2 === 0 ? 'away' : 'home', true);
         return;
       }
       state.finished = true;

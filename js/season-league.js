@@ -248,7 +248,10 @@
   function averages(record, monthKey = null) {
     const source = monthKey ? record.months?.[monthKey] : record;
     const games = Number(source?.games) || 0;
-    const totals = monthKey ? source : record.totals;
+    // Old/in-progress saves can contain a player record before its totals
+    // bucket has been materialized. Treat it as an empty stat line instead of
+    // aborting the whole end-of-game settlement.
+    const totals = (monthKey ? source : record.totals) || emptyTotals();
     const base = record.base || emptyTotals();
     return {
       games,

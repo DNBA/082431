@@ -12,6 +12,12 @@ const nbaPlayers = [
 ];
 const playerCard = { cardId: 'card-owner-star', name: 'Owner Star', team: 'LAL', realOvr: 96, ovr: 98, positions: ['SG'], nbaId: 977 };
 
+{
+  const legacy = leagueApi.averages({ games: 3, base: { min: 30, pts: 20, reb: 5, ast: 4, stl: 1, blk: .5, tov: 2 } });
+  assert.equal(legacy.games, 3);
+  assert.equal(legacy.fgPct, 0, 'missing legacy totals must not abort Season settlement');
+}
+
 function makeJourney(games) {
   const schedule = Array.from({ length: 82 }, (_, index) => ({
     game: index + 1, opponent: teams[index % teams.length][1], played: index < games,

@@ -142,7 +142,7 @@
     const root = current.root;
     root.querySelector('[data-lg-home-score]').textContent = state.homeScore;
     root.querySelector('[data-lg-away-score]').textContent = state.awayScore;
-    root.querySelector('[data-lg-quarter]').textContent = `${state.quarter}Q`;
+    root.querySelector('[data-lg-quarter]').textContent = state.quarter <= 4 ? `${state.quarter}Q` : (state.quarter === 5 ? 'OT' : `${state.quarter - 4}OT`);
     root.querySelector('[data-lg-clock]').textContent = clock(state.gameClock);
     root.querySelector('[data-lg-shot-clock]').textContent = Math.max(0, Math.ceil(state.shotClock));
     const controlledId = state.controlledPlayerId;

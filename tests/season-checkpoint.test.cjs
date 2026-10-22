@@ -97,8 +97,14 @@ function journey(overrides = {}) {
   assert.match(journeySource, /persistJourneyProgress\(j, item/);
   assert.match(journeySource, /visibilitychange/);
   assert.match(journeySource, /pagehide/);
+  assert.match(journeySource, /const game = savedGame \|\| fallback;/, 'schedule normalization must preserve the active game object');
+  assert.match(journeySource, /repairJourneyScheduleProgress\(journey\)/, 'legacy progress gaps must be repaired before counters are derived');
+  assert.match(journeySource, /authoritativeJourneyScheduleGame\(state\.seasonJourney, activeGame\.scheduleGame\)/, 'final settlement must write to the authoritative schedule item');
+  assert.match(journeySource, /activeGame\.quickSimRunning/, 'quick sim must reject re-entrant taps');
+  assert.match(journeySource, /finalizePendingJourneyOnExit\(\)/, 'Q4 exit must finalize before lifecycle persistence');
   assert.doesNotMatch(journeySource, /state\.season\.lastSimGames\s*=\s*j\.schedule\s*;/);
   assert.match(html, /season-checkpoint\.js\?v=20261020-v442/);
+  assert.match(html, /season-journey\.js\?v=20261023-v451-fast-sim-save/);
 }
 
 console.log('Season checkpoint recovery, isolation, lifecycle hooks, and storage-pressure tests passed.');

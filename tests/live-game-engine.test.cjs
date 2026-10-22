@@ -116,6 +116,26 @@ test('full PLAY reaches FINAL without an infinite quarter and score matches play
   assert.equal(result.away.reduce((sum, row) => sum + row.pts, 0), result.awayScore);
 });
 
+test('tied fourth quarter advances to OT and then reaches FINAL', () => {
+  const state = game({ quarterDuration: 20, rng: () => .2 });
+  state.quarter = 4;
+  state.gameClock = .001;
+  state.homeScore = 80;
+  state.awayScore = 80;
+  Engine.step(state, {}, .05);
+  assert.equal(state.finished, false);
+  assert.equal(state.quarter, 5);
+  assert.equal(state.gameClock, 30);
+  assert.equal(state.quarterScores.home.length, 5);
+  assert.equal(state.quarterScores.away.length, 5);
+
+  state.homeScore = 82;
+  state.gameClock = .001;
+  Engine.step(state, {}, .05);
+  assert.equal(state.finished, true);
+  assert.equal(state.finishReason, 'final');
+});
+
 test('HYBRID returns after exactly the configured possession window', () => {
   const state = game({ mode: 'hybrid', possessions: 3, quarterDuration: 70, rng: () => .2 });
   for (let frame = 0; frame < 5000 && !state.finished; frame += 1) Engine.step(state, {}, .05);

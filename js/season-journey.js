@@ -131,6 +131,7 @@
   let activeGame = null;
   let visualGameState = null;
   let visualEventTimer = null;
+  let visualEventTimerGeneration = 0;
   let activeComic = null;
   const badgeArtworkCache = new Map();
   let shootingChallenge = null;
@@ -921,6 +922,7 @@
   }
 
   function flushJourneyProgressOnBackground() {
+    finalizePendingJourneyOnExit();
     const journey = state?.seasonJourney;
     if (!journey || !Number(journey.gameIndex)) return;
     persistJourneyProgress(journey, latestPlayedJourneyGame(journey));
@@ -931,7 +933,9 @@
     journeyLifecycleSaveBound = true;
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'hidden') flushJourneyProgressOnBackground();
+      else resumeStalledVisualPresentation();
     });
+    window.addEventListener('focus', resumeStalledVisualPresentation);
     window.addEventListener('pagehide', flushJourneyProgressOnBackground);
   }
 
@@ -947,7 +951,17 @@
     journey.schedule = baseSchedule.map((fallback, index) => {
       const gameNo = index + 1;
       const savedGame = savedByGame.get(gameNo);
-      const game = savedGame ? { ...fallback, ...savedGame, game: gameNo } : fallback;
+      // Keep saved game objects stable. The active match holds a reference to its
+      // schedule entry; replacing every object during a render detached that
+      // reference, so quick-sim updated a throwaway object and the primary save
+      // still had played=false.
+      const game = savedGame || fallback;
+      if (savedGame) {
+        Object.entries(fallback).forEach(([key, value]) => {
+          if (typeof game[key] === 'undefined') game[key] = value;
+        });
+        game.game = gameNo;
+      }
       if (game.game === 41 && game.special?.key === 'allstar') game.special = null;
       if (game.game === 47) game.special = { key: 'allstar-selection', icon: '★', label: 'All-Star Selection' };
       if (game.game === 50) game.special = { key: 'allstar', icon: '⭐', label: 'All-Star Weekend' };
@@ -956,6 +970,52 @@
       if (game.played && !game.analysis) game.analysis = null;
       return game;
     });
+  }
+
+  function repairJourneyScheduleProgress(journey) {
+    const completed = clamp(Math.round(Number(journey?.gameIndex) || 0), 0, SEASON_LENGTH);
+    if (!completed || !Array.isArray(journey?.schedule)) return false;
+    const completedGames = journey.schedule.slice(0, completed);
+    const missing = completedGames.filter(game => game && (!game.played || typeof game.win !== 'boolean'));
+    if (!missing.length) return false;
+
+    const recentByGame = new Map((journey.recent || []).map(result => [Number(result?.game), result]));
+    let knownWins = completedGames.filter(game => game?.played && game.win === true).length;
+    const knownLosses = completedGames.filter(game => game?.played && game.win === false).length;
+    const storedWins = clamp(Math.round(Number(journey.wins) || 0), 0, completed);
+    const storedLosses = clamp(Math.round(Number(journey.losses) || 0), 0, completed);
+    const recordedTotal = storedWins + storedLosses;
+    let targetWins = recordedTotal >= completed ? storedWins : Math.max(storedWins, knownWins);
+    targetWins = clamp(targetWins, knownWins, completed - knownLosses);
+
+    const unresolved = [];
+    missing.forEach(game => {
+      const recent = recentByGame.get(Number(game.game));
+      if (recent && typeof recent.win === 'boolean') {
+        game.played = true;
+        game.win = recent.win;
+        game.progressRecovered = true;
+        if (recent.win) knownWins += 1;
+      } else {
+        unresolved.push(game);
+      }
+    });
+
+    let winsNeeded = clamp(targetWins - knownWins, 0, unresolved.length);
+    unresolved.forEach(game => {
+      game.played = true;
+      game.win = winsNeeded > 0;
+      game.progressRecovered = true;
+      if (winsNeeded > 0) winsNeeded -= 1;
+    });
+    journey.scheduleProgressRecovered = true;
+    return true;
+  }
+
+  function authoritativeJourneyScheduleGame(journey, scheduleGame) {
+    const gameNo = Number(scheduleGame?.game);
+    if (!Number.isFinite(gameNo) || !Array.isArray(journey?.schedule)) return scheduleGame;
+    return journey.schedule.find(game => Number(game?.game) === gameNo) || scheduleGame;
   }
 
   function scheduleLeagueWarmup() {
@@ -997,10 +1057,13 @@
     if (!Array.isArray(journey.awards)) journey.awards = [];
     journey.teamName = String(journey.teamName || PLAYER_TEAM_FALLBACK).slice(0, 24);
     normalizeJourneySchedule(journey);
+    repairJourneyScheduleProgress(journey);
     const playedCount = journey.schedule.filter(game => game?.played).length;
+    const scheduledWins = journey.schedule.filter(game => game?.played && game?.win).length;
+    const scheduledLosses = journey.schedule.filter(game => game?.played && !game?.win).length;
     journey.gameIndex = clamp(Math.max(Number(journey.gameIndex) || 0, playedCount), 0, SEASON_LENGTH);
-    journey.wins = Math.max(0, Number(journey.wins) || journey.schedule.filter(game => game?.played && game?.win).length);
-    journey.losses = Math.max(0, Number(journey.losses) || journey.schedule.filter(game => game?.played && !game?.win).length);
+    journey.wins = playedCount ? scheduledWins : Math.max(0, Number(journey.wins) || 0);
+    journey.losses = playedCount ? scheduledLosses : Math.max(0, Number(journey.losses) || 0);
 
     try {
       const recovery = journeyCheckpointStore?.apply(journey);
@@ -1879,7 +1942,7 @@
     if (mode === 'play') {
       activeGame.homeQuarters = Array.isArray(result.quarterScores?.home) ? result.quarterScores.home.slice() : [];
       activeGame.awayQuarters = Array.isArray(result.quarterScores?.away) ? result.quarterScores.away.slice() : [];
-      activeGame.quarter = 4;
+      activeGame.quarter = Math.max(4, activeGame.homeQuarters.length, activeGame.awayQuarters.length);
       activeGame.liveGameResult = result;
       activeGame.feed.push(`🎮 LIVE GAME FINAL：${activeGame.homeScore}-${activeGame.awayScore}`);
       finishJourneyGame();
@@ -1945,7 +2008,10 @@
     renderActiveGame();
   }
 
-  function quarterName(q) { return q <= 4 ? `${q}Q` : 'OT'; }
+  function quarterName(q) {
+    if (q <= 4) return `${q}Q`;
+    return q === 5 ? 'OT' : `${q - 4}OT`;
+  }
 
   function activeStrategyForQuarter(q) {
     if (!activeGame) return 'balanced';
@@ -1992,8 +2058,19 @@
   }
 
   function clearVisualEventTimer() {
+    visualEventTimerGeneration += 1;
     if (visualEventTimer) clearTimeout(visualEventTimer);
     visualEventTimer = null;
+  }
+
+  function scheduleVisualEventStep(callback, delay) {
+    clearVisualEventTimer();
+    const generation = visualEventTimerGeneration;
+    visualEventTimer = setTimeout(() => {
+      if (generation !== visualEventTimerGeneration) return;
+      visualEventTimer = null;
+      callback();
+    }, delay);
   }
 
   function visualEventDelay() {
@@ -2055,14 +2132,21 @@
 
   function finishQuarterPresentation(q, allowClutch = true) {
     if (!activeGame) return;
+    clearVisualEventTimer();
     const visual = activeGame.visual;
     if (visual) {
       visual.busy = false;
+      visual.awaitingBadge = false;
+      visual.pendingEvents = [];
+      visual.pendingBadgeEvent = null;
+      visual.clock = 0;
+      visual.displayHomeScore = activeGame.homeScore;
+      visual.displayAwayScore = activeGame.awayScore;
       visual.highlight = '';
       visual.scoringTeam = null;
       visual.scoreDelta = 0;
       visual.transition = {
-        title: q === 2 ? 'HALFTIME' : `END OF ${q === 1 ? '1ST' : q === 2 ? '2ND' : q === 3 ? '3RD' : q > 4 ? 'OVERTIME' : '4TH'}`,
+        title: q === 2 ? 'HALFTIME' : `END OF ${q === 1 ? '1ST' : q === 2 ? '2ND' : q === 3 ? '3RD' : q > 4 ? quarterName(q) : '4TH'}`,
         score: `${activeGame.homeScore} — ${activeGame.awayScore}`
       };
     }
@@ -2076,7 +2160,13 @@
       return;
     }
     if (q >= 4 && activeGame.homeScore !== activeGame.awayScore) finishJourneyGame();
-    else if (q >= 6 && activeGame.homeScore === activeGame.awayScore) activeGame.homeScore += 1;
+    else if (q >= 6 && activeGame.homeScore === activeGame.awayScore) {
+      activeGame.homeScore += 1;
+      activeGame.homeQuarters[q - 1] = Number(activeGame.homeQuarters[q - 1] || 0) + 1;
+      if (visual) visual.displayHomeScore = activeGame.homeScore;
+      activeGame.feed.push(`🏀 ${quarterName(q)} 驟死賽制：主隊完成致勝得分。`);
+      finishJourneyGame();
+    }
     renderActiveGame();
     if (visual?.transition) {
       setTimeout(() => {
@@ -2084,6 +2174,54 @@
         activeGame.visual.transition = null;
         renderActiveGame();
       }, MATCH_PRESENTATION_TIMING.quarterTransition);
+    }
+  }
+
+  function settleVisualPresentation(allowClutch = false) {
+    if (!activeGame?.visual || activeGame.finalized) return false;
+    const visual = activeGame.visual;
+    if (!visual.busy && !visual.awaitingBadge) return false;
+    clearVisualEventTimer();
+    const pendingEvents = Array.isArray(visual.pendingEvents) ? visual.pendingEvents.splice(0) : [];
+    const pendingBadge = visual.pendingBadgeEvent;
+    if (window.VisualMatchSimulator) {
+      window.VisualMatchSimulator.consumeEvents(visual, pendingEvents);
+      if (pendingBadge?.event) window.VisualMatchSimulator.consumeEvents(visual, [pendingBadge.event]);
+    }
+    if (pendingBadge?.moment && !activeGame.pendingMoments.includes(pendingBadge.moment)) {
+      activeGame.pendingMoments.push(pendingBadge.moment);
+    }
+    visual.pendingBadgeEvent = null;
+    visual.awaitingBadge = false;
+    visual.busy = false;
+    finishQuarterPresentation(activeGame.quarter, allowClutch);
+    return true;
+  }
+
+  function finalizePendingJourneyOnExit() {
+    if (!activeGame || activeGame.finalized || activeGame.finalizing || activeGame.quarter < 4
+      || activeGame.homeScore === activeGame.awayScore || activeGame.awaitingClutch
+      || shootingChallenge || defenseChallenge || offenseChallenge) return false;
+    if (activeGame.visual?.busy || activeGame.visual?.awaitingBadge) settleVisualPresentation(false);
+    else finishJourneyGame();
+    return !!activeGame?.finalized;
+  }
+
+  function resumeStalledVisualPresentation() {
+    if (document.hidden || !activeGame || activeGame.finalized || activeGame.visual?.awaitingBadge
+      || shootingChallenge || defenseChallenge || offenseChallenge || activeComic) return;
+    const visual = activeGame.visual;
+    if (!visual?.busy) return;
+    const quarter = activeGame.quarter;
+    if (Array.isArray(visual.pendingEvents) && visual.pendingEvents.length) {
+      scheduleVisualEventStep(() => playNextVisualEvent(quarter), 0);
+    } else if (visual.pendingBadgeEvent) {
+      visual.busy = false;
+      visual.awaitingBadge = true;
+      openComic(visual.pendingBadgeEvent.moment);
+      renderActiveGame();
+    } else {
+      scheduleVisualEventStep(() => finishQuarterPresentation(quarter), 0);
     }
   }
 
@@ -2108,8 +2246,7 @@
     }
     renderActiveGame();
     pulseVisualScore(event.team, event.points);
-    clearVisualEventTimer();
-    visualEventTimer = setTimeout(() => playNextVisualEvent(q), visualEventDelay());
+    scheduleVisualEventStep(() => playNextVisualEvent(q), visualEventDelay());
   }
 
   function startVisualQuarter(events, q, badgeEvent, moment) {
@@ -2121,10 +2258,9 @@
     visual.busy = true;
     visual.pendingEvents = [...events];
     visual.pendingBadgeEvent = badgeEvent ? { event: badgeEvent, moment, quarter: q } : null;
-    visual.transition = { title: q > 4 ? 'OVERTIME' : `${q}${q === 1 ? 'ST' : q === 2 ? 'ND' : q === 3 ? 'RD' : 'TH'} QUARTER`, score: 'TIP-OFF' };
+    visual.transition = { title: q > 4 ? quarterName(q) : `${q}${q === 1 ? 'ST' : q === 2 ? 'ND' : q === 3 ? 'RD' : 'TH'} QUARTER`, score: 'TIP-OFF' };
     renderActiveGame();
-    clearVisualEventTimer();
-    visualEventTimer = setTimeout(() => {
+    scheduleVisualEventStep(() => {
       if (!activeGame?.visual) return;
       activeGame.visual.transition = null;
       renderActiveGame();
@@ -2146,8 +2282,7 @@
     window.VisualMatchSimulator.applyEvent(visual, pending.event);
     renderActiveGame();
     pulseVisualScore(pending.event.team, pending.event.points);
-    clearVisualEventTimer();
-    visualEventTimer = setTimeout(() => finishQuarterPresentation(pending.quarter), visualEventDelay());
+    scheduleVisualEventStep(() => finishQuarterPresentation(pending.quarter), visualEventDelay());
   }
 
   function applyQuarterStrategy(strategyId, q, home, away) {
@@ -2630,12 +2765,27 @@
   }
 
   function quickSimJourneyGame() {
-    if (!activeGame || activeGame.finalized) return;
-    while (!activeGame.finalized) {
-      if (activeGame.awaitingHalftime) selectJourneyHalftimeStrategy('keep', true);
-      simulateOneQuarter(true);
+    if (!activeGame || activeGame.finalized || activeGame.quickSimRunning) return;
+    activeGame.quickSimRunning = true;
+    try {
+      settleVisualPresentation(false);
+      let safety = 0;
+      while (!activeGame.finalized && safety < 12) {
+        safety += 1;
+        if (activeGame.awaitingHalftime) selectJourneyHalftimeStrategy('keep', true);
+        const beforeQuarter = activeGame.quarter;
+        simulateOneQuarter(true);
+        if (!activeGame.finalized && activeGame.quarter === beforeQuarter) break;
+      }
+      if (!activeGame.finalized) {
+        resumeStalledVisualPresentation();
+        if (typeof showToast === 'function') showToast('模擬已安全暫停，請先完成畫面上的操作。', 'info');
+        return;
+      }
+      if (activeGame.pendingMoments.length) openComic(activeGame.pendingMoments.shift());
+    } finally {
+      if (activeGame) activeGame.quickSimRunning = false;
     }
-    if (activeGame.pendingMoments.length) openComic(activeGame.pendingMoments.shift());
   }
 
   function toggleJourneyAutoMode() {
@@ -2743,12 +2893,12 @@
       transition.innerHTML = visual?.transition ? `<b>${safeText(visual.transition.title)}</b><span>${safeText(visual.transition.score)}</span>` : '';
     }
     const strip = document.getElementById('sjQuarterStrip');
-    if (strip) strip.innerHTML = [1,2,3,4,5].map(q => {
+    if (strip) strip.innerHTML = Array.from({ length: Math.max(5, activeGame.quarter, activeGame.homeQuarters.length) }, (_, index) => index + 1).map(q => {
       const isLive = activeGame.quarter === q && !!(visual?.busy || visual?.awaitingBadge);
       const score = activeGame.homeQuarters[q - 1] == null
         ? '—'
         : (isLive ? 'LIVE' : `${activeGame.homeQuarters[q - 1]}-${activeGame.awayQuarters[q - 1]}`);
-      return `<div class="sj-quarter ${activeGame.quarter === q ? 'active' : ''} rounded-xl border border-slate-800 bg-slate-950 p-2 text-center text-[10px] font-black">${q === 5 ? 'OT' : q + 'Q'}<span class="block text-xs font-mono mt-1">${score}</span></div>`;
+      return `<div class="sj-quarter ${activeGame.quarter === q ? 'active' : ''} rounded-xl border border-slate-800 bg-slate-950 p-2 text-center text-[10px] font-black">${quarterName(q)}<span class="block text-xs font-mono mt-1">${score}</span></div>`;
     }).join('');
     const feed = document.getElementById('sjPlayFeed');
     if (feed) {
@@ -3209,9 +3359,85 @@
     return gameData;
   }
 
-  function finishJourneyGame() {
-    if (!activeGame || activeGame.finalized) return;
+  function revealJourneyFinalActions() {
+    const actions = document.getElementById('sjGameActions');
+    if (actions) actions.classList.add('hidden');
+    const finals = document.getElementById('sjFinalActions');
+    if (finals) {
+      finals.classList.remove('hidden');
+      finals.classList.add('grid');
+      window.requestAnimationFrame?.(() => {
+        if (!document.getElementById('sjGameModal')?.classList.contains('hidden')) {
+          finals.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+      });
+    }
+  }
+
+  function recoverJourneyFinalization(error) {
+    if (!activeGame) return;
+    const journey = state.seasonJourney;
+    const item = authoritativeJourneyScheduleGame(journey, activeGame.scheduleGame);
+    activeGame.scheduleGame = item;
+    const win = activeGame.homeScore > activeGame.awayScore;
+    const alreadyPlayed = !!item?.played;
+    if (item) {
+      Object.assign(item, {
+        played: true,
+        win,
+        myScore: activeGame.homeScore,
+        oppScore: activeGame.awayScore,
+        completedAt: item.completedAt || new Date().toISOString(),
+        settlementRecovered: true
+      });
+    }
+    if (journey && item && !alreadyPlayed) {
+      journey.gameIndex = Math.max(Number(journey.gameIndex) || 0, Number(item.game) || 0);
+      const played = journey.schedule.filter(game => game?.played);
+      journey.wins = played.filter(game => game.win).length;
+      journey.losses = played.filter(game => !game.win).length;
+      journey.streak = win ? Math.max(1, Number(journey.streak) || 0) : 0;
+      journey.bestStreak = Math.max(Number(journey.bestStreak) || 0, journey.streak);
+      journey.recent = (journey.recent || []).filter(result => Number(result.game) !== Number(item.game));
+      journey.recent.push({ game: item.game, win, opponent: item.opponent });
+      journey.recent = journey.recent.slice(-10);
+    }
     activeGame.finalized = true;
+    if (activeGame.visual) {
+      activeGame.visual.busy = false;
+      activeGame.visual.awaitingBadge = false;
+      activeGame.visual.clock = 0;
+      activeGame.visual.displayHomeScore = activeGame.homeScore;
+      activeGame.visual.displayAwayScore = activeGame.awayScore;
+    }
+    if (!activeGame.boxScore) {
+      activeGame.boxScore = {
+        myScore: activeGame.homeScore,
+        oppScore: activeGame.awayScore,
+        win,
+        oppTeam: item?.opponent || '',
+        boxScore: [],
+        opponentBoxScore: [],
+        badgeMoments: [],
+        analysis: null
+      };
+    }
+    persistJourneyProgress(journey, item, { clearOnSuccess: false });
+    const finalLine = `${win ? '✅ FINAL 勝利' : '❌ FINAL 敗北'}：${activeGame.homeScore}-${activeGame.awayScore}`;
+    if (!activeGame.feed.includes(finalLine)) activeGame.feed.push(finalLine);
+    revealJourneyFinalActions();
+    renderActiveGame();
+    renderJourneySeasonTab();
+    console.error('[Season Journey] Final settlement recovered', error);
+    if (typeof showToast === 'function') showToast('比賽已安全結算並保留進度。', 'success');
+  }
+
+  function finishJourneyGame() {
+    if (!activeGame || activeGame.finalized || activeGame.finalizing) return;
+    activeGame.finalizing = true;
+    try {
+    activeGame.finalized = true;
+    activeGame.scheduleGame = authoritativeJourneyScheduleGame(state.seasonJourney, activeGame.scheduleGame);
     stopJourneyArenaMusic();
     playJourneySound('whistle');
     const win = activeGame.homeScore > activeGame.awayScore;
@@ -3256,6 +3482,7 @@
     const item = activeGame.scheduleGame;
     Object.assign(item, {
       played: true, win, myScore: activeGame.homeScore, oppScore: activeGame.awayScore,
+      completedAt: item.completedAt || new Date().toISOString(),
       boxScore: gameData.boxScore, opponentBoxScore: gameData.opponentBoxScore, opponentBenchPts: gameData.opponentBenchPts,
       moments: gameData.badgeMoments, analysis: gameData.analysis, manualShots: activeGame.manualShots,
       defensiveMatchups: activeGame.matchupResults, defenseDecisions: activeGame.defenseDecisions,
@@ -3290,17 +3517,27 @@
     window.SeasonStandings?.ensure(j, typeof NBA_PLAYERS !== 'undefined' ? NBA_PLAYERS : []);
     syncLeagueState();
     persistJourneyProgress(j, item);
-    const actions = document.getElementById('sjGameActions'); if (actions) actions.classList.add('hidden');
-    const finals = document.getElementById('sjFinalActions'); if (finals) { finals.classList.remove('hidden'); finals.classList.add('grid'); }
+    revealJourneyFinalActions();
     activeGame.feed.push(`${win ? '✅ FINAL 勝利' : '❌ FINAL 敗北'}：${activeGame.homeScore}-${activeGame.awayScore}`);
     renderActiveGame(); renderJourneySeasonTab();
+    } catch (error) {
+      recoverJourneyFinalization(error);
+    } finally {
+      if (activeGame) activeGame.finalizing = false;
+    }
   }
 
   function completeRegularSeason() {
     const j = state.seasonJourney;
-    j.completed = true;
+    if (j.completionSettled) {
+      j.completed = true;
+      return;
+    }
     const cards = LINEUP_POSITIONS.map(pos => state.startingLineup[pos]).filter(Boolean).concat((state.benchLineup || []).filter(Boolean));
-    cards.forEach(card => { ensureCardJourney(card); card.legacy.seasons = (card.legacy.seasons || 0) + 1; });
+    if (!j.seasonLegacyCredited) {
+      cards.forEach(card => { ensureCardJourney(card); card.legacy.seasons = (card.legacy.seasons || 0) + 1; });
+      j.seasonLegacyCredited = true;
+    }
     const league = syncLeagueState(true);
     const leagueAwards = Array.isArray(league?.finalAwards) ? league.finalAwards : [];
     const cardForAward = award => {
@@ -3312,18 +3549,21 @@
     const dpoyAward = leagueAwards.find(award => award.awardId === 'dpoy');
     const mvpCard = cardForAward(mvpAward);
     const dpoyCard = cardForAward(dpoyAward);
-    if (mvpCard) {
-      mvpCard.legacy.mvps = (mvpCard.legacy.mvps || 0) + 1;
-      unlockBack(mvpCard, 'mvp', `Season ${j.seasonNo} MVP`);
-    }
-    if (dpoyCard) {
-      dpoyCard.legacy.dpoys = (dpoyCard.legacy.dpoys || 0) + 1;
-      unlockBack(dpoyCard, 'dpoy', `Season ${j.seasonNo} DPOY`);
+    if (!j.finalAwardLegacyCredited) {
+      if (mvpCard) {
+        mvpCard.legacy.mvps = (mvpCard.legacy.mvps || 0) + 1;
+        unlockBack(mvpCard, 'mvp', `Season ${j.seasonNo} MVP`);
+      }
+      if (dpoyCard) {
+        dpoyCard.legacy.dpoys = (dpoyCard.legacy.dpoys || 0) + 1;
+        unlockBack(dpoyCard, 'dpoy', `Season ${j.seasonNo} DPOY`);
+      }
+      j.finalAwardLegacyCredited = true;
     }
     const supportingAwards = calculateSeasonAwards(j).filter(award => !/MVP|DPOY|得分王|助攻王|籃板王/.test(award.label));
     j.awards = leagueAwards.length ? leagueAwards.concat(supportingAwards) : calculateSeasonAwards(j);
     const playerStats = window.SeasonLeague?.snapshotPlayerSeasons(j) || [];
-    j.history.push({
+    const historyEntry = {
       season: j.seasonNo,
       seasonLabel: window.SeasonLeague?.seasonYears(j.seasonNo)?.label || `Season ${j.seasonNo}`,
       record: `${j.wins}-${j.losses}`,
@@ -3331,7 +3571,10 @@
       playerStats,
       awardMinimumGames: window.SeasonLeague?.getAwardMinimumGames(j.gameIndex) || Math.ceil(SEASON_LENGTH * .8),
       completedAt: new Date().toISOString()
-    });
+    };
+    const existingHistory = j.history.find(item => Number(item?.season) === Number(j.seasonNo));
+    if (existingHistory) Object.assign(existingHistory, historyEntry, { completedAt: existingHistory.completedAt || historyEntry.completedAt });
+    else j.history.push(historyEntry);
     state.season.lastSimRecord = `${j.wins} 勝 ${j.losses} 敗`;
     state.season.lastSimWins = j.wins;
     state.season.lastSimStreak = j.bestStreak;
@@ -3348,6 +3591,8 @@
     }));
     state.season.lastBoxScores = j.awards.map(award => ({ title: `${award.icon} ${award.label}`, player: award.player, stat: award.stat }));
     if (typeof addNotification === 'function') addNotification({ title: '🏁 例行賽完成', message: `Season ${j.seasonNo} 以 ${j.wins}-${j.losses} 完成，MVP 與 DPOY 卡背已結算。`, icon: '🏆', type: 'achievement' });
+    j.completionSettled = true;
+    j.completed = true;
   }
 
   function adminSimulateToInput() {
@@ -3615,6 +3860,7 @@
 
   function closeJourneyGame() {
     const modal = document.getElementById('sjGameModal');
+    finalizePendingJourneyOnExit();
     if (activeGame && !activeGame.finalized) {
       if (!window.confirm('比賽尚未結束，離開後本場體力不會退還。確定離開嗎？')) return;
     }
